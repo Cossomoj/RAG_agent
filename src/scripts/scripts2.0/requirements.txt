@@ -1,4 +1,5 @@
 fastapi
+uvicorn
 gigachain
 faiss-cpu
 sentence-transformers
@@ -10,7 +11,6 @@ langchain-core
 langchain_huggingface
 huggingface-hub
 websockets
-uvicorn
 telebot
 python-dotenv
 pydantic
