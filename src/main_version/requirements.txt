@@ -11,10 +11,8 @@ langchain-core
 langchain_huggingface
 huggingface-hub
 websockets
-telebot
 python-dotenv
 pydantic
 requests
 pyTelegramBotAPI
-PyPDF2
 pypdf
