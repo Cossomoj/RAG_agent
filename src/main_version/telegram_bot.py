@@ -12,6 +12,7 @@ load_dotenv()
 WEBSOCKET_URL = "ws://127.0.0.1:8000/ws"
 
 secret_key = os.getenv("TELEGRAM_API_KEY")
+cache_dict = {}
 
 # Токен Telegram-бота
 bot = telebot.TeleBot(secret_key)
@@ -118,8 +119,10 @@ def handle_predefined_question(call):
         question = "Что ожидается от меня, как от Junior аналитика?"
         question_id = 3
     
-
-    asyncio.run(test_websocket(question, call.message, role, specialization, question_id))
+    if (question_id not in cache_dict):
+        asyncio.run(test_websocket(question, call.message, role, specialization, question_id))
+    else:
+        handling_cached_requests(question_id, call.message)
 
 @bot.callback_query_handler(func=lambda call: call.data == "question_777")
 def hadl_print_in_development(call):
@@ -132,11 +135,6 @@ def hadl_print_in_development_2(message):
 
 # Обработчик пользовательского вопроса
 @bot.callback_query_handler(func=lambda call: call.data == "question_custom")
-def ask_custom_question(call):
-    bot.send_message(call.message.chat.id, "Введите ваш вопрос:")
-    bot.register_next_step_handler(call.message, process_custom_question)
-
-@bot.callback_query_handler(func=lambda call: call.data == "question_custom_add")
 def ask_custom_question(call):
     bot.send_message(call.message.chat.id, "Введите ваш вопрос:")
     bot.register_next_step_handler(call.message, process_custom_question)
@@ -154,6 +152,17 @@ def process_custom_question(message):
     question = message.text
     asyncio.run(test_websocket(question, message, role, specialization, question_id))
 
+def handling_cached_requests(question_id, message):
+    print("Кешированное сообщение")
+
+    arr = cache_dict[question_id]
+
+    # Отправляем каждую часть с задержкой
+    for i in arr:
+        bot.send_message(chat_id=message.chat.id, text=i)
+        time.sleep(1)
+
+    send_welcome(message)
 
 async def test_websocket(question, message, role, specialization, question_id):
     print(question)
@@ -169,6 +178,7 @@ async def test_websocket(question, message, role, specialization, question_id):
             message_2 = bot.send_message(message.chat.id, "Ожидайте ответа...")
             full_answer = ""
             last_send_time = time.time()
+            answer_for_cache = []
             while True:
                 answer_part = await websocket.recv()  # Получаем ответ частями
                 if answer_part:
@@ -180,6 +190,7 @@ async def test_websocket(question, message, role, specialization, question_id):
                     if time.time() - last_send_time >= 1:
                         try:
                             bot.send_message(chat_id=message_2.chat.id, text=full_answer)
+                            answer_for_cache.append(full_answer)
                             full_answer = ""
                             last_send_time = time.time()
                         except telebot.apihelper.ApiTelegramException as e:
@@ -188,6 +199,7 @@ async def test_websocket(question, message, role, specialization, question_id):
                                 print(f"Rate limit exceeded. Retrying after {retry_after} seconds...")
                                 time.sleep(retry_after)
                                 bot.send_message(chat_id=message_2.chat.id, text=full_answer)
+                                answer_for_cache.append(full_answer)
                                 last_send_time = time.time()
                                 full_answer = ""
                 else:
@@ -196,17 +208,14 @@ async def test_websocket(question, message, role, specialization, question_id):
         except websockets.exceptions.ConnectionClosed:
             if (full_answer != ""):
                 bot.send_message(chat_id=message_2.chat.id, text=full_answer)
+                answer_for_cache.append(full_answer)
             print("")
+            if(question_id != 777):
+                cache_dict[question_id] = answer_for_cache
+            
         
         send_welcome(message_2)
 
         
 if __name__ == "__main__":
-    while True:
-        try:
-            bot.polling(none_stop=True)
-
-        except Exception as e:
-            print(e)  # или просто print(e) если у вас логгера нет,
-            # или import traceback; traceback.print_exc() для печати полной инфы
-            time.sleep(15)
+    bot.polling(none_stop=True)
