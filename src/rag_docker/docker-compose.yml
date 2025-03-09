@@ -1,0 +1,13 @@
+services:
+  rag_service:
+    container_name: rag_service7
+    build:
+      context: ./rag_service7
+      dockerfile: Dockerfile
+    working_dir: /app
+    ports:
+      - "8000:8000"  # Открываем WebSocket на 8000 порту
+    environment:
+      - GIGACHAT_API_KEY=${GIGACHAT_API_KEY}
+      - TELEGRAM_API_KEY=${TELEGRAM_API_KEY}
+    restart: always
