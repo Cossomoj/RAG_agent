@@ -7,9 +7,15 @@ import requests
 import json
 import time
 import os
+import sqlite3
+import schedule
+from datetime import datetime, UTC 
+import threading
+import pytz
 load_dotenv()
 
 WEBSOCKET_URL = "ws://127.0.0.1:8000/ws"
+moscow_tz = pytz.timezone('Europe/Moscow')
 
 dialogue_context = {}
 count_questions_users = {}
@@ -35,25 +41,165 @@ cache_dict = {3 : ["Уровень Junior\nСофты:\n1. Желание учи
 
 # Токен Telegram-бота
 bot = telebot.TeleBot(secret_key)
-
 # Словарь для хранения данных пользователя
 user_data = {}
 
 # Функция для дообогащения промпта
 
+#conn = sqlite3.connect('AI_agent.db')
+#cursor = conn.cursor()
+#cursor.execute('''
+#DROP TABLE Reminder
+#''')
+#conn.commit()
+#conn.close()
+#print("2\n")
+# Создание таблицы, если она не существует
+
+conn = sqlite3.connect('AI_agent.db')
+cursor = conn.cursor()
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS Users (
+    user_id INTEGER PRIMARY KEY,
+    role TEXT DEFAULT NULL
+)
+''')
+conn.commit()
+conn.close()
+
+conn = sqlite3.connect('AI_agent.db')
+cursor = conn.cursor()
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS Reminder (
+    id_rem INTEGER PRIMARY KEY AUTOINCREMENT, 
+    user_id INTEGER,
+    reminder_text DEFAULT NULL,
+    reminder_time DEFAULT NULL
+)
+''')
+
+
+conn.commit()
+conn.close()
+
 # Обработчик команды /start
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    chat_id = message.chat.id
-    clear_dialog_context(chat_id)
+    user_id = message.chat.id
+    conn = sqlite3.connect('AI_Agent.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_id FROM Users WHERE user_id = ?", (user_id,))
+    existing_user = cursor.fetchone()
+
+
+    if existing_user:
+        print(f"Пользователь с ID {user_id} уже существует в базе данных.")
+    else:
+        # Вставляем user_id в таблицу
+        cursor.execute("INSERT INTO Users (user_id) VALUES(?)", (user_id,))
+        conn.commit()
+        print(f"Пользователь с ID {user_id} успешно добавлен в базу данных.")
+    # Выводим всех пользователей для проверки
+    cursor.execute("SELECT * FROM Users")
+    users = cursor.fetchall()
+    print("Текущие пользователи в базе данных:")
+    for user in users:
+        print(user[0], user[1])  # user[0], так как fetchall() возвращает кортежи
     markup = types.InlineKeyboardMarkup()
     button = types.InlineKeyboardButton(text="Начать", callback_data="start")
     markup.add(button)
     bot.send_message(message.chat.id, "Добро пожаловать! Нажмите кнопку ниже, чтобы начать:", reply_markup=markup)
+    conn.close()
+    
 
 # Обработчик нажатия кнопки Start
 @bot.callback_query_handler(func=lambda call: call.data == "start")
 def handle_start(call):
+
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    roles = [
+        types.InlineKeyboardButton(text="Задать вопрос по роли", callback_data="menu_qr"),
+        types.InlineKeyboardButton(text="Выбрать роль", callback_data="menu_r"),
+        # types.InlineKeyboardButton(text="Ввести свой вопрос", callback_data="question_custom"),
+        types.InlineKeyboardButton(text="Поставьте напоминание", callback_data="menu_rem")
+
+    ]
+    markup.add(*roles)
+    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Меню:", reply_markup=markup)
+
+
+# Обработчик нажатия кнопки "Поставьте напоминание"
+@bot.callback_query_handler(func=lambda call: call.data == "menu_rem")
+def handle_reminder(call):
+    msg = bot.send_message(call.message.chat.id, "Введите время напоминания в формате HH:MM и текст напоминания через пробел.\nНапример: 14:30 Позвонить маме")
+    bot.register_next_step_handler(msg, process_reminder_input)
+
+# Обработчик ввода времени и текста напоминания
+def process_reminder_input(message):
+    try:
+        # Разделяем ввод на время и текст
+        time_str, reminder_text = message.text.split(maxsplit=1)
+        
+        # Проверяем формат времени
+        datetime.strptime(time_str, "%H:%M")  # Если время не в формате HH:MM, выбросится исключение
+        
+        # Сохраняем напоминание в базу данных
+        conn = sqlite3.connect('AI_Agent.db')
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO Reminder (user_id, reminder_text, reminder_time) VALUES (?, ?, ?)",
+            (message.chat.id, reminder_text, time_str)  # По умолчанию напоминание одноразовое
+        )
+        conn.commit()
+        conn.close()
+        
+        bot.send_message(message.chat.id, f"Напоминание установлено на {time_str}: {reminder_text}")
+    except ValueError:
+        bot.send_message(message.chat.id, "Неверный формат времени. Используйте HH:MM.")
+
+# Асинхронная функция для проверки и отправки напоминаний
+async def check():
+    while True:
+        conn = sqlite3.connect('AI_Agent.db')
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Получаем текущее время в формате HH:MM
+        current_time = datetime.now(moscow_tz).strftime("%H:%M")
+        
+        # Выбираем все напоминания
+        cursor.execute("SELECT * FROM Reminder;")
+        reminders_results = cursor.fetchall()
+        
+        for reminder in reminders_results:
+            if reminder['reminder_time'] == current_time:
+                # Удаляем одноразовое напоминание
+                cursor.execute("DELETE FROM Reminder WHERE id_rem=?", (reminder['id_rem'],))
+                conn.commit()
+                bot.send_message(chat_id=reminder['user_id'], text=reminder['reminder_text'])
+        
+        conn.close()
+        await asyncio.sleep(60)  # Проверяем каждую минуту
+
+# Функция для запуска асинхронной задачи
+async def start():
+    current_sec = int(datetime.now(moscow_tz).strftime("%S"))
+    delay = 60 - current_sec
+    if delay == 60:
+        delay = 0
+    
+    await asyncio.sleep(delay)
+    await check()
+
+# Запуск асинхронной задачи в отдельном потоке
+def run_async_task():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(start())
+
+# Обработчик нажатия кнопки Выбор роли
+@bot.callback_query_handler(func=lambda call: call.data == "menu_qr")
+def handle_role(call):
     chat_id = call.message.chat.id
     clear_dialog_context(chat_id)
     markup = types.InlineKeyboardMarkup(row_width=1)
@@ -70,6 +216,52 @@ def clear_dialog_context(chat_id):
         dialogue_context[chat_id] = []
     if chat_id in count_questions_users:
         count_questions_users[chat_id] = 0
+
+# Обработчик выбора меню
+@bot.callback_query_handler(func=lambda call: call.data.startswith("menu_r"))
+def choose_menu(call):
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    roles = [
+        types.InlineKeyboardButton(text="Аналитик", callback_data="specsql_analyst"),
+        types.InlineKeyboardButton(text="Тестировщик", callback_data="specsql_tester"),
+        types.InlineKeyboardButton(text="WEB", callback_data="specsql_web"),
+        types.InlineKeyboardButton(text="Java", callback_data="specsql_java"),
+        types.InlineKeyboardButton(text="Python", callback_data="specsql_python"),
+        types.InlineKeyboardButton(text="В начало", callback_data="start"),
+    ]
+    markup.add(*roles)
+    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Выберите роль:", reply_markup=markup)
+
+ # Обработка выбора специализации
+@bot.callback_query_handler(func=lambda call: call.data.startswith( "specsql_"))
+def handle_role_specialization(call):
+    user_id = call.message.chat.id
+    data = call.data
+    conn = sqlite3.connect('AI_Agent.db')
+    cursor = conn.cursor()
+    specialization_mapping = {
+        "specsql_analyst": "Аналитик",
+        "specsql_tester": "Тестировщик",
+        "specsql_web": "WEB",
+        "specsql_java": "Java",
+        "specsql_python": "Python"
+    }
+    specialization = specialization_mapping.get(data)
+    cursor.execute("UPDATE Users SET role = ? WHERE user_id = ?", (specialization, user_id))
+    conn.commit()
+    bot.answer_callback_query(call.id, f"Специализация '{specialization}' успешно сохранена!")
+    cursor.execute("SELECT user_id, role FROM Users WHERE user_id = ?", (user_id,))
+    users= cursor.fetchone()
+
+    if users:
+        # user_data — это кортеж, например: (123456789, "Аналитик")
+        print(f"User ID: {users[0]}, Role: {users[1]}")
+    conn.close()
+
+
+    # Возврат в меню
+    handle_start(call)
+
 
 
 # Обработчик выбора роли
@@ -461,6 +653,11 @@ async def test_websocket(question, message, role, specialization, question_id):
         markup.add(*button)
         bot.send_message(chat_id=message_2.chat.id, text = "Пожалуйста, выберите дальнейшее действие", reply_markup=markup)
 
-        
+current_timezone = time.tzname
+print(f"Текущий часовой пояс: {current_timezone}")     
+current_timenow = datetime.now(moscow_tz).strftime("%H:%M")
+print(f"Текущий часовой пояс:{current_timenow}")
+# Запуск планировщика в отдельном потоке
+threading.Thread(target=run_async_task, daemon=True).start()
+bot.polling(none_stop=False)
 
-bot.polling(none_stop=True)

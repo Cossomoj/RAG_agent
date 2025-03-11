@@ -3,7 +3,7 @@ import sys
 
 # Пути к скриптам, которые нужно запустить
 script1 = 'rag_service.py'
-script2 = 'telegram_bot.py'
+     = 'telegram_bot.py'
 
 # Функция для запуска скрипта в фоновом режиме
 def run_script_in_background(script_path):
