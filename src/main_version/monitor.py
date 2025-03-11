@@ -2,12 +2,12 @@ import os
 import psutil
 import telebot
 import logging
+from telebot.types import ReplyKeyboardMarkup, KeyboardButton
 import matplotlib.pyplot as plt
 
 # Загружаем токен бота из переменных окружения
 ALERT_BOT_TOKEN = os.getenv("ALERT_BOT_TOKEN")
 bot = telebot.TeleBot(ALERT_BOT_TOKEN)
-
 
 # Настройка логирования
 logging.basicConfig(filename="monitor.log", level=logging.ERROR, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -79,6 +79,15 @@ def generate_graph():
         logging.error(f"Ошибка генерации графика: {e}")
         return None
 
+# Обработчик команды /start
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    """Отправляет приветственное сообщение и кнопку для вызова /status"""
+    markup = ReplyKeyboardMarkup(resize_keyboard=True)
+    status_button = KeyboardButton("/status")
+    markup.add(status_button)
+    bot.send_message(message.chat.id, "👋 Привет! Я бот для мониторинга системы. Нажмите кнопку ниже, чтобы узнать текущий статус.", reply_markup=markup)
+
 # Обработчик команды /status
 @bot.message_handler(commands=['status'])
 def send_status(message):
@@ -101,4 +110,4 @@ def send_status(message):
 
 # Запуск бота
 if __name__ == "__main__":
-    bot.infinity_polling() 
+    bot.infinity_polling()
