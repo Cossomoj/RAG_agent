@@ -378,7 +378,7 @@ def handling_cached_requests(question_id, message, question):
     
     dialogue_context[chat_id].append({"role": "assistant", "content": full_ans_for_context})
     markup = types.InlineKeyboardMarkup()
-    button = [types.InlineKeyboardButton(text="Ввести уточняющее сообщение", callback_data="question_custom"),
+    button = [types.InlineKeyboardButton(text="Уточнить", callback_data="question_custom"),
                     types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start")
                 ]
     markup.add(*button)
