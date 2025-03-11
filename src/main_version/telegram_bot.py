@@ -452,7 +452,7 @@ async def test_websocket(question, message, role, specialization, question_id):
         dialogue_context[chat_id].append({"role": "assistant", "content": answer_for_countinue_dialog})
         markup = types.InlineKeyboardMarkup()
         if(count_questions_users[chat_id] < 6):
-            button = [types.InlineKeyboardButton(text="Ввести уточняющее сообщение", callback_data="question_custom"),
+            button = [types.InlineKeyboardButton(text="Уточнить", callback_data="question_custom"),
                     types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start")
                 ]
         else:
