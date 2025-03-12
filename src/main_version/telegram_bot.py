@@ -56,31 +56,51 @@ user_data = {}
 #print("2\n")
 # Создание таблицы, если она не существует
 
-conn = sqlite3.connect('AI_agent.db')
-cursor = conn.cursor()
-cursor.execute('''
-CREATE TABLE IF NOT EXISTS Users (
-    user_id INTEGER PRIMARY KEY,
-    role TEXT DEFAULT NULL
-)
-''')
-conn.commit()
-conn.close()
+def init_db():
+    # Подключаемся к базе данных (или создаем ее, если она не существует)
+    conn = sqlite3.connect('AI_agent.db')
+    cursor = conn.cursor()
 
-conn = sqlite3.connect('AI_agent.db')
-cursor = conn.cursor()
-cursor.execute('''
-CREATE TABLE IF NOT EXISTS Reminder (
-    id_rem INTEGER PRIMARY KEY AUTOINCREMENT, 
-    user_id INTEGER,
-    reminder_text DEFAULT NULL,
-    reminder_time DEFAULT NULL
-)
-''')
+    try:
+        # Создаем таблицу Users
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS Users (
+            user_id INTEGER PRIMARY KEY,
+            role TEXT DEFAULT NULL
+        )
+        ''')
 
+        # Создаем таблицу Reminder
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS Reminder (
+            id_rem INTEGER PRIMARY KEY AUTOINCREMENT, 
+            user_id INTEGER,
+            reminder_text TEXT DEFAULT NULL,
+            reminder_time TEXT DEFAULT NULL
+        )
+        ''')
 
-conn.commit()
-conn.close()
+        # Создаем таблицу Message_history
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS Message_history (
+            id_message INTEGER PRIMARY KEY AUTOINCREMENT, 
+            user_id INTEGER,
+            message TEXT
+        )
+        ''')
+
+        # Фиксируем изменения в базе данных
+        conn.commit()
+    except Exception as e:
+        # В случае ошибки откатываем изменения
+        conn.rollback()
+        print(f"Ошибка при создании таблиц: {e}")
+    finally:
+        # Закрываем соединение с базой данных
+        conn.close()
+
+# Вызов функции для инициализации базы данных
+init_db()
 
 # Обработчик команды /start
 @bot.message_handler(commands=['start'])
@@ -114,28 +134,39 @@ def send_welcome(message):
 
 # Обработчик нажатия кнопки Start
 @bot.callback_query_handler(func=lambda call: call.data == "start")
-def handle_start(call):
-
+def handle_start(message_or_call):
+    # Определяем chat_id в зависимости от типа объекта (message или call)
+    if isinstance(message_or_call, telebot.types.Message):
+        chat_id = message_or_call.chat.id
+    else:
+        chat_id = message_or_call.message.chat.id
+    
+    # Отменяем текущий обработчик следующего шага
+    bot.clear_step_handler_by_chat_id(chat_id)  # Передаем chat_id (число), а не объект
+    
+    # Создаем клавиатуру с кнопками
     markup = types.InlineKeyboardMarkup(row_width=1)
     roles = [
         types.InlineKeyboardButton(text="Задать вопрос по роли", callback_data="menu_qr"),
         types.InlineKeyboardButton(text="Выбрать роль", callback_data="menu_r"),
-        # types.InlineKeyboardButton(text="Ввести свой вопрос", callback_data="question_custom"),
         types.InlineKeyboardButton(text="Поставьте напоминание", callback_data="menu_rem")
-
     ]
     markup.add(*roles)
-    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Меню:", reply_markup=markup)
-
+    
+    # Отправляем новое сообщение с главным меню
+    bot.send_message(chat_id, "Главное меню:", reply_markup=markup)
 
 # Обработчик нажатия кнопки "Поставьте напоминание"
 @bot.callback_query_handler(func=lambda call: call.data == "menu_rem")
 def handle_reminder(call):
-    msg = bot.send_message(call.message.chat.id, "Введите время напоминания в формате HH:MM и текст напоминания через пробел.\nНапример: 14:30 Позвонить маме")
-    bot.register_next_step_handler(msg, process_reminder_input)
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    back_button = types.InlineKeyboardButton(text="В начало", callback_data="start")
+    markup.add(back_button)
+    msg = bot.send_message(call.message.chat.id, "Введите время напоминания в формате HH:MM и текст напоминания через пробел.\nНапример: 14:30 Рассказать про uc", reply_markup=markup)
+    bot.register_next_step_handler(msg, lambda message: process_reminder_input(message, call))
 
 # Обработчик ввода времени и текста напоминания
-def process_reminder_input(message):
+def process_reminder_input(message, call):
     try:
         # Разделяем ввод на время и текст
         time_str, reminder_text = message.text.split(maxsplit=1)
@@ -153,9 +184,17 @@ def process_reminder_input(message):
         conn.commit()
         conn.close()
         
+        # Отправляем сообщение об успешном создании напоминания
         bot.send_message(message.chat.id, f"Напоминание установлено на {time_str}: {reminder_text}")
+        handle_start(call)
+        
     except ValueError:
+        # Обработка ошибки неверного формата времени
         bot.send_message(message.chat.id, "Неверный формат времени. Используйте HH:MM.")
+        handle_start(call)
+    except sqlite3.Error as e:
+        # Обработка ошибок базы данных
+        bot.send_message(message.chat.id, f"Ошибка при сохранении напоминания: {e}")
 
 # Асинхронная функция для проверки и отправки напоминаний
 async def check():
@@ -165,7 +204,7 @@ async def check():
         cursor = conn.cursor()
         
         # Получаем текущее время в формате HH:MM
-        current_time = datetime.now(moscow_tz).strftime("%H:%M")
+        current_time = datetime.now().strftime("%H:%M")
         
         # Выбираем все напоминания
         cursor.execute("SELECT * FROM Reminder;")
@@ -183,7 +222,7 @@ async def check():
 
 # Функция для запуска асинхронной задачи
 async def start():
-    current_sec = int(datetime.now(moscow_tz).strftime("%S"))
+    current_sec = int(datetime.now().strftime("%S"))
     delay = 60 - current_sec
     if delay == 60:
         delay = 0
@@ -217,7 +256,7 @@ def clear_dialog_context(chat_id):
     if chat_id in count_questions_users:
         count_questions_users[chat_id] = 0
 
-# Обработчик выбора меню
+# Обработчик выбора роли
 @bot.callback_query_handler(func=lambda call: call.data.startswith("menu_r"))
 def choose_menu(call):
     markup = types.InlineKeyboardMarkup(row_width=1)
