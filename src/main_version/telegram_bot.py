@@ -14,6 +14,30 @@ import threading
 import pytz
 load_dotenv()
 
+import threading
+import queue
+
+# Создаем очередь для хранения запросов
+request_queue = queue.Queue()
+
+# Функция-воркер для обработки запросов
+def request_worker():
+    while True:
+        # Получаем запрос из очереди
+        item = request_queue.get()
+        if item is None:
+            break
+        
+        # Обрабатываем запрос
+        chat_id, question, role, specialization, question_id = item
+        asyncio.run(websocket_question_from_user(question, chat_id, role, specialization, question_id))
+        
+        # Помечаем задачу как выполненную
+        request_queue.task_done()
+
+# Запускаем воркер в отдельном потоке
+threading.Thread(target=request_worker, daemon=True).start()
+
 WEBSOCKET_URL = "ws://127.0.0.1:8000/ws"
 moscow_tz = pytz.timezone('Europe/Moscow')
 
@@ -73,19 +97,22 @@ def init_db():
         # Создаем таблицу Reminder
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS Reminder (
-            id_rem INTEGER PRIMARY KEY AUTOINCREMENT, 
-            user_id INTEGER,
-            reminder_text TEXT DEFAULT NULL,
-            reminder_time TEXT DEFAULT NULL
+        id_rem INTEGER PRIMARY KEY AUTOINCREMENT, 
+        user_id INTEGER,
+        reminder_text TEXT DEFAULT NULL,
+        reminder_time TEXT DEFAULT NULL,
+        FOREIGN KEY (user_id) REFERENCES Users(user_id)
         )
         ''')
 
         # Создаем таблицу Message_history
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS Message_history (
-            id_message INTEGER PRIMARY KEY AUTOINCREMENT, 
-            user_id INTEGER,
-            message TEXT
+        user_id INTEGER, 
+        role TEXT CHECK(role IN ('user', 'assistant')),
+        message TEXT NOT NULL,
+        time DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES Users(user_id)
         )
         ''')
 
@@ -101,6 +128,43 @@ def init_db():
 
 # Вызов функции для инициализации базы данных
 init_db()
+
+def save_message_in_db(chat_id, role, message):
+    try:
+        conn = sqlite3.connect('AI_Agent.db')
+        cursor = conn.cursor()
+        time = datetime.now() 
+        cursor.execute('''
+        INSERT INTO Message_history (user_id, role, message, time)
+        VALUES (?, ?, ?, ?)
+        ''', (chat_id, role, message, time))
+        conn.commit()
+        conn.close()
+    except sqlite3.Error as e:
+        # Обработка ошибок базы данных
+        print( f"Ошибка при сохранении сообщения в историю: {e}")
+
+def take_history_dialog_from_db(chat_id):
+    conn = sqlite3.connect('AI_Agent.db') 
+    cursor = conn.cursor()
+
+    # Запрос для получения истории сообщений в одну строку по user_id
+    user_id = chat_id 
+    query = '''
+    SELECT 
+        GROUP_CONCAT(role || ': ' || message || ' (' || time || ')', '; ') AS full_history
+    FROM Message_history
+    WHERE user_id = ?
+    GROUP BY user_id;
+    
+    '''
+
+    # Выполнение запроса
+    cursor.execute(query, (user_id,))
+    result = cursor.fetchone()
+
+    conn.close()
+    return result
 
 # Обработчик команды /start
 @bot.message_handler(commands=['start'])
@@ -215,7 +279,38 @@ async def check():
                 # Удаляем одноразовое напоминание
                 cursor.execute("DELETE FROM Reminder WHERE id_rem=?", (reminder['id_rem'],))
                 conn.commit()
-                bot.send_message(chat_id=reminder['user_id'], text=reminder['reminder_text'])
+
+                chat_id = reminder['user_id']
+                wanted_simbols = [".", ":"]
+                context_str = take_history_dialog_from_db(chat_id)
+                question_id = 666
+                role = 'Аналитик'
+                specialization = 'Специалист'
+                count_for_pro_activity = 101
+                question = 'without'
+                async with websockets.connect(WEBSOCKET_URL) as websocket:
+                    await websocket.send(question) # Отправляем вопрос
+                    await websocket.send(role)
+                    await websocket.send(specialization)
+                    await websocket.send(str(question_id))
+                    await websocket.send(context_str)
+                    await websocket.send(str(count_for_pro_activity))
+                    try:
+                        full_answer = ""
+                        while True:
+                            answer_part = await websocket.recv()  # Получаем ответ частями
+                            if answer_part:
+                                for char in answer_part:
+                                    if (char in wanted_simbols):
+                                        answer_part += "\n"
+
+                                full_answer += answer_part
+                            else:
+                                print("Получено пустое сообщение от WebSocket.")
+                        
+                    except websockets.exceptions.ConnectionClosed:
+                        bot.send_message(chat_id=chat_id, text = full_answer)
+                
         
         conn.close()
         await asyncio.sleep(60)  # Проверяем каждую минуту
@@ -433,7 +528,6 @@ def handle_predefined_question_group_1(call):
     role = user_data[call.message.chat.id]['role']
     specialization = user_data[call.message.chat.id]['specialization']
     
-    
     if call.data == "group_1_question_1":
         question = "Поиск кандидатов на рбаоту"
         question_id = 6
@@ -450,11 +544,8 @@ def handle_predefined_question_group_1(call):
         question = "Проведение встреч компетенции"
         question_id = 10
 
-    if (question_id not in cache_dict):
-        asyncio.run(test_websocket(question, call.message, role, specialization, question_id))
-    else:
-        handling_cached_requests(question_id, call.message, question)
-
+    # Добавляем запрос в очередь
+    request_queue.put((chat_id, question, role, specialization, question_id))
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("group_2"))
 def handle_predefined_question_group_2(call):
@@ -485,7 +576,7 @@ def handle_predefined_question_group_2(call):
         question_id = 14
 
     if (question_id not in cache_dict):
-        asyncio.run(test_websocket(question, call.message, role, specialization, question_id))
+        request_queue.put((chat_id, question, role, specialization, question_id))
     else:
         handling_cached_requests(question_id, call.message, question)
 
@@ -516,13 +607,13 @@ def handle_predefined_question_group_2(call):
         question_id = 17
 
     if (question_id not in cache_dict):
-        asyncio.run(test_websocket(question, call.message, role, specialization, question_id))
+        request_queue.put((chat_id, question, role, specialization, question_id))
     else:
         handling_cached_requests(question_id, call.message, question)
 
 
 
-@bot.callback_query_handler(func=lambda call: call.data in ["question_1", "question_2", "question_3", "question_4", "question_5"])
+@bot.callback_query_handler(func=lambda call: call.data.startswith("question_"))
 def handle_predefined_question(call):
     chat_id = call.message.chat.id
     clear_dialog_context(chat_id)
@@ -535,7 +626,6 @@ def handle_predefined_question(call):
 
     role = user_data[call.message.chat.id]['role']
     specialization = user_data[call.message.chat.id]['specialization']
-    
     
     if call.data == "question_1":
         question = "Что я могу ожидать от своего PO/PM?"
@@ -553,9 +643,9 @@ def handle_predefined_question(call):
         question = "Что я могу ожидать от своего PO/PM специалиста"
         question_id = 5
     
-    
+    # Добавляем запрос в очередь
     if (question_id not in cache_dict):
-        asyncio.run(test_websocket(question, call.message, role, specialization, question_id))
+        request_queue.put((chat_id, question, role, specialization, question_id))
     else:
         handling_cached_requests(question_id, call.message, question)
 
@@ -575,8 +665,7 @@ def ask_custom_question(call):
     bot.register_next_step_handler(call.message, process_custom_question)
 
 
-def process_custom_question(message):
-
+def process_custom_question(message):   
     if message.chat.id not in user_data:
         user_data[message.chat.id] = {"role": "Специалист", "specialization": "Аналитик"}
 
@@ -585,7 +674,10 @@ def process_custom_question(message):
 
     question_id = 777
     question = message.text
-    asyncio.run(test_websocket(question, message, role, specialization, question_id))
+    
+    # Добавляем запрос в очередь
+
+    request_queue.put((chat_id, question, role, specialization, question_id))
 
 def handling_cached_requests(question_id, message, question):
     print("Кешированное сообщение")
@@ -600,6 +692,7 @@ def handling_cached_requests(question_id, message, question):
     if chat_id not in count_questions_users:
         count_questions_users[chat_id] = 0
     count_questions_users[chat_id] += 1
+    save_message_in_db(chat_id, "user", question)
 
     # Отправляем каждую часть с задержкой
     for i in arr:
@@ -608,22 +701,21 @@ def handling_cached_requests(question_id, message, question):
         time.sleep(1)
     
     dialogue_context[chat_id].append({"role": "assistant", "content": full_ans_for_context})
+    save_message_in_db(chat_id, "assistant", full_ans_for_context)
     markup = types.InlineKeyboardMarkup()
     button = [types.InlineKeyboardButton(text="Ввести уточняющее сообщение", callback_data="question_custom"),
                     types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start")
                 ]
     markup.add(*button)
     bot.send_message(chat_id=message_2.chat.id, text = "Пожалуйста, выберите дальнейшее действие", reply_markup=markup)
-
-async def test_websocket(question, message, role, specialization, question_id):
+async def websocket_question_from_user(question, chat_id, role, specialization, question_id):
     print(question)
     wanted_simbols = [".", ":"]
 
-    chat_id = message.chat.id
-    print(chat_id)
     if chat_id not in dialogue_context:
         dialogue_context[chat_id] = []
     dialogue_context[chat_id].append({"role": "user", "content": question})
+    save_message_in_db(chat_id, "user", question)
     context_str = json.dumps(dialogue_context[chat_id], ensure_ascii=False, indent=4)
     if chat_id not in count_questions_users:
         count_questions_users[chat_id] = 0
@@ -638,7 +730,7 @@ async def test_websocket(question, message, role, specialization, question_id):
         await websocket.send(str(count_questions_users[chat_id]))
 
         try:
-            message_2 = bot.send_message(message.chat.id, "Ожидайте ответа...")
+            message_2 = bot.send_message(chat_id, "Ожидайте ответа...")
             full_answer = ""
             last_send_time = time.time()
             answer_for_cache = []
@@ -653,7 +745,7 @@ async def test_websocket(question, message, role, specialization, question_id):
                     full_answer += answer_part
                     if time.time() - last_send_time >= 1:
                         try:
-                            message_2 = bot.send_message(chat_id=message_2.chat.id, text=full_answer)
+                            message_2 = bot.send_message(chat_id=chat_id, text=full_answer)
                             answer_for_cache.append(full_answer)
                             answer_for_countinue_dialog += full_answer
                             full_answer = ""
@@ -663,7 +755,7 @@ async def test_websocket(question, message, role, specialization, question_id):
                                 retry_after = int(e.result.headers.get('Retry-After', 1))
                                 print(f"Rate limit exceeded. Retrying after {retry_after} seconds...")
                                 time.sleep(retry_after)
-                                message_2 = bot.send_message(chat_id=message_2.chat.id, text=full_answer)
+                                message_2 = bot.send_message(chat_id=chat_id, text=full_answer)
                                 answer_for_countinue_dialog += full_answer
                                 answer_for_cache.append(full_answer)
                                 last_send_time = time.time()
@@ -673,7 +765,7 @@ async def test_websocket(question, message, role, specialization, question_id):
             
         except websockets.exceptions.ConnectionClosed:
             if (full_answer != ""):
-                message_2 = bot.send_message(chat_id=message_2.chat.id, text=full_answer)
+                message_2 = bot.send_message(chat_id=chat_id, text=full_answer)
                 answer_for_cache.append(full_answer)
                 answer_for_countinue_dialog += full_answer
             print("")
@@ -681,6 +773,7 @@ async def test_websocket(question, message, role, specialization, question_id):
                 cache_dict[question_id] = answer_for_cache
             
         dialogue_context[chat_id].append({"role": "assistant", "content": answer_for_countinue_dialog})
+        save_message_in_db(chat_id, "assistant", answer_for_countinue_dialog)
         markup = types.InlineKeyboardMarkup()
         if(count_questions_users[chat_id] < 6):
             button = [types.InlineKeyboardButton(text="Ввести уточняющее сообщение", callback_data="question_custom"),
@@ -690,7 +783,39 @@ async def test_websocket(question, message, role, specialization, question_id):
             button = [types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start")]
 
         markup.add(*button)
-        bot.send_message(chat_id=message_2.chat.id, text = "Пожалуйста, выберите дальнейшее действие", reply_markup=markup)
+        bot.send_message(chat_id=chat_id, text = "Пожалуйста, выберите дальнейшее действие", reply_markup=markup)
+
+async def websocket_proactiv_bot(chat_id):
+    wanted_simbols = [".", ":"]
+
+    context_str = take_history_dialog_from_db(chat_id)
+    question_id = 666
+    role = 'Аналитик'
+    specialization = 'Специалист'
+    count_for_pro_activity = 101
+    question = 'without'
+    async with websockets.connect(WEBSOCKET_URL) as websocket:
+        await websocket.send(question) # Отправляем вопрос
+        await websocket.send(role)
+        await websocket.send(specialization)
+        await websocket.send(str(question_id))
+        await websocket.send(context_str)
+        await websocket.send(str(count_for_pro_activity))
+        try:
+            full_answer = ""
+            while True:
+                answer_part = await websocket.recv()  # Получаем ответ частями
+                if answer_part:
+                    for char in answer_part:
+                        if (char in wanted_simbols):
+                            answer_part += "\n"
+
+                    full_answer += answer_part
+                else:
+                    print("Получено пустое сообщение от WebSocket.")
+            
+        except websockets.exceptions.ConnectionClosed:
+            bot.send_message(chat_id=chat_id, text = full_answer)
 
 current_timezone = time.tzname
 print(f"Текущий часовой пояс: {current_timezone}")     
@@ -699,4 +824,3 @@ print(f"Текущий часовой пояс:{current_timenow}")
 # Запуск планировщика в отдельном потоке
 threading.Thread(target=run_async_task, daemon=True).start()
 bot.polling(none_stop=False)
-
