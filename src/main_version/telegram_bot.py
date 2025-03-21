@@ -338,9 +338,11 @@ async def check():
                         
                     except websockets.exceptions.ConnectionClosed:
                         markup = types.InlineKeyboardMarkup(row_width=1)
-                        question = types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start")
-                        markup.add(question)
-                        markup = types.InlineKeyboardMarkup(row_width=1)
+                        question = [
+                            types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start"),
+                            types.InlineKeyboardButton(text="Задать вопрос", callback_data="question_custom"),
+                        ]
+                        markup.add(*question)
                         try:
                             # Пытаемся отправить сообщение
                             bot.send_message(chat_id=chat_id, text = full_answer, reply_markup=markup)
@@ -354,6 +356,7 @@ async def check():
                                 print(f"Ошибка при отправке сообщения: {e}")
         conn.close()
         await asyncio.sleep(60)  # Проверяем каждую минуту
+
 
 # Функция для запуска асинхронной задачи
 async def start():
