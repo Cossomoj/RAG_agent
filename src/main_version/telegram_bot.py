@@ -47,54 +47,6 @@ bot = telebot.TeleBot(secret_key)
 # Словарь для хранения данных пользователя
 user_data = {}
 
-def init_db():
-    # Подключаемся к базе данных (или создаем ее, если она не существует)
-    conn = sqlite3.connect(DATABASE_URL)
-    cursor = conn.cursor()
-
-    try:
-        # Создаем таблицу Users
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS Users (
-            user_id INTEGER PRIMARY KEY,
-            role TEXT DEFAULT NULL
-        )
-        ''')
-
-        # Создаем таблицу Reminder
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS Reminder (
-        id_rem INTEGER PRIMARY KEY AUTOINCREMENT, 
-        user_id INTEGER,
-        reminder_text TEXT DEFAULT NULL,
-        reminder_time TEXT DEFAULT NULL,
-        FOREIGN KEY (user_id) REFERENCES Users(user_id)
-        )
-        ''')
-
-        # Создаем таблицу Message_history
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS Message_history (
-        user_id INTEGER, 
-        role TEXT CHECK(role IN ('user', 'assistant')),
-        message TEXT NOT NULL,
-        time DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES Users(user_id)
-        )
-        ''')
-
-        # Фиксируем изменения в базе данных
-        conn.commit()
-    except Exception as e:
-        # В случае ошибки откатываем изменения
-        conn.rollback()
-        print(f"Ошибка при создании таблиц: {e}")
-    finally:
-        # Закрываем соединение с базой данных
-        conn.close()
-
-# Вызов функции для инициализации базы данных
-init_db()
 
 def save_message_in_db(chat_id, role, message):
     try:
