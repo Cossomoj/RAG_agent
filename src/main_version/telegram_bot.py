@@ -250,7 +250,7 @@ async def check():
         
         # Получаем текущее время в формате HH:MM
         current_time = datetime.now().strftime("%H:%M")
-        time_for_send_messages = "14:20"
+        time_for_send_messages = "14:40"
         
         # Выбираем все напоминания
         cursor.execute("SELECT * FROM Users;")
