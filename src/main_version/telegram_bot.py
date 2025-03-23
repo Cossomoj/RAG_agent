@@ -15,7 +15,7 @@ import pytz
 
 load_dotenv()
 
-DATABASE_URL = "AI_agent.db"
+DATABASE_URL = "/app/AI_agent.db"
 
 WEBSOCKET_URL = "ws://127.0.0.1:8000/ws"
 moscow_tz = pytz.timezone('Europe/Moscow')
