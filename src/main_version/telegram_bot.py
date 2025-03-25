@@ -284,7 +284,13 @@ def process_reminder_input(message):
         datetime.strptime(time_str, "%H:%M")  # Если время не в формате HH:MM, выбросится исключение
 
         # Вычитаем 3 часа
+        time_obj = datetime.strptime(time_str, "%H:%M")
+
+        # Вычитаем 3 часа
         time_obj = time_obj - timedelta(hours=3)
+
+        # Преобразуем обратно в строку
+        time_str = time_obj.strftime("%H:%M")
         
         # Сохраняем напоминание в базу данных
         conn = sqlite3.connect(DATABASE_URL)
