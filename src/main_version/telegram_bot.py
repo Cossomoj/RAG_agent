@@ -248,7 +248,7 @@ def handle_team(call):
     bot.edit_message_text(
         chat_id = call.message.chat.id,
         message_id=call.message.message_id,
-        text = "@dradns \n @betonnnnnnnn \n @alexr_home \n @leanorac \n @kathlynw \n @grahamchik \n @biryukovaoly \n Приглашаем работать над ИИ-агентом вместе с нами! Напиши @biryukovaoly, чтобы присоединиться.",
+        text = "@dradns \n @betonnnnnnnn \n @latexala \n @alexr_home \n @leanorac \n @kathlynw \n @grahamchik \n @biryukovaoly \n Приглашаем работать над ИИ-агентом вместе с нами! Напиши @biryukovaoly, чтобы присоединиться.",
         reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data == "profile")
@@ -282,6 +282,9 @@ def process_reminder_input(message):
         
         # Проверяем формат времени
         datetime.strptime(time_str, "%H:%M")  # Если время не в формате HH:MM, выбросится исключение
+
+        # Вычитаем 3 часа
+        time_obj = time_obj - timedelta(hours=3)
         
         # Сохраняем напоминание в базу данных
         conn = sqlite3.connect(DATABASE_URL)
@@ -395,9 +398,6 @@ threading.Thread(target=run_async_task, daemon=True).start()
 # Асинхронная функция для проверки и отправки напоминаний
 async def check_for_hack():
     while True:
-        conn = sqlite3.connect(DATABASE_URL)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
         
         # Получаем текущее время в формате HH:MM
         current_time = datetime.now().strftime("%H:%M")
@@ -453,7 +453,6 @@ async def check_for_hack():
                             else:
                                 # Обработка других возможных ошибок
                                 print(f"Ошибка при отправке сообщения: {e}")
-        conn.close()
         await asyncio.sleep(60)  # Проверяем каждую минуту
 
 async def start_for_hack():
@@ -597,8 +596,9 @@ def choose_specialization(call):
     spec_mapping = {
         "spec_analyst": "Аналитик",
         "spec_tester": "Тестировщик",
-        "spec_devops": "Девопс",
-        "spec_developer": "Разработчик"
+        "spec_web": "WEB",
+        "spec_java": "Java",
+        "spec_python": "Python"
     }
     selected_spec = spec_mapping.get(call.data)
 
@@ -610,7 +610,7 @@ def choose_specialization(call):
     markup = types.InlineKeyboardMarkup(row_width=1)
 
 
-    if(selected_spec in ["Аналитик", "Тестировщик", "Девопс", "Разработчик"] and user_data[call.message.chat.id]['role'] == "Специалист"):
+    if(selected_spec in ["Аналитик", "Тестировщик", "WEB", "Java", "Python"] and user_data[call.message.chat.id]['role'] == "Специалист"):
         questions = [
             types.InlineKeyboardButton(text="Что я могу ожидать от своего PO/PM", callback_data="question_1"),
             types.InlineKeyboardButton(text="Что я могу ожидать от своего Лида", callback_data="question_2"),
@@ -793,8 +793,8 @@ def handle_predefined_question(call):
     elif call.data == "question_2":
         question = "Что я могу ожидать от своего Лида?"
         question_id = 2
-    elif call.data == "question_3":
-        question = "Посмотреть матрицу компетенций"
+    elif(call.data == "question_3"):
+        question = "Посмотерть матрицу компетенций"
         question_id = 3
     elif call.data == "question_4":
         question = "Что я могу ожидать от специалиста компетенции"
@@ -803,11 +803,16 @@ def handle_predefined_question(call):
         question = "Что я могу ожидать от своего PO/PM специалиста"
         question_id = 5
     
-    
-    if (question_id not in cache_dict):
-        asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
+    if(question_id != 3):
+        if (question_id not in cache_dict):
+            asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
+        else:
+            handling_cached_requests(question_id, call.message, question)
     else:
-        handling_cached_requests(question_id, call.message, question)
+        if(specialization != "Аналитик"):
+            hadl_print_in_development_2(call.message)
+        else:
+            handling_cached_requests(question_id, call.message, question)
 
 @bot.callback_query_handler(func=lambda call: call.data == "question_777")
 def hadl_print_in_development(call):
