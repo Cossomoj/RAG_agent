@@ -9,19 +9,20 @@ import time
 import os
 import sqlite3
 import schedule
-from datetime import datetime, UTC 
+from datetime import datetime, UTC, timedelta
 import threading
 import pytz
 
 load_dotenv()
 
-DATABASE_URL = "/app/src/main_version/AI_agent.db"
+DATABASE_URL = "AI_agent.db"
 
 WEBSOCKET_URL = "ws://127.0.0.1:8000/ws"
 moscow_tz = pytz.timezone('Europe/Moscow')
 
 dialogue_context = {}
 count_questions_users = {}
+new_users = {}
 
 secret_key = os.getenv("TELEGRAM_API_KEY")
 cache_dict = {3 : ["Уровень Junior\nСофты:\n1. Желание учиться которое подтверждается делом.(Что изучено за последний год? Как это применяется?).\n2. Проактивная работа с заказчиком.(Инициатива по вопросам/запросу ОС должна поступать от специалиста).\n3. Умение принимать ОС.\n4. Многозадачность - в термин (многозадачность) вкладывается НЕ возможность в каждый момент времени думать сразу о нескольких задачах, а возможность переключаться между задачами/проектами (от 2х - оптимально, до 5ти - максимально) без сильной потери эффективности (что какая-то потеря эффективности будет - факт).",
@@ -152,11 +153,27 @@ def send_welcome(message):
         cursor.execute("INSERT INTO Users (user_id) VALUES(?)", (user_id,))
         conn.commit()
         print(f"Пользователь с ID {user_id} успешно добавлен в базу данных.")
+    if user_id in new_users:
+        current_time = datetime.now().replace(second=0, microsecond=0)
+        new_users[user_id] = [
+            (current_time + timedelta(minutes=1)).strftime("%H:%M"),  # +2 минуты
+            (current_time + timedelta(minutes=5)).strftime("%H:%M"),  # +5 минут
+            (current_time + timedelta(minutes=10)).strftime("%H:%M")  # +10 минут
+        ]
+    else:
+        current_time = datetime.now().replace(second=0, microsecond=0)
+        new_users[user_id] = [
+            (current_time + timedelta(minutes=1)).strftime("%H:%M"),  # +2 минуты
+            (current_time + timedelta(minutes=5)).strftime("%H:%M"),  # +5 минут
+            (current_time + timedelta(minutes=10)).strftime("%H:%M")  # +10 минут
+        ]
+
     # Выводим всех пользователей для проверки
     cursor.execute("SELECT * FROM Users")
     users = cursor.fetchall()
     print("Текущие пользователи в базе данных:")
     for user in users:
+
         print(user[0], user[1])  # user[0], так как fetchall() возвращает кортежи
     markup = types.InlineKeyboardMarkup()
     button = types.InlineKeyboardButton(text="Начать", callback_data="start")
@@ -177,7 +194,7 @@ def handle_start(call):
     markup = types.InlineKeyboardMarkup(row_width=1)
     roles = [
         types.InlineKeyboardButton(text="Выбрать роль", callback_data="menu_qr"),
-        types.InlineKeyboardButton(text="Поставьте напоминание", callback_data="question_777"),
+        types.InlineKeyboardButton(text="Поставьте напоминание", callback_data="menu_rem"),
         types.InlineKeyboardButton(text="Что я умею?", callback_data="other_whatido"),
         types.InlineKeyboardButton(text="Другое", callback_data="other_other")
     ]
@@ -197,11 +214,10 @@ def handle_other(call):
             text=(
                 "🚀 *Я умею:*\n"
                 "✅ *Помогать по ролям:* бизнес-заказчику, лиду компетенции, линейному сотруднику.\n"
-                "✅ *Специализируюсь на аналитике* (скоро — тестировщик, web, Java, Python).\n"
+                "✅ *Специализируюсь на аналитике*, а также роли тестировщик, web, Java, Python.\n"
                 "✅ *Отвечать на вопросы* из списка или в свободной форме.\n"
                 "✅ *Объяснять роли в команде* и развивать профессиональные навыки.\n"
-                "✅ Использую RAG и интеграцию с GigaChat для точных ответов.\n"
-                "✅ Скоро: рассылка полезных материалов и персональные советы на основе ваших диалогов.\n"
+                "✅ *Рассылка полезных материалов и персональные советы* на основе ваших диалогов.\n"
                 "Спрашивайте — помогу разобраться! 😊"
             ),
             parse_mode="Markdown"
@@ -232,7 +248,7 @@ def handle_team(call):
     bot.edit_message_text(
         chat_id = call.message.chat.id,
         message_id=call.message.message_id,
-        text = "Мы классные ребята",
+        text = "@dradns \n @betonnnnnnnn \n @alexr_home \n @leanorac \n @kathlynw \n @grahamchik \n @biryukovaoly \n Приглашаем работать над ИИ-агентом вместе с нами! Напиши @biryukovaoly, чтобы присоединиться.",
         reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data == "profile")
@@ -251,16 +267,15 @@ def handle_profile(call):
 # Обработчик нажатия кнопки "Поставьте напоминание"
 @bot.callback_query_handler(func=lambda call: call.data == "menu_rem")
 def handle_reminder(call):
-    bot.clear_step_handler_by_chat_id(call.message.chat.id)
     markup = types.InlineKeyboardMarkup(row_width=1)
     back_button = types.InlineKeyboardButton(text="В начало", callback_data="start")
     markup.add(back_button)
     msg = bot.send_message(call.message.chat.id, "Введите время напоминания в формате HH:MM и текст напоминания через пробел.\nНапример: 14:30 Рассказать про uc", reply_markup=markup)
-    bot.register_next_step_handler(msg, lambda message: process_reminder_input(message, call))
+    bot.register_next_step_handler(msg, lambda message: process_reminder_input(message))
 
 
 # Обработчик ввода времени и текста напоминания
-def process_reminder_input(message, call):
+def process_reminder_input(message):
     try:
         # Разделяем ввод на время и текст
         time_str, reminder_text = message.text.split(maxsplit=1)
@@ -280,12 +295,10 @@ def process_reminder_input(message, call):
         
         # Отправляем сообщение об успешном создании напоминания
         bot.send_message(message.chat.id, f"Напоминание установлено на {time_str}: {reminder_text}")
-        handle_start(call)
         
     except ValueError:
         # Обработка ошибки неверного формата времени
         bot.send_message(message.chat.id, "Неверный формат времени. Используйте HH:MM.")
-        handle_start(call)
     except sqlite3.Error as e:
         # Обработка ошибок базы данных
         bot.send_message(message.chat.id, f"Ошибка при сохранении напоминания: {e}")
@@ -302,20 +315,21 @@ async def check():
         time_for_send_messages = "20:40"
         
         # Выбираем все напоминания
-        cursor.execute("SELECT * FROM Users;")
+        cursor.execute("SELECT * FROM Reminder;")
         reminders_results = cursor.fetchall()
-        if(current_time == time_for_send_messages):
-            for reminder in reminders_results:
-
+        for reminder in reminders_results:
+            if(reminder['reminder_time'] == current_time):
+                cursor.execute("DELETE FROM Reminder WHERE id_rem=?", (reminder['id_rem'],))
+                conn.commit()
                 chat_id = reminder['user_id']
                 wanted_simbols = [".", ":"]
-                context_str = take_history_dialog_from_db(chat_id)
+                context_str = reminder['reminder_text']
                 if(not context_str):
                     context_str = "История сообщений пустая"
                 question_id = 666
-                role = 'Аналитик'
+                role = 'Аналитик'   
                 specialization = 'Специалист'
-                count_for_pro_activity = 101
+                count_for_pro_activity = 102
                 question = 'without'
                 async with websockets.connect(WEBSOCKET_URL) as websocket:
                     await websocket.send(question) # Отправляем вопрос
@@ -374,6 +388,91 @@ def run_async_task():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(start())
+
+# Запуск планировщика в отдельном потоке
+threading.Thread(target=run_async_task, daemon=True).start()
+
+# Асинхронная функция для проверки и отправки напоминаний
+async def check_for_hack():
+    while True:
+        conn = sqlite3.connect(DATABASE_URL)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Получаем текущее время в формате HH:MM
+        current_time = datetime.now().strftime("%H:%M")
+        
+        # Выбираем все напоминания
+        for user_id in new_users:
+            if(current_time in new_users[user_id]):
+                chat_id = user_id
+                wanted_simbols = [".", ":"]
+                context_str = take_history_dialog_from_db(chat_id)
+                if(not context_str):
+                    context_str = "История сообщений пустая"
+                question_id = 666
+                role = 'Аналитик'   
+                specialization = 'Специалист'
+                count_for_pro_activity = 101
+                question = 'without'
+                async with websockets.connect(WEBSOCKET_URL) as websocket:
+                    await websocket.send(question) # Отправляем вопрос
+                    await websocket.send(role)
+                    await websocket.send(specialization)
+                    await websocket.send(str(question_id))
+                    await websocket.send(context_str)
+                    await websocket.send(str(count_for_pro_activity))
+                    try:
+                        full_answer = ""
+                        while True:
+                            answer_part = await websocket.recv()  # Получаем ответ частями
+                            if answer_part:
+                                for char in answer_part:
+                                    if (char in wanted_simbols):
+                                        answer_part += "\n"
+
+                                full_answer += answer_part
+                            else:
+                                print("Получено пустое сообщение от WebSocket.")
+                        
+                    except websockets.exceptions.ConnectionClosed:
+                        markup = types.InlineKeyboardMarkup(row_width=1)
+                        question = [
+                            types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start"),
+                            types.InlineKeyboardButton(text="Задать вопрос", callback_data="question_custom"),
+                        ]
+                        markup.add(*question)
+                        try:
+                            # Пытаемся отправить сообщение
+                            bot.send_message(chat_id=chat_id, text = full_answer, reply_markup=markup)
+                            print(f"Сообщение отправлено пользователю {chat_id}")
+                        except telebot.apihelper.ApiException as e:
+                            # Если пользователь заблокировал бота, вы получите исключение
+                            if "Forbidden: bot was blocked by the user" in str(e):
+                                print(f"Пользователь {chat_id} заблокировал бота.")
+                            else:
+                                # Обработка других возможных ошибок
+                                print(f"Ошибка при отправке сообщения: {e}")
+        conn.close()
+        await asyncio.sleep(60)  # Проверяем каждую минуту
+
+async def start_for_hack():
+    current_sec = int(datetime.now().strftime("%S"))
+    delay = 60 - current_sec
+    if delay == 60:
+        delay = 0
+    
+    await asyncio.sleep(delay)
+    await check_for_hack()
+
+# Запуск асинхронной задачи в отдельном потоке
+def run_async_task_for_hack():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(start_for_hack())
+
+# Запуск планировщика в отдельном потоке
+threading.Thread(target=run_async_task_for_hack, daemon=True).start()
 
 # Обработчик нажатия кнопки Выбор роли
 @bot.callback_query_handler(func=lambda call: call.data == "menu_qr")
@@ -511,7 +610,7 @@ def choose_specialization(call):
     markup = types.InlineKeyboardMarkup(row_width=1)
 
 
-    if(selected_spec == "Аналитик" and user_data[call.message.chat.id]['role'] == "Специалист"):
+    if(selected_spec in ["Аналитик", "Тестировщик", "Девопс", "Разработчик"] and user_data[call.message.chat.id]['role'] == "Специалист"):
         questions = [
             types.InlineKeyboardButton(text="Что я могу ожидать от своего PO/PM", callback_data="question_1"),
             types.InlineKeyboardButton(text="Что я могу ожидать от своего Лида", callback_data="question_2"),
@@ -856,8 +955,6 @@ current_timezone = time.tzname
 print(f"Текущий часовой пояс: {current_timezone}")     
 current_timenow = datetime.now(moscow_tz).strftime("%H:%M")
 print(f"Текущий часовой пояс:{current_timenow}")
-# Запуск планировщика в отдельном потоке
-threading.Thread(target=run_async_task, daemon=True).start()
 bot.polling(none_stop=False)
 
 

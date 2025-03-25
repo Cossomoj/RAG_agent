@@ -580,6 +580,23 @@ async def websocket_endpoint(websocket: WebSocket):
 
             # Отправляем ответ через WebSocket
             await websocket.send_text(answer)
+
+    elif(count == 102):
+        for chunk in GigaChat(credentials=api_key,
+                              verify_ssl_certs=False,
+                                model='GigaChat'
+                                ).stream(f"Напомни мне пожалуйста вот об этой теме {context}"):
+            answer = chunk.content.strip()  # Используем атрибут .content
+
+            # Заменяем ненужные символы
+            for char in unwanted_chars:
+                answer = answer.replace(char, " ")
+
+            # Удаляем лишние пробелы
+            answer = " ".join(answer.split())
+
+            # Отправляем ответ через WebSocket
+            await websocket.send_text(answer)
     
     await websocket.close()    
 
