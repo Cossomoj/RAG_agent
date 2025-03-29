@@ -15,7 +15,7 @@ import pytz
 
 load_dotenv()
 
-DATABASE_URL = "/app/src/main_version/AI_agent.db"
+DATABASE_URL = "AI_agent.db"
 
 WEBSOCKET_URL = "ws://127.0.0.1:8000/ws"
 moscow_tz = pytz.timezone('Europe/Moscow')
@@ -25,6 +25,10 @@ count_questions_users = {}
 new_users = {}
 
 secret_key = os.getenv("TELEGRAM_API_KEY")
+FEEDBACK_BOT_TOKEN = os.getenv("FEEDBACK_BOT_TOKEN")
+FEEDBACK_CHAT_ID = os.getenv("FEEDBACK_CHAT_ID")
+
+feedback_bot = telebot.TeleBot(FEEDBACK_BOT_TOKEN)
 cache_dict = {3 : ["Уровень Junior\nСофты:\n1. Желание учиться которое подтверждается делом.(Что изучено за последний год? Как это применяется?).\n2. Проактивная работа с заказчиком.(Инициатива по вопросам/запросу ОС должна поступать от специалиста).\n3. Умение принимать ОС.\n4. Многозадачность - в термин (многозадачность) вкладывается НЕ возможность в каждый момент времени думать сразу о нескольких задачах, а возможность переключаться между задачами/проектами (от 2х - оптимально, до 5ти - максимально) без сильной потери эффективности (что какая-то потеря эффективности будет - факт).",
                     "Харды:\n1. Знание json нотации.\n2. Знание Postman и Curl (любого инструмента отправки http запросов).\n3. Умение использовать User Story и Use Case.\n4. Понимание клиент-серверного взаимодействия.\n5. Владение  любым инструментом разметки макетов (пэинт/фотошоп/автокад/...).",
                     "Уровень Junior+ Middle-\nСофты:\n1. Желание учиться которое  подтверждается делом (Что изучено за последний год? Как это применяется?).\n2. Проактивная работа с заказчиком (Инициатива по вопросам/запросу ОС должна поступать от специалиста).\n3. Умение принимать ОС.\n4. Многозадачность (определение см. выше)",
@@ -241,6 +245,48 @@ def handle_other(call):
             text="Выберите действие:",
             reply_markup=markup
         )
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("feedback"))
+def handle_other_buttons(call):
+    if call.data == "feedback":
+        bot.send_message(call.message.chat.id, "📝 *Оставить ОС*\n\nНапишите, о чем хотите оставить ОС — начнём! 🌟",
+                         parse_mode="Markdown")
+        bot.register_next_step_handler(call.message, handle_feedback)
+
+    elif call.data == "other_team":
+        markup = types.InlineKeyboardMarkup()
+        bot.send_message(call.message.chat.id,
+                         "Вопрос ... ФИО, тг, ники школьные или вовсе гитхаб (я за последнее)\n\nПредложение: вывести ники гитхаб списком",
+                         reply_markup=markup)
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start"))
+        bot.send_message(call.message.chat.id, "Вы можете продолжить работу, вернувшись в начало:", reply_markup=markup)
+
+    
+def handle_feedback(message):
+    user_feedback = message.text
+    chat_id = message.chat.id
+    username = message.from_user.username or "не указан"
+    user_fullname = f"{message.from_user.first_name or ''} {message.from_user.last_name or ''}".strip()
+
+    feedback_text = (
+        f"📨 *Новый отзыв от пользователя:*\n"
+        f"👤 *Имя:* {user_fullname}\n"
+        f"📍 *Username:* @{username}\n"
+        f"📝 *Отзыв:* {user_feedback}"
+    )
+
+    try:
+        feedback_bot.send_message(FEEDBACK_CHAT_ID, feedback_text, parse_mode="Markdown")
+        bot.send_message(chat_id, "Спасибо! Ваш отзыв принят! 🎉")
+    except Exception as e:
+        bot.send_message(chat_id, "❌ Ошибка при отправке отзыва. Попробуйте позже.")
+        print(f"Ошибка при отправке отзыва: {e}")
+
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start"))
+    bot.send_message(chat_id, "Вы можете продолжить работу, вернувшись в начало:", reply_markup=markup)
+
 @bot.callback_query_handler(func=lambda call: call.data == "team")
 def handle_team(call):
     markup = types.InlineKeyboardMarkup()
