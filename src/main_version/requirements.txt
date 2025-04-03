@@ -1,0 +1,13 @@
+telebot
+python-dotenv
+asyncio
+websockets
+fastapi
+uvicorn
+faiss-cpu
+langchain_community
+langchain_gigachat
+langchain_huggingface
+sentence-transformers
+schedule
+pytz
