@@ -294,7 +294,7 @@ def handle_team(call):
     bot.edit_message_text(
         chat_id = call.message.chat.id,
         message_id=call.message.message_id,
-        text = "@dradns \n @betonnnnnnnn \n @latexala \n @alexr_home \n @leanorac \n @kathlynw \n @grahamchik \n @biryukovaoly \n Приглашаем работать над ИИ-агентом вместе с нами! Напиши @biryukovaoly, чтобы присоединиться.",
+        text = "@dradns \n @betonnnnnnnn \n @latexala \n @alexr_home \n @leanorac \n @mplusk \n @kathlynw \n @grahamchik \n @biryukovaoly \n Приглашаем работать над ИИ-агентом вместе с нами! Напиши @biryukovaoly, чтобы присоединиться.",
         reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: call.data == "profile")
