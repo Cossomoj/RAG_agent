@@ -537,7 +537,7 @@ def process_reminder_input(message):
         
     except ValueError as ve:
         error_msg = f"Ошибка ввода: {ve}\n\nПример правильного формата:\n2024-12-31 23:59 Ваш текст"
-        bot.send_message(message.chat.id, error_msg, markup)
+        bot.send_message(message.chat.id, error_msg, reply_markup=markup)
     except sqlite3.IntegrityError:
         bot.send_message(message.chat.id, "⛔ Ошибка: Пользователь не найден в системе", reply_markup=markup)
     except sqlite3.Error as e:
