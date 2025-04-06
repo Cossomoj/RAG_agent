@@ -1006,7 +1006,6 @@ def handle_predefined_question_group_1(call):
 
     if (question_id in cache_dict):
             handling_cached_requests(question_id, call.message, question, specialization)
-            asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
     elif (question_id in cache_by_specialization):
         if(specialization in cache_by_specialization[question_id]):
             handling_cached_requests(question_id, call.message, question, specialization)
@@ -1046,7 +1045,6 @@ def handle_predefined_question_group_2(call):
 
     if (question_id in cache_dict):
             handling_cached_requests(question_id, call.message, question, specialization)
-            asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
     elif (question_id in cache_by_specialization):
         if(specialization in cache_by_specialization[question_id]):
             handling_cached_requests(question_id, call.message, question, specialization)
@@ -1083,7 +1081,6 @@ def handle_predefined_question_group_2(call):
 
     if (question_id in cache_dict):
             handling_cached_requests(question_id, call.message, question, specialization)
-            asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
     elif (question_id in cache_by_specialization):
         if(specialization in cache_by_specialization[question_id]):
             handling_cached_requests(question_id, call.message, question, specialization)
@@ -1137,7 +1134,6 @@ def handle_predefined_question(call):
 
     if (question_id in cache_dict):
             handling_cached_requests(question_id, call.message, question, specialization)
-            asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
     elif (question_id in cache_by_specialization):
         if(specialization in cache_by_specialization[question_id]):
             handling_cached_requests(question_id, call.message, question, specialization)
