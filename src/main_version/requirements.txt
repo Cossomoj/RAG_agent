@@ -11,3 +11,6 @@ langchain_huggingface
 sentence-transformers
 schedule
 pytz
+transformers==4.29.2
+sentence-transformers==2.2.2
+accelerate
