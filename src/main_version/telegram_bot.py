@@ -15,7 +15,7 @@ import pytz
 
 load_dotenv()
 
-DATABASE_URL = "/app/src/main_version/AI_agent.db"
+DATABASE_URL = "AI_agent.db"
 
 WEBSOCKET_URL = "ws://127.0.0.1:8000/ws"
 moscow_tz = pytz.timezone('Europe/Moscow')
@@ -293,7 +293,7 @@ def handle_start(call):
     markup = types.InlineKeyboardMarkup(row_width=1)
     roles = [
         types.InlineKeyboardButton(text="Выбрать роль", callback_data="menu_qr"),
-        types.InlineKeyboardButton(text="Проактивный режим", callback_data="menu_rem"),
+        types.InlineKeyboardButton(text="Личный кабинет", callback_data="menu_rem"),
         types.InlineKeyboardButton(text="Что я умею?", callback_data="other_whatido"),
         types.InlineKeyboardButton(text="Другое", callback_data="other_other")
     ]
@@ -389,7 +389,8 @@ def handle_reminder(call):
     back_button = ([types.InlineKeyboardButton(text="Запланировать сообщение на тему", callback_data="rem_by_user"),
                    types.InlineKeyboardButton(text="Регулярные сообщения", callback_data="on_reminder"),
                    types.InlineKeyboardButton(text="Мои уведомления", callback_data="my_reminders"),
-                   types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start")])
+                   types.InlineKeyboardButton(text="История сообщений", callback_data="question_777"),
+                   types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start"),])
     markup.add(*back_button)
     bot.edit_message_text(chat_id = call.message.chat.id, message_id=call.message.message_id, text="Вы находитесь в разделе напоминания\nВыберите дальнейшие действия:", reply_markup=markup)
 
