@@ -99,7 +99,7 @@ def create_retrieval_chain_from_folder(role, specialization, prompt_template, em
 
     llm = GigaChat(
     credentials=api_key,
-    model='GigaChat',
+    model='GigaChat-Max',
     verify_ssl_certs=False,
     profanity_check=False
 )
@@ -682,7 +682,7 @@ async def websocket_endpoint(websocket: WebSocket):
     elif(count > 1 and count < 10):
         for chunk in GigaChat(credentials=api_key,
                               verify_ssl_certs=False,
-                                model='GigaChat'
+                                model='GigaChat-Max'
                                 ).stream(f"Использую контекст нашей прошлой беседы {context}, ответь на уточняющий вопрос {question}"):
             answer = chunk.content.strip()  # Используем атрибут .content
 
