@@ -225,3 +225,123 @@ async def websocket_endpoint(websocket: WebSocket):
 if __name__ == "__main__":
     print("Запускаем сервер на ws://127.0.0.1:8000/ws")
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+class DatabaseOperations:
+    def __init__(self, db_path='src/main_version/AI_agent.db'):
+        self.db_path = db_path
+
+    # Пользователи
+    def get_all_users(self):
+        """Получение всех пользователей с их статистикой"""
+        query = """
+        SELECT u.*, 
+               COUNT(DISTINCT m.message) as message_count,
+               MAX(m.time) as last_activity
+        FROM Users u
+        LEFT JOIN Message_history m ON u.user_id = m.user_id
+        GROUP BY u.user_id
+        """
+        # Реализация запроса
+
+    # Промпты
+    def get_all_prompts(self):
+        """Получение всех промптов"""
+        query = "SELECT * FROM Prompts ORDER BY created_at DESC"
+        # Реализация запроса
+
+    def add_prompt(self, question_text, prompt_template):
+        """Добавление нового промпта"""
+        query = """
+        INSERT INTO Prompts (question_text, prompt_template)
+        VALUES (?, ?)
+        """
+        # Реализация запроса
+
+    def update_prompt(self, question_id, question_text, prompt_template):
+        """Обновление промпта"""
+        query = """
+        UPDATE Prompts 
+        SET question_text = ?, prompt_template = ?
+        WHERE question_id = ?
+        """
+        # Реализация запроса
+
+    def delete_prompt(self, question_id):
+        """Удаление промпта"""
+        query = "DELETE FROM Prompts WHERE question_id = ?"
+        # Реализация запроса
+
+    # История сообщений
+    def get_user_messages(self, user_id):
+        """Получение истории сообщений пользователя"""
+        query = """
+        SELECT * FROM Message_history 
+        WHERE user_id = ? 
+        ORDER BY time DESC
+        """
+        # Реализация запроса
+
+class RAGDocumentManager:
+    def __init__(self, base_path="src/main_version/txt_docs"):
+        self.base_path = base_path
+        self.packs = {
+            "pack_1": os.path.join(base_path, "docs_pack_1"),
+            "pack_2": os.path.join(base_path, "docs_pack_2"),
+            "pack_3": os.path.join(base_path, "docs_pack_3"),
+            "pack_full": os.path.join(base_path, "docs_pack_full")
+        }
+
+    def get_all_documents(self):
+        """Получение списка всех документов по всем пакетам"""
+        documents = {}
+        for pack_name, pack_path in self.packs.items():
+            documents[pack_name] = [
+                f for f in os.listdir(pack_path) 
+                if f.endswith('.txt')
+            ]
+        return documents
+
+    def add_document(self, file_content, filename, pack_name):
+        """Добавление нового документа в указанный пакет"""
+        if pack_name not in self.packs:
+            raise ValueError(f"Неверное имя пакета: {pack_name}")
+        
+        file_path = os.path.join(self.packs[pack_name], filename)
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(file_content)
+        
+        # Также добавляем в pack_full
+        full_path = os.path.join(self.packs["pack_full"], filename)
+        with open(full_path, 'w', encoding='utf-8') as f:
+            f.write(file_content)
+
+    def delete_document(self, filename, pack_name):
+        """Удаление документа из указанного пакета"""
+        if pack_name not in self.packs:
+            raise ValueError(f"Неверное имя пакета: {pack_name}")
+        
+        file_path = os.path.join(self.packs[pack_name], filename)
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            
+        # Также удаляем из pack_full
+        full_path = os.path.join(self.packs["pack_full"], filename)
+        if os.path.exists(full_path):
+            os.remove(full_path)
+
+    def read_document(self, filename, pack_name):
+        """Чтение содержимого документа"""
+        if pack_name not in self.packs:
+            raise ValueError(f"Неверное имя пакета: {pack_name}")
+        
+        file_path = os.path.join(self.packs[pack_name], filename)
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"Файл не найден: {filename}")
+        
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return f.read()
+
+    def update_document(self, file_content, filename, pack_name):
+        """Обновление содержимого документа"""
+        self.delete_document(filename, pack_name)
+        self.add_document(file_content, filename, pack_name)
