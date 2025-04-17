@@ -9,6 +9,29 @@ log() {
 mkdir -p /var/log/supervisor
 log "Созданы директории для логов supervisor"
 
+# Проверяем структуру директорий для RAG сервиса
+log "Проверяем структуру директорий для RAG сервиса..."
+if [ ! -d "/app/src" ]; then
+    log "Создаем директорию /app/src"
+    mkdir -p /app/src
+fi
+
+if [ ! -d "/app/src/main_version" ]; then
+    log "Создаем директорию /app/src/main_version"
+    mkdir -p /app/src/main_version
+fi
+
+# Перемещаем файлы RAG сервиса в нужную структуру если они находятся не там где нужно
+if [ -f "/app/telegram_bot.py" ] && [ ! -f "/app/src/main_version/telegram_bot.py" ]; then
+    log "Перемещаем telegram_bot.py в правильное место"
+    cp /app/telegram_bot.py /app/src/main_version/
+fi
+
+if [ -f "/app/websocket_server.py" ] && [ ! -f "/app/src/main_version/websocket_server.py" ]; then
+    log "Перемещаем websocket_server.py в правильное место"
+    cp /app/websocket_server.py /app/src/main_version/
+fi
+
 # Настройка директорий для данных
 mkdir -p /app/sqlite_data_rag
 if [ ! -f "/app/src/main_version/AI_agent.db" ]; then
@@ -38,6 +61,16 @@ if [ ! -f "/app/admin/app.py" ]; then
     log "Ошибка: файл app.py для админ-панели не найден"
     exit 1
 fi
+
+# Вывод содержимого директорий для диагностики
+log "Структура директорий:"
+find /app -type d | sort
+log "Файлы в главной директории:"
+ls -la /app
+log "Файлы в директории src/main_version:"
+ls -la /app/src/main_version 2>/dev/null || echo "Директория не существует"
+log "Файлы в директории admin:"
+ls -la /app/admin
 
 # Проверяем права доступа
 chmod -R 755 /app

@@ -176,8 +176,24 @@ main() {
 
     # Копируем необходимые файлы
     log "Копируем файлы из репозитория..."
-    # Копируем файлы RAG сервиса
+    
+    # Создаем директории для RAG сервиса с правильной структурой
+    mkdir -p "app_service/src/main_version"
+    
+    # Копируем файлы RAG сервиса с сохранением структуры
     cp -r "$REPO_DIR/src/main_version/rag_service2/"* "app_service/"
+    
+    # Переносим ключевые файлы в нужную структуру директорий
+    if [ -f "app_service/telegram_bot.py" ]; then
+        cp "app_service/telegram_bot.py" "app_service/src/main_version/"
+        log "Скопирован файл telegram_bot.py в app_service/src/main_version/"
+    fi
+    
+    if [ -f "app_service/websocket_server.py" ]; then
+        cp "app_service/websocket_server.py" "app_service/src/main_version/"
+        log "Скопирован файл websocket_server.py в app_service/src/main_version/"
+    fi
+    
     # Копируем файлы админки в нужное место внутри app_service
     mkdir -p "app_service/admin"
     cp -r "$REPO_DIR/src/main_version/admin/"* "app_service/admin/"
@@ -195,6 +211,34 @@ main() {
             cp "$REPO_DIR/src/main_version/admin/app.py" "app_service/admin/"
         else
             log "Критическая ошибка: исходный файл app.py для админки не найден"
+            exit 1
+        fi
+    fi
+    
+    # Проверяем директорию src/main_version
+    if [ ! -d "app_service/src/main_version" ]; then
+        log "Ошибка: директория src/main_version не создана"
+        mkdir -p "app_service/src/main_version"
+    fi
+    
+    if [ ! -f "app_service/src/main_version/telegram_bot.py" ]; then
+        log "Ошибка: файл telegram_bot.py не найден в правильной директории"
+        if [ -f "app_service/telegram_bot.py" ]; then
+            cp "app_service/telegram_bot.py" "app_service/src/main_version/"
+            log "Перемещен файл telegram_bot.py в нужную директорию"
+        else
+            log "Критическая ошибка: файл telegram_bot.py не найден"
+            exit 1
+        fi
+    fi
+    
+    if [ ! -f "app_service/src/main_version/websocket_server.py" ]; then
+        log "Ошибка: файл websocket_server.py не найден в правильной директории"
+        if [ -f "app_service/websocket_server.py" ]; then
+            cp "app_service/websocket_server.py" "app_service/src/main_version/"
+            log "Перемещен файл websocket_server.py в нужную директорию"
+        else
+            log "Критическая ошибка: файл websocket_server.py не найден"
             exit 1
         fi
     fi
