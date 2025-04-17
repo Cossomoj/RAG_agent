@@ -117,6 +117,59 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Создаем и проверяем наличие .env файла
+create_env_file() {
+    log "Проверяем наличие .env файла..."
+    ENV_FILE="/home/user1/.env"
+    
+    if [ ! -f "$ENV_FILE" ]; then
+        log "Файл .env не найден, создаем новый..."
+        cat > "$ENV_FILE" << 'EOF'
+GIGACHAT_API_KEY=NjgxNTc1NjUtYWIwYS00MTZjLThmZGMtMjBjODc0YWNiN2QyOmE0ODAyN2Y3LTE4MGYtNDdlOC1hOGRlLTk0MTdmODk3MDBmYg==
+TELEGRAM_API_KEY=8155935674:AAFfCj46uFRhv8KxBhSPRS8fIGBBCw6XgME
+ALERT_BOT_TOKEN=7721921385:AAFavQq8xl_v3qzKzQ8CMn5-XlEBeiCf8Wc
+TELEGRAM_CHAT_ID=191136151
+TELEGRAM_BOT_TOKEN=7721921385:AAFavQq8xl_v3qzKzQ8CMn5-XlEBeiCf8Wc
+FEEDBACK_CHAT_ID=191136151
+FEEDBACK_BOT_TOKEN=7721921385:AAFavQq8xl_v3qzKzQ8CMn5-XlEBeiCf8Wc
+TELEGRAM_BOT_ACCESS=7721921385:AAFavQq8xl_v3qzKzQ8CMn5-XlEBeiCf8Wc
+CHAT_ID=191136151
+EOF
+        chmod 600 "$ENV_FILE"
+        chown user1:user1 "$ENV_FILE"
+        log "Файл .env создан и настроен"
+    else
+        log "Файл .env уже существует"
+        # Проверяем и добавляем отсутствующие переменные
+        ensure_env_variable "$ENV_FILE" "GIGACHAT_API_KEY" "NjgxNTc1NjUtYWIwYS00MTZjLThmZGMtMjBjODc0YWNiN2QyOmE0ODAyN2Y3LTE4MGYtNDdlOC1hOGRlLTk0MTdmODk3MDBmYg=="
+        ensure_env_variable "$ENV_FILE" "TELEGRAM_API_KEY" "8155935674:AAFfCj46uFRhv8KxBhSPRS8fIGBBCw6XgME"
+        ensure_env_variable "$ENV_FILE" "ALERT_BOT_TOKEN" "7721921385:AAFavQq8xl_v3qzKzQ8CMn5-XlEBeiCf8Wc"
+        ensure_env_variable "$ENV_FILE" "TELEGRAM_CHAT_ID" "191136151"
+        ensure_env_variable "$ENV_FILE" "TELEGRAM_BOT_TOKEN" "7721921385:AAFavQq8xl_v3qzKzQ8CMn5-XlEBeiCf8Wc"
+        ensure_env_variable "$ENV_FILE" "FEEDBACK_CHAT_ID" "191136151"
+        ensure_env_variable "$ENV_FILE" "FEEDBACK_BOT_TOKEN" "7721921385:AAFavQq8xl_v3qzKzQ8CMn5-XlEBeiCf8Wc"
+        ensure_env_variable "$ENV_FILE" "TELEGRAM_BOT_ACCESS" "7721921385:AAFavQq8xl_v3qzKzQ8CMn5-XlEBeiCf8Wc"
+        ensure_env_variable "$ENV_FILE" "CHAT_ID" "191136151"
+    fi
+}
+
+# Функция для добавления/обновления переменной в .env файле
+ensure_env_variable() {
+    local env_file=$1
+    local var_name=$2
+    local var_value=$3
+    
+    if grep -q "^$var_name=" "$env_file"; then
+        # Переменная существует, обновляем значение
+        sed -i "s|^$var_name=.*|$var_name=$var_value|" "$env_file"
+        log "Обновлена переменная $var_name в файле .env"
+    else
+        # Переменная не существует, добавляем
+        echo "$var_name=$var_value" >> "$env_file"
+        log "Добавлена переменная $var_name в файл .env"
+    fi
+}
+
 main() {
     log "Начинаем процесс развертывания..."
 
@@ -376,6 +429,9 @@ EOF
     fi
 
     save_state
+
+    # Создаем .env файл перед настройкой других компонентов
+    create_env_file
 
     setup_database
     setup_nginx

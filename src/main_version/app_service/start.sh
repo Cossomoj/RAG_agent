@@ -9,6 +9,48 @@ log() {
 mkdir -p /var/log/supervisor
 log "Созданы директории для логов supervisor"
 
+# Проверка и настройка файла .env
+log "Настройка файла .env..."
+if [ -f "/.env" ]; then
+    log "/.env обнаружен в корне контейнера"
+elif [ -f "/app/.env" ]; then
+    log "/app/.env обнаружен"
+else
+    log "Файл .env не найден, создаем базовый файл с переменными окружения"
+    # Создаем базовый файл с переменными из окружения
+    cat > /app/.env << EOF
+GIGACHAT_API_KEY=${GIGACHAT_API_KEY}
+TELEGRAM_API_KEY=${TELEGRAM_API_KEY}
+FEEDBACK_CHAT_ID=${FEEDBACK_CHAT_ID}
+FEEDBACK_BOT_TOKEN=${FEEDBACK_BOT_TOKEN}
+TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+TELEGRAM_BOT_ACCESS=${TELEGRAM_BOT_ACCESS}
+CHAT_ID=${CHAT_ID}
+ALERT_BOT_TOKEN=${ALERT_BOT_TOKEN}
+EOF
+    log "Создан файл /app/.env"
+fi
+
+# Копирование .env в нужные места
+if [ -f "/app/.env" ]; then
+    cp /app/.env /app/src/main_version/.env
+    log "Файл .env скопирован в /app/src/main_version/"
+    cp /app/.env /app/admin/.env
+    log "Файл .env скопирован в /app/admin/"
+else
+    log "ВНИМАНИЕ: Файл .env отсутствует, переменные окружения могут быть недоступны"
+fi
+
+# Вывод текущих переменных окружения для диагностики
+log "Проверка доступных переменных окружения:"
+log "GIGACHAT_API_KEY: ${GIGACHAT_API_KEY:0:5}... (обрезано для безопасности)"
+log "TELEGRAM_API_KEY: ${TELEGRAM_API_KEY:0:10}... (обрезано для безопасности)"
+log "TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}"
+if [ -z "${GIGACHAT_API_KEY}" ] || [ -z "${TELEGRAM_API_KEY}" ]; then
+    log "ПРЕДУПРЕЖДЕНИЕ: Одна или несколько важных переменных окружения отсутствуют!"
+fi
+
 # Проверяем структуру директорий для RAG сервиса
 log "Проверяем структуру директорий для RAG сервиса..."
 if [ ! -d "/app/src" ]; then
