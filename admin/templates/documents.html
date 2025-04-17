@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Управление RAG документами</h2>
+    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addDocumentModal">
+        Добавить документ
+    </button>
+</div>
+
+{% for pack_name, docs in documents.items() %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">Пакет: {{ pack_name }}</h5>
+    </div>
+    <div class="card-body">
+        {% if docs %}
+        <div class="table-responsive">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Имя файла</th>
+                        <th>Размер</th>
+                        <th>Последнее изменение</th>
+                        <th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for doc in docs %}
+                    <tr>
+                        <td>{{ doc.filename }}</td>
+                        <td>{{ (doc.size / 1024)|round(1) }} KB</td>
+                        <td>{{ doc.modified|datetime }}</td>
+                        <td>
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-sm btn-info" 
+                                        onclick="viewDocument('{{ doc.filename }}', '{{ doc.pack }}')">
+                                    Просмотр
+                                </button>
+                                <button type="button" class="btn btn-sm btn-danger" 
+                                        onclick="deleteDocument('{{ doc.filename }}', '{{ doc.pack }}')">
+                                    Удалить
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted">В этом пакете нет документов</p>
+        {% endif %}
+    </div>
+</div>
+{% endfor %}
+
+<!-- Модальное окно для добавления документа -->
+<div class="modal fade" id="addDocumentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Добавить новый документ</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addDocumentForm" method="POST" action="{{ url_for('add_document') }}" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="file" class="form-label">Выберите файл</label>
+                        <input type="file" class="form-control" id="file" name="file" accept=".txt" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="pack_name" class="form-label">Выберите пакет</label>
+                        <select class="form-select" id="pack_name" name="pack_name" required>
+                            <option value="pack_1">Пакет 1</option>
+                            <option value="pack_2">Пакет 2</option>
+                            <option value="pack_3">Пакет 3</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="document.getElementById('addDocumentForm').submit()">
+                    Добавить
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для просмотра документа -->
+<div class="modal fade" id="viewDocumentModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Просмотр документа</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <pre id="documentContent" style="white-space: pre-wrap;"></pre>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function viewDocument(filename, pack) {
+    fetch(`/documents/${pack}/${filename}`)
+        .then(response => response.text())
+        .then(content => {
+            document.getElementById('documentContent').textContent = content;
+            const modal = new bootstrap.Modal(document.getElementById('viewDocumentModal'));
+            modal.show();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Ошибка при загрузке документа');
+        });
+}
+
+function deleteDocument(filename, pack) {
+    if (confirm('Вы уверены, что хотите удалить этот документ?')) {
+        fetch(`/documents/${pack}/${filename}`, {
+            method: 'DELETE'
+        }).then(response => {
+            if (response.ok) {
+                location.reload();
+            } else {
+                alert('Ошибка при удалении документа');
+            }
+        });
+    }
+}
+</script>
+{% endblock %} 
