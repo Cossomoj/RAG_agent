@@ -211,9 +211,6 @@ main() {
 
     setup_database
     setup_nginx
-    setup_yandex_disk
-    setup_backup
-    setup_timezone
 
     log "Запускаем Docker контейнеры..."
     if ! docker-compose up -d --build; then
@@ -221,6 +218,15 @@ main() {
         restore_state
         exit 1
     fi
+
+    # Ждем, пока контейнеры запустятся
+    log "Ожидаем запуска контейнеров..."
+    sleep 30
+
+    # Настраиваем Яндекс.Диск после запуска контейнеров
+    setup_yandex_disk
+    setup_backup
+    setup_timezone
 
     if [ "$SKIP_BACKUP" -eq 0 ]; then
         perform_initial_backup
@@ -316,6 +322,17 @@ setup_nginx() {
 setup_yandex_disk() {
     log "Настройка Яндекс.Диска..."
 
+    # Создаем виртуальное окружение для Яндекс.Диска
+    YANDEX_VENV="/home/user1/yandex_venv"
+    if [ ! -d "$YANDEX_VENV" ]; then
+        log "Создаем виртуальное окружение для Яндекс.Диска..."
+        apt-get update
+        apt-get install -y python3-venv
+        python3 -m venv "$YANDEX_VENV"
+        chown -R user1:user1 "$YANDEX_VENV"
+        chmod -R 755 "$YANDEX_VENV"
+    fi
+
     if ! command -v yandex-disk &> /dev/null; then
         log "Установка Яндекс.Диска..."
         ARCH=$(uname -m)
@@ -330,12 +347,16 @@ setup_yandex_disk() {
     fi
 
     if id "user1" &>/dev/null; then
-        pkill -9 -u user1 yandex-disk 2>/dev/null
+        # Останавливаем предыдущую версию, если она запущена
+        su - user1 -c "yandex-disk stop 2>/dev/null || true"
+        pkill -9 -u user1 yandex-disk 2>/dev/null || true
         sleep 3
         
+        # Очищаем предыдущие конфигурации
         rm -rf /home/user1/.config/yandex-disk
         rm -f "/home/user1/yes"
         
+        # Создаем нужные директории
         mkdir -p "$YANDEX_DISK_PATH"
         chown user1:user1 "$YANDEX_DISK_PATH"
 
@@ -348,23 +369,28 @@ auth="yes"
 EOF
         chown -R user1:user1 /home/user1/.config/yandex-disk
 
+        # Файл с автоматическими ответами для настройки
         ANSWERS_FILE="/tmp/yandex_answers.txt"
         echo -e "n\n\ny" > "$ANSWERS_FILE"
         chown user1:user1 "$ANSWERS_FILE"
         chmod 644 "$ANSWERS_FILE"
 
+        # Активируем виртуальное окружение для команд
+        ACTIVATE_VENV="source $YANDEX_VENV/bin/activate && "
+
         if [ -f "yandex_token.txt" ]; then
             TOKEN=$(cat yandex_token.txt)
             log "Используем предварительно сохраненный токен"
+            mkdir -p /home/user1/.config/yandex-disk
             echo "$TOKEN" > /home/user1/.config/yandex-disk/token
             chown user1:user1 /home/user1/.config/yandex-disk/token
             
             log "Запускаем Яндекс.Диск с предварительно сохраненным токеном..."
-            su - user1 -c "yandex-disk start"
+            su - user1 -c "${ACTIVATE_VENV}yandex-disk start"
         else
             log "Запрос кода авторизации с ya.ru/device (потребуется ввод только этого кода)..."
             
-            su - user1 -c "yandex-disk setup < $ANSWERS_FILE"
+            su - user1 -c "${ACTIVATE_VENV}yandex-disk setup < $ANSWERS_FILE"
             
             if [ -f "/home/user1/.config/yandex-disk/token" ]; then
                 cp /home/user1/.config/yandex-disk/token yandex_token.txt
@@ -375,10 +401,12 @@ EOF
             fi
         fi
         
+        # Удаляем временный файл
         rm -f "$ANSWERS_FILE"
         
+        # Проверяем статус
         sleep 10
-        status=$(su - user1 -c "yandex-disk status")
+        status=$(su - user1 -c "${ACTIVATE_VENV}yandex-disk status")
         log "Статус Яндекс.Диска: $status"
         
         if echo "$status" | grep -q -E "синхронизация|работает|sync|idle"; then
@@ -397,6 +425,9 @@ EOF
                 log "Файл токена не найден!"
             fi
             
+            # Попытка перезапуска
+            log "Пробуем перезапустить Яндекс.Диск..."
+            su - user1 -c "${ACTIVATE_VENV}yandex-disk start"
             return 0
         fi
     else
@@ -414,16 +445,24 @@ setup_backup() {
         return 1
     fi
     
+    # Подготавливаем команды для активации виртуального окружения
+    VENV_PATH="/home/user1/yandex_venv"
+    
     cat > "$CRON_TMP" << EOF
-*/5 * * * * export DB_PATH="$DB_PATH"; export LOCK_FILE="$LOCK_FILE"; if [ -f "\$DB_PATH" ]; then touch "\$LOCK_FILE"; TIMESTAMP=\$(date +"%Y-%m-%d_%H-%M"); cp "\$DB_PATH" "$YANDEX_DISK_PATH/AI_agent_\$TIMESTAMP.db"; rm -f "\$LOCK_FILE"; find "$YANDEX_DISK_PATH" -name "AI_agent_*.db" -type f -mmin +20 -delete; fi > /dev/null 2>&1
+*/5 * * * * export DB_PATH="$DB_PATH"; export LOCK_FILE="$LOCK_FILE"; export PATH="/home/user1/yandex_venv/bin:\$PATH"; if [ -f "\$DB_PATH" ]; then touch "\$LOCK_FILE"; TIMESTAMP=\$(date +"%Y-%m-%d_%H-%M"); cp "\$DB_PATH" "$YANDEX_DISK_PATH/AI_agent_\$TIMESTAMP.db" && source "$VENV_PATH/bin/activate" && yandex-disk sync; rm -f "\$LOCK_FILE"; find "$YANDEX_DISK_PATH" -name "AI_agent_*.db" -type f -mmin +20 -delete; fi > /dev/null 2>&1
 
-0 0 * * * export DB_PATH="$DB_PATH"; export LOCK_FILE="$LOCK_FILE"; if [ -f "\$DB_PATH" ]; then touch "\$LOCK_FILE"; TIMESTAMP=\$(date +"%Y-%m-%d"); cp "\$DB_PATH" "$YANDEX_DISK_PATH/AI_agent_\$TIMESTAMP.db"; rm -f "\$LOCK_FILE"; find "$YANDEX_DISK_PATH" -name "AI_agent_*.db" -type f -mtime +$BACKUP_RETENTION_DAYS -delete; fi > /dev/null 2>&1
+0 0 * * * export DB_PATH="$DB_PATH"; export LOCK_FILE="$LOCK_FILE"; export PATH="/home/user1/yandex_venv/bin:\$PATH"; if [ -f "\$DB_PATH" ]; then touch "\$LOCK_FILE"; TIMESTAMP=\$(date +"%Y-%m-%d"); cp "\$DB_PATH" "$YANDEX_DISK_PATH/AI_agent_\$TIMESTAMP.db" && source "$VENV_PATH/bin/activate" && yandex-disk sync; rm -f "\$LOCK_FILE"; find "$YANDEX_DISK_PATH" -name "AI_agent_*.db" -type f -mtime +$BACKUP_RETENTION_DAYS -delete; fi > /dev/null 2>&1
 EOF
 
-    if ! crontab "$CRON_TMP"; then
-        log "Ошибка при установке cron-заданий"
-        rm -f "$CRON_TMP"
-        return 1
+    # Устанавливаем cron для пользователя user1
+    if ! crontab -u user1 "$CRON_TMP"; then
+        log "Ошибка при установке cron-заданий для пользователя user1"
+        log "Пробуем установить cron для текущего пользователя..."
+        if ! crontab "$CRON_TMP"; then
+            log "Ошибка при установке cron-заданий"
+            rm -f "$CRON_TMP"
+            return 1
+        fi
     fi
     
     rm -f "$CRON_TMP"
