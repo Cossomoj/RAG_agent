@@ -13,23 +13,35 @@ log "Созданы директории для логов supervisor"
 log "Настройка файла .env..."
 if [ -f "/.env" ]; then
     log "/.env обнаружен в корне контейнера"
+    cp /.env /app/.env
+    log "/.env скопирован в /app/.env"
 elif [ -f "/app/.env" ]; then
     log "/app/.env обнаружен"
 else
-    log "Файл .env не найден, создаем базовый файл с переменными окружения"
-    # Создаем базовый файл с переменными из окружения
+    log "ПРЕДУПРЕЖДЕНИЕ: Файл .env не найден. Многие функции могут быть недоступны!"
+    log "Создаем пустой шаблон .env файла..."
+    # Создаем пустой шаблон без реальных значений
     cat > /app/.env << EOF
-GIGACHAT_API_KEY=${GIGACHAT_API_KEY}
-TELEGRAM_API_KEY=${TELEGRAM_API_KEY}
-FEEDBACK_CHAT_ID=${FEEDBACK_CHAT_ID}
-FEEDBACK_BOT_TOKEN=${FEEDBACK_BOT_TOKEN}
-TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
-TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-TELEGRAM_BOT_ACCESS=${TELEGRAM_BOT_ACCESS}
-CHAT_ID=${CHAT_ID}
-ALERT_BOT_TOKEN=${ALERT_BOT_TOKEN}
+# Токены для сервисов (необходимо заполнить)
+# GigaChat API токен
+GIGACHAT_API_KEY=
+
+# Telegram API токены
+TELEGRAM_API_KEY=
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_BOT_ACCESS=
+
+# Идентификаторы чатов Telegram
+TELEGRAM_CHAT_ID=
+CHAT_ID=
+FEEDBACK_CHAT_ID=
+
+# Токены для бота обратной связи и уведомлений
+FEEDBACK_BOT_TOKEN=
+ALERT_BOT_TOKEN=
 EOF
-    log "Создан файл /app/.env"
+    log "Создан пустой шаблон /app/.env"
+    log "ВНИМАНИЕ: Для работы сервиса необходимо заполнить файл .env вручную!"
 fi
 
 # Копирование .env в нужные места
@@ -44,9 +56,24 @@ fi
 
 # Вывод текущих переменных окружения для диагностики
 log "Проверка доступных переменных окружения:"
-log "GIGACHAT_API_KEY: ${GIGACHAT_API_KEY:0:5}... (обрезано для безопасности)"
-log "TELEGRAM_API_KEY: ${TELEGRAM_API_KEY:0:10}... (обрезано для безопасности)"
-log "TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}"
+if [ -n "${GIGACHAT_API_KEY}" ]; then
+    log "GIGACHAT_API_KEY: доступен (значение скрыто)"
+else
+    log "GIGACHAT_API_KEY: НЕ НАЙДЕН"
+fi
+
+if [ -n "${TELEGRAM_API_KEY}" ]; then
+    log "TELEGRAM_API_KEY: доступен (значение скрыто)"
+else
+    log "TELEGRAM_API_KEY: НЕ НАЙДЕН"
+fi
+
+if [ -n "${TELEGRAM_CHAT_ID}" ]; then
+    log "TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}"
+else
+    log "TELEGRAM_CHAT_ID: НЕ НАЙДЕН"
+fi
+
 if [ -z "${GIGACHAT_API_KEY}" ] || [ -z "${TELEGRAM_API_KEY}" ]; then
     log "ПРЕДУПРЕЖДЕНИЕ: Одна или несколько важных переменных окружения отсутствуют!"
 fi
