@@ -1,17 +1,18 @@
 version: '3.8'
 
 services:
-  rag_service:
-    container_name: rag_service
+  app_service:
+    container_name: app_service
     build:
-      context: /home/user1/rag_service2
+      context: /home/user1/app_service
       dockerfile: Dockerfile
     volumes:
       - /home/user1/sqlite_data_rag/AI_agent.db:/app/src/main_version/AI_agent.db
       - /home/user1/sqlite_data_rag:/app/sqlite_data_rag
     ports:
-      - "8001:8001"  # Порт для FastAPI
+      - "8001:8001"  # Порт для FastAPI RAG-сервиса
       - "8000:8000"  # Порт для WebSocket
+      - "5000:5000"  # Порт для админ-панели
     environment:
       - GIGACHAT_API_KEY=${GIGACHAT_API_KEY}
       - TELEGRAM_API_KEY=${TELEGRAM_API_KEY}
@@ -19,25 +20,8 @@ services:
       - FEEDBACK_BOT_TOKEN=${FEEDBACK_BOT_TOKEN}
       - WEBSOCKET_URL=ws://127.0.0.1:8000/ws
       - PYTHONPATH=/app
-    env_file:
-      - /home/user1/.env
-    restart: always
-    networks:
-      - app_network
-
-  admin_panel:
-    container_name: admin_panel
-    build:
-      context: /home/user1/admin
-      dockerfile: Dockerfile
-    volumes:
-      - /home/user1/sqlite_data_rag:/app/sqlite_data_rag
-    ports:
-      - "5000:5000"
-    environment:
       - FLASK_APP=app.py
       - FLASK_ENV=production
-      - PYTHONPATH=/app
     env_file:
       - /home/user1/.env
     restart: always
@@ -55,8 +39,7 @@ services:
       - /home/user1/certbot/conf:/etc/letsencrypt
       - /home/user1/certbot/www:/var/www/certbot
     depends_on:
-      - rag_service
-      - admin_panel
+      - app_service
     restart: always
     networks:
       - app_network
@@ -82,8 +65,7 @@ services:
     env_file:
       - /home/user1/.env
     depends_on:
-      - rag_service
-      - admin_panel
+      - app_service
     restart: always
     networks:
       - app_network

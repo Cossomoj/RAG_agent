@@ -165,7 +165,7 @@ main() {
 
     # Создаем необходимые директории
     log "Создаем необходимые директории..."
-    for dir in "rag_service2" "monitor2" "nginx" "certbot" "admin" "sqlite_data_rag"; do
+    for dir in "app_service" "monitor2" "nginx" "certbot" "sqlite_data_rag"; do
         if [ ! -d "$dir" ]; then
             mkdir -p "$dir"
             chown user1:user1 "$dir"
@@ -176,16 +176,37 @@ main() {
 
     # Копируем необходимые файлы
     log "Копируем файлы из репозитория..."
-    cp -r "$REPO_DIR/src/main_version/rag_service2/"* "rag_service2/"
+    # Копируем файлы RAG сервиса
+    cp -r "$REPO_DIR/src/main_version/rag_service2/"* "app_service/"
+    # Копируем файлы админки в нужное место внутри app_service
+    mkdir -p "app_service/admin"
+    cp -r "$REPO_DIR/src/main_version/admin/"* "app_service/admin/"
+    
+    # Копируем файлы зависимостей для разных сервисов
+    cp "$REPO_DIR/src/main_version/app_service/requirements_rag.txt" "app_service/"
+    cp "$REPO_DIR/src/main_version/app_service/requirements_admin.txt" "app_service/"
+    
+    # Копируем конфигурацию supervisor и скрипт запуска
+    cp "$REPO_DIR/src/main_version/app_service/supervisord.conf" "app_service/"
+    cp "$REPO_DIR/src/main_version/app_service/start.sh" "app_service/"
+    chmod +x "app_service/start.sh"
+    
+    # Копируем Dockerfile для app_service
+    cp "$REPO_DIR/src/main_version/app_service/Dockerfile" "app_service/"
+    
+    # Копируем файлы мониторинга
     cp -r "$REPO_DIR/src/main_version/monitor2/"* "monitor2/"
+    
+    # Копируем файлы nginx и certbot
     cp -r "$REPO_DIR/src/main_version/nginx/"* "nginx/"
     cp -r "$REPO_DIR/src/main_version/certbot/"* "certbot/"
-    cp -r "$REPO_DIR/src/main_version/admin/"* "admin/"
+    
+    # Копируем docker-compose.yml
     cp "$REPO_DIR/src/main_version/docker-compose.yml" .
 
     # Устанавливаем правильные права
-    chown -R user1:user1 rag_service2 monitor2 nginx certbot admin docker-compose.yml
-    chmod -R 755 rag_service2 monitor2 nginx certbot admin
+    chown -R user1:user1 app_service monitor2 nginx certbot docker-compose.yml
+    chmod -R 755 app_service monitor2 nginx certbot
 
     # Проверяем наличие необходимых файлов
     for file in ".env" "docker-compose.yml"; do
@@ -196,9 +217,8 @@ main() {
     done
 
     # Копируем конфигурационные файлы
-    cp -f .env rag_service2/
+    cp -f .env app_service/
     cp -f .env monitor2/
-    cp -f .env admin/
 
     # Создаем базу данных если её нет
     if [ ! -f "$DB_PATH" ]; then
