@@ -155,14 +155,27 @@ echo "Процесс остановки и очистки завершен."
 echo "Время: $(date)"
 echo "Все контейнеры остановлены, неиспользуемые образы, контейнеры, сети и тома удалены."
 
-REPO_URL="https://github.com/Cossomoj/RAG_agent.git"
+REPO_URL="git@github.com:Cossomoj/RAG_agent.git"
 REPO_DIR="/tmp/RAG_agent"
 BRANCH="develop"
+
+# Настраиваем SSH для Git
+if [ ! -f "$HOME/.ssh/id_ed25519" ]; then
+    echo "Копируем SSH ключи..."
+    mkdir -p "$HOME/.ssh"
+    cp id_ed25519 "$HOME/.ssh/"
+    cp id_ed25519.pub "$HOME/.ssh/"
+    chmod 600 "$HOME/.ssh/id_ed25519"
+    chmod 644 "$HOME/.ssh/id_ed25519.pub"
+    
+    # Добавляем GitHub в known_hosts
+    ssh-keyscan github.com >> "$HOME/.ssh/known_hosts" 2>/dev/null
+fi
 
 # Клонируем репозиторий
 echo "Клонируем репозиторий..."
 rm -rf "$REPO_DIR"
-git clone -b "$BRANCH" "$REPO_URL" "$REPO_DIR" || {
+GIT_SSH_COMMAND="ssh -i $HOME/.ssh/id_ed25519" git clone -b "$BRANCH" "$REPO_URL" "$REPO_DIR" || {
     echo "Ошибка при клонировании репозитория"
     exit 1
 }
