@@ -21,6 +21,11 @@ if [ ! -d "/app/src/main_version" ]; then
     mkdir -p /app/src/main_version
 fi
 
+# Создаем файлы __init__.py для корректной работы импорта модулей Python
+log "Создаем файлы __init__.py для модулей Python..."
+touch /app/src/__init__.py
+touch /app/src/main_version/__init__.py
+
 # Перемещаем файлы RAG сервиса в нужную структуру если они находятся не там где нужно
 if [ -f "/app/telegram_bot.py" ] && [ ! -f "/app/src/main_version/telegram_bot.py" ]; then
     log "Перемещаем telegram_bot.py в правильное место"
@@ -62,6 +67,19 @@ if [ ! -f "/app/admin/app.py" ]; then
     exit 1
 fi
 
+# Проверяем и корректируем права доступа
+log "Настраиваем права доступа..."
+chmod -R 755 /app
+chmod 644 /app/src/__init__.py
+chmod 644 /app/src/main_version/__init__.py
+if [ -f "/app/src/main_version/telegram_bot.py" ]; then
+    chmod 644 /app/src/main_version/telegram_bot.py
+fi
+if [ -f "/app/src/main_version/websocket_server.py" ]; then
+    chmod 644 /app/src/main_version/websocket_server.py
+fi
+chmod 644 /app/requirements_rag.txt /app/requirements_admin.txt
+
 # Вывод содержимого директорий для диагностики
 log "Структура директорий:"
 find /app -type d | sort
@@ -71,10 +89,6 @@ log "Файлы в директории src/main_version:"
 ls -la /app/src/main_version 2>/dev/null || echo "Директория не существует"
 log "Файлы в директории admin:"
 ls -la /app/admin
-
-# Проверяем права доступа
-chmod -R 755 /app
-chmod 644 /app/requirements_rag.txt /app/requirements_admin.txt
 
 # Создаем и активируем виртуальные окружения
 log "Настраиваем виртуальные окружения..."

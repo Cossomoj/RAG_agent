@@ -174,11 +174,15 @@ main() {
         fi
     done
 
-    # Копируем необходимые файлы
-    log "Копируем файлы из репозитория..."
-    
     # Создаем директории для RAG сервиса с правильной структурой
     mkdir -p "app_service/src/main_version"
+    
+    # Создаем файлы __init__.py для корректной работы импорта модулей Python
+    log "Создаем файлы __init__.py для модулей Python..."
+    touch "app_service/src/__init__.py"
+    touch "app_service/src/main_version/__init__.py"
+    chmod 644 "app_service/src/__init__.py"
+    chmod 644 "app_service/src/main_version/__init__.py"
     
     # Копируем файлы RAG сервиса с сохранением структуры
     cp -r "$REPO_DIR/src/main_version/rag_service2/"* "app_service/"
