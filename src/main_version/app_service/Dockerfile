@@ -24,5 +24,5 @@ COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 # Делаем скрипт запуска исполняемым
 RUN chmod +x /app/start.sh
 
-# Запускаем supervisor, который будет управлять обоими процессами
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"] 
+# Запускаем скрипт запуска, который подготовит окружение и запустит supervisor
+CMD ["/app/start.sh"] 

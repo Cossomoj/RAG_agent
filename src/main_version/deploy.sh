@@ -182,6 +182,23 @@ main() {
     mkdir -p "app_service/admin"
     cp -r "$REPO_DIR/src/main_version/admin/"* "app_service/admin/"
     
+    # Проверяем структуру директорий
+    log "Проверяем структуру директорий..."
+    if [ ! -d "app_service/admin" ]; then
+        log "Ошибка: директория админки не создана"
+        mkdir -p "app_service/admin"
+    fi
+    
+    if [ ! -f "app_service/admin/app.py" ]; then
+        log "Ошибка: файл app.py для админки не найден"
+        if [ -f "$REPO_DIR/src/main_version/admin/app.py" ]; then
+            cp "$REPO_DIR/src/main_version/admin/app.py" "app_service/admin/"
+        else
+            log "Критическая ошибка: исходный файл app.py для админки не найден"
+            exit 1
+        fi
+    fi
+    
     # Копируем файлы зависимостей для разных сервисов
     cp "$REPO_DIR/src/main_version/app_service/requirements_rag.txt" "app_service/"
     cp "$REPO_DIR/src/main_version/app_service/requirements_admin.txt" "app_service/"
