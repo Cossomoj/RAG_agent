@@ -2,21 +2,22 @@ FROM python:3.9-slim
 
 WORKDIR /app
 
+# Устанавливаем базовые инструменты и библиотеки
+RUN apt-get update && apt-get install -y \
+    supervisor \
+    && rm -rf /var/lib/apt/lists/*
+
 # Копируем файлы приложения
 COPY . .
 
-# Создаем и настраиваем виртуальное окружение для RAG сервиса
+# Просто создаем виртуальные окружения, но не устанавливаем зависимости
+# Их установка будет выполнена в start.sh
 RUN python -m venv /opt/venv_rag
-ENV PATH_RAG="/opt/venv_rag/bin"
-RUN $PATH_RAG/pip install --no-cache-dir -r requirements_rag.txt
-
-# Создаем и настраиваем виртуальное окружение для админ-панели
 RUN python -m venv /opt/venv_admin
-ENV PATH_ADMIN="/opt/venv_admin/bin"
-RUN $PATH_ADMIN/pip install --no-cache-dir -r requirements_admin.txt
 
-# Устанавливаем supervisor для управления процессами
-RUN apt-get update && apt-get install -y supervisor && rm -rf /var/lib/apt/lists/*
+# Устанавливаем переменные окружения
+ENV PATH_RAG="/opt/venv_rag/bin"
+ENV PATH_ADMIN="/opt/venv_admin/bin"
 
 # Копируем конфигурацию supervisor
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
@@ -24,5 +25,5 @@ COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 # Делаем скрипт запуска исполняемым
 RUN chmod +x /app/start.sh
 
-# Запускаем скрипт запуска, который подготовит окружение и запустит supervisor
+# Запускаем скрипт запуска, который установит зависимости и запустит supervisor
 CMD ["/app/start.sh"] 

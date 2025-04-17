@@ -43,21 +43,56 @@ fi
 chmod -R 755 /app
 chmod 644 /app/requirements_rag.txt /app/requirements_admin.txt
 
-# Активируем виртуальные окружения и проверяем установку пакетов
-log "Проверяем установку пакетов в виртуальных окружениях..."
+# Создаем и активируем виртуальные окружения
+log "Настраиваем виртуальные окружения..."
 
-# Проверяем RAG окружение
-if [ ! -f "/opt/venv_rag/bin/python" ]; then
-    log "Ошибка: виртуальное окружение для RAG сервиса не настроено"
-    python -m venv /opt/venv_rag
-    /opt/venv_rag/bin/pip install --no-cache-dir -r /app/requirements_rag.txt
+# Настраиваем RAG окружение
+log "Настраиваем виртуальное окружение для RAG сервиса..."
+python -m venv /opt/venv_rag
+export PATH_RAG="/opt/venv_rag/bin"
+
+# Устанавливаем базовые пакеты в правильном порядке
+log "Устанавливаем зависимости для RAG сервиса..."
+$PATH_RAG/pip install --no-cache-dir pip==23.1.2
+$PATH_RAG/pip install --no-cache-dir setuptools==68.0.0 wheel==0.38.4
+
+# Устанавливаем пакеты по одному для избежания конфликтов
+log "Устанавливаем основные пакеты для RAG сервиса..."
+$PATH_RAG/pip install --no-cache-dir telebot==0.0.5
+$PATH_RAG/pip install --no-cache-dir python-dotenv==1.0.1
+$PATH_RAG/pip install --no-cache-dir asyncio==3.4.3
+$PATH_RAG/pip install --no-cache-dir websockets==15.0
+$PATH_RAG/pip install --no-cache-dir fastapi==0.115.10
+$PATH_RAG/pip install --no-cache-dir uvicorn==0.34.0
+$PATH_RAG/pip install --no-cache-dir python-multipart==0.0.5
+$PATH_RAG/pip install --no-cache-dir pytz==2025.1
+$PATH_RAG/pip install --no-cache-dir schedule==1.2.2
+$PATH_RAG/pip install --no-cache-dir faiss-cpu==1.10.0
+
+# Устанавливаем более сложные пакеты
+log "Устанавливаем ML пакеты для RAG сервиса..."
+$PATH_RAG/pip install --no-cache-dir transformers==4.41.0
+$PATH_RAG/pip install --no-cache-dir sentence-transformers==3.4.1
+$PATH_RAG/pip install --no-cache-dir langchain-huggingface==0.1.2
+$PATH_RAG/pip install --no-cache-dir langchain-community==0.3.18
+$PATH_RAG/pip install --no-cache-dir langchain-gigachat==0.3.4
+
+# Проверяем успешность установки пакетов
+if [ $? -ne 0 ]; then
+    log "Ошибка при установке пакетов для RAG сервиса"
+    exit 1
 fi
 
-# Проверяем Admin окружение
-if [ ! -f "/opt/venv_admin/bin/python" ]; then
-    log "Ошибка: виртуальное окружение для админ-панели не настроено"
-    python -m venv /opt/venv_admin
-    /opt/venv_admin/bin/pip install --no-cache-dir -r /app/requirements_admin.txt
+# Настраиваем Admin окружение
+log "Настраиваем виртуальное окружение для админ-панели..."
+python -m venv /opt/venv_admin
+export PATH_ADMIN="/opt/venv_admin/bin"
+$PATH_ADMIN/pip install --no-cache-dir -r /app/requirements_admin.txt
+
+# Проверяем успешность установки пакетов
+if [ $? -ne 0 ]; then
+    log "Ошибка при установке пакетов для админ-панели"
+    exit 1
 fi
 
 log "Запускаем supervisor..."
