@@ -113,10 +113,10 @@ sleep 5
 echo "Выполняем полную очистку системы Docker..."
 docker system prune -a -f
 
-# Очистка директорий nginx и certbot
-echo "Очищаем директории nginx и certbot..."
-rm -rf nginx certbot
-echo "Директории nginx и certbot очищены."
+# Очистка директорий и файлов
+echo "Очищаем директории и файлы..."
+rm -rf monitor2 rag_service2 nginx certbot admin sqlite_data_rag
+rm -f yandex_token.txt docker-compose.yml
 
 # ===============================================================
 # Удаление Яндекс.Диска (по желанию)

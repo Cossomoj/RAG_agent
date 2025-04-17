@@ -156,13 +156,36 @@ main() {
         exit 1
     }
 
+    # Создаем рабочую директорию и переходим в нее
+    WORK_DIR="/home/user1"
+    cd "$WORK_DIR" || {
+        log "Ошибка: не удалось перейти в директорию $WORK_DIR"
+        exit 1
+    }
+
+    # Создаем необходимые директории
+    log "Создаем необходимые директории..."
+    for dir in "rag_service2" "monitor2" "nginx" "certbot" "admin" "sqlite_data_rag"; do
+        if [ ! -d "$dir" ]; then
+            mkdir -p "$dir"
+            chown user1:user1 "$dir"
+            chmod 755 "$dir"
+            log "Создана директория $dir"
+        fi
+    done
+
     # Копируем необходимые файлы
     log "Копируем файлы из репозитория..."
-    cp -r "$REPO_DIR/src/main_version/rag_service2" .
-    cp -r "$REPO_DIR/src/main_version/monitor2" .
-    cp -r "$REPO_DIR/src/main_version/nginx" .
-    cp -r "$REPO_DIR/src/main_version/certbot" .
+    cp -r "$REPO_DIR/src/main_version/rag_service2/"* "rag_service2/"
+    cp -r "$REPO_DIR/src/main_version/monitor2/"* "monitor2/"
+    cp -r "$REPO_DIR/src/main_version/nginx/"* "nginx/"
+    cp -r "$REPO_DIR/src/main_version/certbot/"* "certbot/"
+    cp -r "$REPO_DIR/src/main_version/admin/"* "admin/"
     cp "$REPO_DIR/src/main_version/docker-compose.yml" .
+
+    # Устанавливаем правильные права
+    chown -R user1:user1 rag_service2 monitor2 nginx certbot admin docker-compose.yml
+    chmod -R 755 rag_service2 monitor2 nginx certbot admin
 
     # Проверяем наличие необходимых файлов
     for file in ".env" "docker-compose.yml"; do
@@ -172,17 +195,17 @@ main() {
         fi
     done
 
-    # Создаем необходимые директории
-    for dir in "rag_service2" "monitor2" "nginx" "certbot"; do
-        if [ ! -d "$dir" ]; then
-            mkdir -p "$dir"
-            log "Создана директория $dir"
-        fi
-    done
-
     # Копируем конфигурационные файлы
     cp -f .env rag_service2/
     cp -f .env monitor2/
+    cp -f .env admin/
+
+    # Создаем базу данных если её нет
+    if [ ! -f "$DB_PATH" ]; then
+        mkdir -p "$DB_DIRECTORY"
+        chown user1:user1 "$DB_DIRECTORY"
+        chmod 755 "$DB_DIRECTORY"
+    fi
 
     save_state
 
