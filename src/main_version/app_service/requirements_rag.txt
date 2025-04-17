@@ -1,35 +1,35 @@
 # Базовые библиотеки
-pip==23.1.2
-setuptools==68.0.0
-wheel==0.38.4
+pip==21.3.1
+setuptools==60.0.0
+wheel==0.37.1
 
 # Telegram и API
 telebot==0.0.5
 python-dotenv==1.0.1
-requests==2.31.0
+requests==2.27.1
 
 # Асинхронные библиотеки
 asyncio==3.4.3
-websockets==12.0
-aiohttp==3.9.3
+websockets==15.0
+aiohttp==3.8.1
 
 # FastAPI и веб
-fastapi==0.115.0
-uvicorn==0.29.0
-python-multipart==0.0.7
-pydantic==2.6.3
+fastapi==0.115.10
+uvicorn==0.34.0
+python-multipart==0.0.5
+pydantic==1.9.1
 
 # Утилиты
 pytz==2025.1
-schedule==1.2.1
+schedule==1.2.2
 
 # ML библиотеки
+numpy==1.22.4
 transformers==4.41.0
-sentence-transformers==3.0.1
-faiss-cpu==1.7.4
-numpy==1.26.3
+sentence-transformers==3.4.1
+faiss-cpu==1.10.0
 
 # LangChain
-langchain-huggingface==0.0.2
-langchain-community==0.0.18
-langchain-gigachat==0.0.4 
+langchain-huggingface==0.1.2
+langchain-community==0.3.18
+langchain-gigachat==0.3.4 
