@@ -249,75 +249,228 @@ main() {
     
     # Проверяем наличие критически важных файлов в репозитории и создаем заглушки при необходимости
     if [ ! -f "$REPO_DIR/src/main_version/rag_service2/telegram_bot.py" ] && [ ! -f "app_service/telegram_bot.py" ]; then
-        log "Файл telegram_bot.py не найден в репозитории. Создаем заглушку..."
-        cat > "app_service/telegram_bot.py" << 'EOF'
-from fastapi import FastAPI, Request, Response
-import uvicorn
+        log "Файл telegram_bot.py не найден в репозитории. Копируем из текущего каталога..."
+        if [ -f "$REPO_DIR/src/main_version/app_service/telegram_bot.py" ]; then
+            cp "$REPO_DIR/src/main_version/app_service/telegram_bot.py" "app_service/"
+            log "Скопирован telegram_bot.py из app_service"
+        else
+            log "Файл telegram_bot.py не найден в app_service. Создаем заглушку..."
+            cat > "app_service/telegram_bot.py" << 'EOF'
 import os
 import logging
+from fastapi import FastAPI, Request, Response
+from telebot import TeleBot
+from dotenv import load_dotenv
+import uvicorn
 
 # Настройка логирования
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] %(levelname)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 logger = logging.getLogger("telegram_bot")
 
-app = FastAPI()
+# Загружаем переменные окружения из .env файла
+load_dotenv()
+logger.info("Загрузка переменных окружения из .env файла...")
+
+# Получаем переменные окружения
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("TELEGRAM_API_KEY")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID") or os.getenv("CHAT_ID")
+GIGACHAT_API_KEY = os.getenv("GIGACHAT_API_KEY")
+
+logger.info(f"TELEGRAM_BOT_TOKEN: {TELEGRAM_BOT_TOKEN[:10]}... (обрезано для безопасности)")
+logger.info(f"TELEGRAM_CHAT_ID: {TELEGRAM_CHAT_ID}")
+logger.info(f"GIGACHAT_API_KEY доступен: {bool(GIGACHAT_API_KEY)}")
+
+# Проверка наличия обязательных переменных
+if not TELEGRAM_BOT_TOKEN:
+    logger.error("TELEGRAM_BOT_TOKEN не найден. Проверьте .env файл или переменные окружения.")
+    TELEGRAM_BOT_TOKEN = "default_token"  # Заглушка для запуска FastAPI
+
+# Инициализация Telegram бота
+bot = None
+try:
+    bot = TeleBot(TELEGRAM_BOT_TOKEN)
+    logger.info("Telegram бот инициализирован успешно")
+except Exception as e:
+    logger.error(f"Ошибка при инициализации Telegram бота: {e}")
+
+# Инициализация FastAPI приложения
+app = FastAPI(title="RAG Service API")
 
 @app.get("/")
 async def root():
-    logger.info("Получен запрос к корневому маршруту")
-    return {"message": "Telegram Bot API работает"}
+    """Корневой эндпоинт"""
+    logger.info("Получен запрос к корневому эндпоинту")
+    return {"message": "RAG Service API работает", "status": "online"}
 
-@app.get("/ping")
-async def ping():
-    logger.info("Получен ping-запрос")
-    return {"status": "ok", "message": "pong"}
+@app.get("/health")
+async def health():
+    """Проверка состояния сервиса"""
+    bot_status = "ready" if bot else "not initialized"
+    logger.info(f"Проверка состояния: бот {bot_status}")
+    return {
+        "status": "ok", 
+        "telegram_bot": bot_status,
+        "environment_variables": {
+            "TELEGRAM_BOT_TOKEN": bool(TELEGRAM_BOT_TOKEN),
+            "TELEGRAM_CHAT_ID": bool(TELEGRAM_CHAT_ID),
+            "GIGACHAT_API_KEY": bool(GIGACHAT_API_KEY)
+        }
+    }
+
+@app.get("/send-test")
+async def send_test():
+    """Отправка тестового сообщения в Telegram"""
+    if not bot or not TELEGRAM_CHAT_ID:
+        logger.error("Невозможно отправить тестовое сообщение: бот не инициализирован или отсутствует CHAT_ID")
+        return {"status": "error", "message": "Бот не инициализирован или отсутствует CHAT_ID"}
+    
+    try:
+        bot.send_message(TELEGRAM_CHAT_ID, "Тестовое сообщение от RAG сервиса")
+        logger.info(f"Тестовое сообщение отправлено в чат {TELEGRAM_CHAT_ID}")
+        return {"status": "success", "message": "Тестовое сообщение отправлено"}
+    except Exception as e:
+        logger.error(f"Ошибка при отправке тестового сообщения: {e}")
+        return {"status": "error", "message": str(e)}
 
 if __name__ == "__main__":
+    # Запуск сервера FastAPI
+    logger.info("Запуск FastAPI сервера...")
     uvicorn.run("telegram_bot:app", host="0.0.0.0", port=8001)
 EOF
-        log "Создана заглушка для telegram_bot.py"
+            log "Создана заглушка для telegram_bot.py"
+        fi
     fi
     
     if [ ! -f "$REPO_DIR/src/main_version/rag_service2/websocket_server.py" ] && [ ! -f "app_service/websocket_server.py" ]; then
-        log "Файл websocket_server.py не найден в репозитории. Создаем заглушку..."
-        cat > "app_service/websocket_server.py" << 'EOF'
+        log "Файл websocket_server.py не найден в репозитории. Копируем из текущего каталога..."
+        if [ -f "$REPO_DIR/src/main_version/app_service/websocket_server.py" ]; then
+            cp "$REPO_DIR/src/main_version/app_service/websocket_server.py" "app_service/"
+            log "Скопирован websocket_server.py из app_service"
+        else
+            log "Файл websocket_server.py не найден в app_service. Создаем заглушку..."
+            cat > "app_service/websocket_server.py" << 'EOF'
 import asyncio
-import websockets
-import logging
 import json
+import logging
+import os
+import websockets
+from dotenv import load_dotenv
 
 # Настройка логирования
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] %(levelname)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 logger = logging.getLogger("websocket_server")
 
-connected = set()
+# Загружаем переменные окружения
+load_dotenv()
+logger.info("Загрузка переменных окружения из .env файла...")
 
-async def handler(websocket, path):
-    logger.info(f"Новое соединение: {websocket.remote_address}")
-    connected.add(websocket)
+# Порт для WebSocket сервера
+WS_PORT = int(os.getenv("WEBSOCKET_PORT", "8000"))
+logger.info(f"WebSocket сервер будет запущен на порту {WS_PORT}")
+
+# Хранилище активных соединений
+connected_clients = set()
+
+async def notify_clients(message):
+    """Отправка сообщения всем подключенным клиентам"""
+    if connected_clients:
+        await asyncio.gather(*[client.send(message) for client in connected_clients])
+        logger.info(f"Отправлено сообщение всем клиентам: {message[:50]}...")
+
+async def register(websocket):
+    """Регистрация нового клиента"""
+    connected_clients.add(websocket)
+    logger.info(f"Новое подключение: {websocket.remote_address}. Всего клиентов: {len(connected_clients)}")
+
+async def unregister(websocket):
+    """Удаление клиента при отключении"""
+    connected_clients.remove(websocket)
+    logger.info(f"Отключение: {websocket.remote_address}. Осталось клиентов: {len(connected_clients)}")
+
+async def ws_handler(websocket, path):
+    """Обработчик WebSocket соединений"""
     try:
+        # Регистрируем нового клиента
+        await register(websocket)
+        
+        # Отправляем приветственное сообщение
+        await websocket.send(json.dumps({
+            "type": "connection_established",
+            "message": "Соединение с WebSocket сервером установлено"
+        }))
+        
+        # Слушаем сообщения от клиента
         async for message in websocket:
-            logger.info(f"Получено сообщение: {message}")
+            logger.info(f"Получено сообщение: {message[:100]}...")
+            
             try:
+                # Пытаемся распарсить JSON
                 data = json.loads(message)
-                response = {"status": "ok", "message": "Сообщение получено", "data": data}
-                await websocket.send(json.dumps(response))
+                
+                # Обрабатываем сообщение в зависимости от типа
+                if data.get("type") == "ping":
+                    await websocket.send(json.dumps({
+                        "type": "pong",
+                        "timestamp": data.get("timestamp", "")
+                    }))
+                elif data.get("type") == "broadcast":
+                    # Пересылаем сообщение всем клиентам
+                    await notify_clients(json.dumps({
+                        "type": "broadcast",
+                        "from": websocket.remote_address[0],
+                        "message": data.get("message", "")
+                    }))
+                else:
+                    # Если тип не распознан, просто отвечаем эхом
+                    await websocket.send(json.dumps({
+                        "type": "echo",
+                        "message": data.get("message", ""),
+                        "received": True
+                    }))
+                    
             except json.JSONDecodeError:
-                await websocket.send(json.dumps({"status": "error", "message": "Неверный формат JSON"}))
+                logger.warning(f"Получено сообщение в неверном формате: {message[:50]}...")
+                await websocket.send(json.dumps({
+                    "type": "error",
+                    "message": "Неверный формат JSON"
+                }))
+    
     except websockets.exceptions.ConnectionClosed as e:
         logger.info(f"Соединение закрыто: {e}")
+    except Exception as e:
+        logger.error(f"Ошибка при обработке сообщения: {e}")
     finally:
-        connected.remove(websocket)
+        # Убираем клиента из списка при любом завершении соединения
+        await unregister(websocket)
 
 async def main():
-    async with websockets.serve(handler, "0.0.0.0", 8000):
-        logger.info("WebSocket сервер запущен на порту 8000")
-        await asyncio.Future()  # Запускаем бесконечно
+    """Основная функция запуска WebSocket сервера"""
+    logger.info(f"Запуск WebSocket сервера на порту {WS_PORT}...")
+    
+    async with websockets.serve(ws_handler, "0.0.0.0", WS_PORT):
+        logger.info(f"WebSocket сервер запущен и слушает на 0.0.0.0:{WS_PORT}")
+        # Бесконечный цикл для поддержания сервера активным
+        await asyncio.Future()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Сервер остановлен пользователем")
+    except Exception as e:
+        logger.error(f"Ошибка при запуске сервера: {e}")
+        raise
 EOF
-        log "Создана заглушка для websocket_server.py"
+            log "Создана заглушка для websocket_server.py"
+        fi
     fi
     
     # Переносим ключевые файлы в нужную структуру директорий
