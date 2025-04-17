@@ -3,24 +3,22 @@ version: '3.8'
 services:
   rag_service:
     container_name: rag_service
-    working_dir: /app
-    command: sh -c "uvicorn app.src.main_version.telegram_bot:app --reload --host 0.0.0.0 --port 8001 & uvicorn app.src.main_version.admin_panel:app --reload --host 0.0.0.0 --port 8088"
+    build:
+      context: /home/user1/rag_service2
+      dockerfile: Dockerfile
     volumes:
       - /home/user1/sqlite_data_rag/AI_agent.db:/app/src/main_version/AI_agent.db
       - /home/user1/sqlite_data_rag:/app/sqlite_data_rag
     ports:
       - "8001:8001"  # Порт для FastAPI
       - "8000:8000"  # Порт для WebSocket
-      - "8088:8088"  # Порт для админ-панели
     environment:
       - GIGACHAT_API_KEY=${GIGACHAT_API_KEY}
       - TELEGRAM_API_KEY=${TELEGRAM_API_KEY}
       - FEEDBACK_CHAT_ID=${FEEDBACK_CHAT_ID}
       - FEEDBACK_BOT_TOKEN=${FEEDBACK_BOT_TOKEN}
       - WEBSOCKET_URL=ws://127.0.0.1:8000/ws
-    build:
-      context: /home/user1/rag_service2
-      dockerfile: Dockerfile
+      - PYTHONPATH=/app
     env_file:
       - /home/user1/.env
     restart: always
@@ -36,6 +34,10 @@ services:
       - /home/user1/sqlite_data_rag:/app/sqlite_data_rag
     ports:
       - "5000:5000"
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=production
+      - PYTHONPATH=/app
     env_file:
       - /home/user1/.env
     restart: always
