@@ -120,6 +120,13 @@ done
 main() {
     log "Начинаем процесс развертывания..."
 
+    # Проверяем, что переменные с путями заданы корректно
+    if [ -z "$YANDEX_DISK_PATH" ]; then
+        log "Ошибка: Не задан путь к Яндекс.Диску"
+        YANDEX_DISK_PATH="/home/user1/Yandex.Disk"
+        log "Используем путь по умолчанию: $YANDEX_DISK_PATH"
+    fi
+
     if [ "$EUID" -ne 0 ]; then
         log "Для выполнения операций с Docker требуются права суперпользователя."
         exit 1
@@ -547,11 +554,11 @@ EOF
             chown user1:user1 /home/user1/.config/yandex-disk/token
             
             log "Запускаем Яндекс.Диск с предварительно сохраненным токеном..."
-            su - user1 -c "${ACTIVATE_VENV}yandex-disk start"
+            su - user1 -c "yandex-disk start --no-daemon"
         else
             log "Запрос кода авторизации с ya.ru/device (потребуется ввод только этого кода)..."
             
-            su - user1 -c "${ACTIVATE_VENV}yandex-disk setup < $ANSWERS_FILE"
+            su - user1 -c "echo -e 'n\n$YANDEX_DISK_PATH\ny\n' | yandex-disk setup"
             
             if [ -f "/home/user1/.config/yandex-disk/token" ]; then
                 cp /home/user1/.config/yandex-disk/token yandex_token.txt
@@ -567,7 +574,7 @@ EOF
         
         # Проверяем статус
         sleep 10
-        status=$(su - user1 -c "${ACTIVATE_VENV}yandex-disk status")
+        status=$(su - user1 -c "yandex-disk status")
         log "Статус Яндекс.Диска: $status"
         
         if echo "$status" | grep -q -E "синхронизация|работает|sync|idle"; then
@@ -588,7 +595,7 @@ EOF
             
             # Попытка перезапуска
             log "Пробуем перезапустить Яндекс.Диск..."
-            su - user1 -c "${ACTIVATE_VENV}yandex-disk start"
+            su - user1 -c "yandex-disk start"
             return 0
         fi
     else
@@ -610,9 +617,9 @@ setup_backup() {
     VENV_PATH="/home/user1/yandex_venv"
     
     cat > "$CRON_TMP" << EOF
-*/5 * * * * export DB_PATH="$DB_PATH"; export LOCK_FILE="$LOCK_FILE"; export PATH="/home/user1/yandex_venv/bin:\$PATH"; if [ -f "\$DB_PATH" ]; then touch "\$LOCK_FILE"; TIMESTAMP=\$(date +"%Y-%m-%d_%H-%M"); cp "\$DB_PATH" "$YANDEX_DISK_PATH/AI_agent_\$TIMESTAMP.db" && source "$VENV_PATH/bin/activate" && yandex-disk sync; rm -f "\$LOCK_FILE"; find "$YANDEX_DISK_PATH" -name "AI_agent_*.db" -type f -mmin +20 -delete; fi > /dev/null 2>&1
+*/5 * * * * export DB_PATH="$DB_PATH"; export LOCK_FILE="$LOCK_FILE"; export PATH="/home/user1/yandex_venv/bin:\$PATH"; if [ -f "\$DB_PATH" ]; then touch "\$LOCK_FILE"; TIMESTAMP=\$(date +"%Y-%m-%d_%H-%M"); cp "\$DB_PATH" "$YANDEX_DISK_PATH/AI_agent_\$TIMESTAMP.db"; rm -f "\$LOCK_FILE"; find "$YANDEX_DISK_PATH" -name "AI_agent_*.db" -type f -mmin +20 -delete; fi > /dev/null 2>&1
 
-0 0 * * * export DB_PATH="$DB_PATH"; export LOCK_FILE="$LOCK_FILE"; export PATH="/home/user1/yandex_venv/bin:\$PATH"; if [ -f "\$DB_PATH" ]; then touch "\$LOCK_FILE"; TIMESTAMP=\$(date +"%Y-%m-%d"); cp "\$DB_PATH" "$YANDEX_DISK_PATH/AI_agent_\$TIMESTAMP.db" && source "$VENV_PATH/bin/activate" && yandex-disk sync; rm -f "\$LOCK_FILE"; find "$YANDEX_DISK_PATH" -name "AI_agent_*.db" -type f -mtime +$BACKUP_RETENTION_DAYS -delete; fi > /dev/null 2>&1
+0 0 * * * export DB_PATH="$DB_PATH"; export LOCK_FILE="$LOCK_FILE"; export PATH="/home/user1/yandex_venv/bin:\$PATH"; if [ -f "\$DB_PATH" ]; then touch "\$LOCK_FILE"; TIMESTAMP=\$(date +"%Y-%m-%d"); cp "\$DB_PATH" "$YANDEX_DISK_PATH/AI_agent_\$TIMESTAMP.db"; rm -f "\$LOCK_FILE"; find "$YANDEX_DISK_PATH" -name "AI_agent_*.db" -type f -mtime +$BACKUP_RETENTION_DAYS -delete; fi > /dev/null 2>&1
 EOF
 
     # Устанавливаем cron для пользователя user1

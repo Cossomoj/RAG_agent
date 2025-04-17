@@ -18,7 +18,7 @@ fi
 
 if [ ! -d "/app/src/main_version" ]; then
     log "Создаем директорию /app/src/main_version"
-    mkdir -p /app/src/main_version
+    mkdir -p "/app/src/main_version"
 fi
 
 # Создаем файлы __init__.py для корректной работы импорта модулей Python

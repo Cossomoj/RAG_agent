@@ -201,3 +201,59 @@ rm -rf "$REPO_DIR"
 rm -f docker-compose.yml
 
 echo "Очистка завершена"
+
+# Функция для логирования
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+}
+
+# Остановка контейнеров
+log "Останавливаем Docker контейнеры..."
+docker-compose down -v || log "Ошибка при остановке контейнеров"
+
+# Завершаем процесс Яндекс.Диска
+log "Останавливаем Яндекс.Диск..."
+if [ -f "/usr/bin/yandex-disk" ]; then
+    su - user1 -c "yandex-disk stop" || log "Яндекс.Диск не был запущен или уже остановлен"
+fi
+
+# Удаляем контейнеры, образы и волюмы
+log "Удаляем все Docker контейнеры и образы..."
+docker system prune -a -f || log "Ошибка при очистке Docker"
+
+# Каталоги для удаления
+DIRS=(
+    "/home/user1/app_service"
+    "/home/user1/monitor2"
+    "/home/user1/nginx"
+    "/home/user1/certbot"
+    "/home/user1/Yandex.Disk"
+    "/home/user1/yandex_venv"
+)
+
+# Удаляем директории
+for dir in "${DIRS[@]}"; do
+    if [ -d "$dir" ]; then
+        log "Удаляем директорию $dir..."
+        rm -rf "$dir" || log "Ошибка при удалении директории $dir"
+    fi
+done
+
+# Удаляем конфигурационные файлы
+log "Удаляем конфигурационные файлы..."
+rm -f "/home/user1/docker-compose.yml" || log "Ошибка при удалении docker-compose.yml"
+rm -rf "/home/user1/.config/yandex-disk" || log "Ошибка при удалении конфигурации Яндекс.Диска"
+
+# Сохраняем .env
+if [ -f "/home/user1/.env" ]; then
+    log "Сохраняем файл .env..."
+    cp "/home/user1/.env" "/home/user1/.env.backup" || log "Ошибка при сохранении .env"
+fi
+
+# Удаляем токен Яндекс.Диска
+if [ -f "/home/user1/yandex_token.txt" ]; then
+    log "Удаляем токен Яндекс.Диска..."
+    rm -f "/home/user1/yandex_token.txt" || log "Ошибка при удалении токена Яндекс.Диска"
+fi
+
+log "Очистка завершена успешно"

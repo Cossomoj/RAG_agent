@@ -5,6 +5,9 @@ WORKDIR /app
 # Устанавливаем базовые инструменты и библиотеки
 RUN apt-get update && apt-get install -y \
     supervisor \
+    procps \
+    net-tools \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Копируем файлы приложения
@@ -18,6 +21,7 @@ RUN python -m venv /opt/venv_admin
 # Устанавливаем переменные окружения
 ENV PATH_RAG="/opt/venv_rag/bin"
 ENV PATH_ADMIN="/opt/venv_admin/bin"
+ENV PYTHONUNBUFFERED=1
 
 # Копируем конфигурацию supervisor
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
