@@ -12,6 +12,9 @@ YANDEX_DISK_PATH="/home/user1/Yandex.Disk"
 REQUIRED_SPACE=1000000
 BACKUP_RETENTION_DAYS=7
 CRON_TMP=""
+REPO_URL="https://github.com/Cossomoj/RAG_agent.git"
+REPO_DIR="/tmp/RAG_agent"
+BRANCH="develop"
 
 log() {
     local message="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
@@ -122,7 +125,7 @@ main() {
         exit 1
     fi
 
-    for cmd in docker docker-compose sqlite3; do
+    for cmd in docker docker-compose sqlite3 git; do
         if ! command -v $cmd &> /dev/null; then
             log "Ошибка: $cmd не установлен."
             exit 1
@@ -132,8 +135,25 @@ main() {
     check_disk_space || exit 1
     check_docker_status || exit 1
 
+    # Клонируем репозиторий
+    log "Клонируем репозиторий..."
+    rm -rf "$REPO_DIR"
+    git clone -b "$BRANCH" "$REPO_URL" "$REPO_DIR" || {
+        log "Ошибка при клонировании репозитория"
+        exit 1
+    }
+
+    # Копируем необходимые файлы
+    log "Копируем файлы из репозитория..."
+    cp -r "$REPO_DIR/src/main_version/rag_service2" .
+    cp -r "$REPO_DIR/src/main_version/monitor2" .
+    cp -r "$REPO_DIR/src/main_version/nginx" .
+    cp -r "$REPO_DIR/src/main_version/certbot" .
+    cp "$REPO_DIR/src/main_version/docker-compose.yml" .
+    cp "$REPO_DIR/src/main_version/.env" .
+
     # Проверяем наличие необходимых файлов
-    for file in ".env"; do
+    for file in ".env" "docker-compose.yml"; do
         if [ ! -f "$file" ]; then
             log "Ошибка: Не найден файл $file"
             exit 1
@@ -170,6 +190,9 @@ main() {
     if [ "$SKIP_BACKUP" -eq 0 ]; then
         perform_initial_backup
     fi
+
+    # Очищаем временные файлы
+    rm -rf "$REPO_DIR"
 
     log "Процесс развертывания успешно завершен"
     log "Для получения SSL-сертификата выполните:"
