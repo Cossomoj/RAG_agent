@@ -8,6 +8,8 @@ RUN apt-get update && apt-get install -y \
     procps \
     net-tools \
     curl \
+    vim \
+    less \
     && rm -rf /var/lib/apt/lists/*
 
 # Копируем файлы приложения
@@ -22,6 +24,15 @@ RUN python -m venv /opt/venv_admin
 ENV PATH_RAG="/opt/venv_rag/bin"
 ENV PATH_ADMIN="/opt/venv_admin/bin"
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONIOENCODING=utf-8
+ENV WEBSOCKET_PORT=8000
+ENV PYTHONPATH=/app
+
+# Создаем директорию для логов
+RUN mkdir -p /var/log/supervisor
+RUN mkdir -p /app/logs
+RUN chmod -R 777 /var/log/supervisor /app/logs
 
 # Копируем конфигурацию supervisor
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
