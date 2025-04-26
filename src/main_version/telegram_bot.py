@@ -15,7 +15,7 @@ import pytz
 
 load_dotenv()
 
-DATABASE_URL = "/app/src/main_version/AI_agent.db"
+DATABASE_URL = "/home/user1/sqlite_data_rag/AI_agent.db"
 
 WEBSOCKET_URL = "ws://rag_service2:8000/ws"
 moscow_tz = pytz.timezone('Europe/Moscow')
