@@ -119,7 +119,7 @@ def create_retrieval_chain_from_folder(role, specialization, question_id, embedd
 
 def get_prompt_from_db(question_id):
     """Получает промт из базы данных по ID вопроса"""
-    conn = sqlite3.connect('AI_agent.db')
+    conn = sqlite3.connect('/app/src/main_version/AI_agent.db')
     cursor = conn.cursor()
     
     try:
