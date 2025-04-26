@@ -119,7 +119,7 @@ def create_retrieval_chain_from_folder(role, specialization, question_id, embedd
 
 def get_prompt_from_db(question_id):
     """Получает промт из базы данных по ID вопроса"""
-    conn = sqlite3.connect('/app/src/main_version/AI_agent.db')
+    conn = sqlite3.connect('src/main_version/AI_agent.db')
     cursor = conn.cursor()
     
     try:
@@ -227,7 +227,7 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
 class DatabaseOperations:
-    def __init__(self, db_path='/app/src/main_version/AI_agent.db'):
+    def __init__(self, db_path='src/main_version/AI_agent.db'):
         self.db_path = db_path
 
     # Пользователи
