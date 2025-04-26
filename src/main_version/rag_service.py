@@ -227,7 +227,7 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
 class DatabaseOperations:
-    def __init__(self, db_path='src/main_version/AI_agent.db'):
+    def __init__(self, db_path='/app/src/main_version/AI_agent.db'):
         self.db_path = db_path
 
     # Пользователи
