@@ -3,7 +3,7 @@ from datetime import datetime
 import os
 
 class DatabaseOperations:
-    def __init__(self, db_path='src/main_version/AI_agent.db'):
+    def __init__(self, db_path='/home/user1/sqlite_data_rag/AI_agent.db'):
         # Преобразуем относительный путь в абсолютный
         self.db_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', db_path))
         print(f"Подключение к базе данных: {self.db_path}")  # Отладочная информация
