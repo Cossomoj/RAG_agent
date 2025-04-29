@@ -17,7 +17,7 @@ load_dotenv()
 
 DATABASE_URL = "/app/src/main_version/AI_agent.db"
 
-WEBSOCKET_URL = "ws://rag_service2:8000/ws"
+WEBSOCKET_URL = "ws://127.0.0.1:8000/ws"
 moscow_tz = pytz.timezone('Europe/Moscow')
 
 dialogue_context = {}
