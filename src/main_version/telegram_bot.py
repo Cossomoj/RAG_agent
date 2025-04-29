@@ -1162,18 +1162,30 @@ def ask_custom_question(call):
     bot.register_next_step_handler(call.message, process_custom_question)
 
 
-def process_custom_question(message):   
-    if message.chat.id not in user_data:
-        user_data[message.chat.id] = {"role": "Специалист", "specialization": "Аналитик"}
-
-    role = user_data[message.chat.id]['role']
-    specialization = user_data[message.chat.id]['specialization']
-    if(not specialization):
-        specialization = "Аналитик"
-
-    question_id = 777
-    question = message.text
-    asyncio.run(websocket_question_from_user(question, message, role, specialization, question_id))
+def process_custom_question(message, custom_question=None):   
+    """Обрабатывает пользовательский вопрос или предварительно заданный вопрос."""
+    chat_id = message.chat.id
+    
+    if chat_id not in dialogue_context:
+        bot.reply_to(message, "Пожалуйста, начните диалог заново с команды /start")
+        return
+        
+    user_data = dialogue_context[chat_id]
+    if 'role' not in user_data or 'specialization' not in user_data:
+        bot.reply_to(message, "Пожалуйста, выберите роль и специализацию заново")
+        return
+        
+    # Используем предоставленный вопрос или текст сообщения
+    question = custom_question if custom_question else message.text
+    
+    # Запускаем асинхронную обработку вопроса
+    asyncio.run(websocket_question_from_user(
+        question=question,
+        message=message,
+        role=user_data['role'],
+        specialization=user_data['specialization'],
+        question_id=777  # Используем специальный ID для пользовательских вопросов
+    ))
 
 def handling_cached_requests(question_id, message, question, specialization):
     print("Кешированное сообщение")
@@ -1297,5 +1309,136 @@ print(f"Текущий часовой пояс: {current_timezone}")
 current_timenow = datetime.now(moscow_tz).strftime("%H:%M")
 print(f"Текущий часовой пояс:{current_timenow}")
 bot.polling(none_stop=False)
+
+@bot.message_handler(func=lambda message: message.text in ["1", "2", "3"] and message.chat.id in dialogue_context)
+def handle_question_selection(message):
+    """Обрабатывает выбор пользователем одного из предложенных вопросов."""
+    chat_id = message.chat.id
+    if chat_id not in dialogue_context:
+        bot.reply_to(message, "Пожалуйста, начните диалог заново с команды /start")
+        return
+
+    user_data = dialogue_context[chat_id]
+    if 'role' not in user_data or 'specialization' not in user_data:
+        bot.reply_to(message, "Пожалуйста, выберите роль и специализацию заново")
+        return
+
+    # Получаем выбранный вопрос из контекста диалога
+    selected_index = int(message.text) - 1
+    if 'generated_questions' not in user_data or selected_index >= len(user_data['generated_questions']):
+        bot.reply_to(message, "Извините, не могу найти выбранный вопрос. Пожалуйста, начните заново")
+        return
+
+    selected_question = user_data['generated_questions'][selected_index]
+    # Убираем номер из начала вопроса
+    clean_question = selected_question.split('. ', 1)[1] if '. ' in selected_question else selected_question
+    
+    # Запускаем обработку выбранного вопроса
+    process_custom_question(message, custom_question=clean_question)
+
+async def websocket_question_from_user(question, message, role, specialization, question_id):
+    """Отправляет вопрос через WebSocket и обрабатывает ответ."""
+    chat_id = message.chat.id
+    try:
+        async with websockets.connect(WEBSOCKET_URL) as websocket:
+            # Отправляем необходимые данные
+            await websocket.send(question)
+            await websocket.send(role)
+            await websocket.send(specialization)
+            await websocket.send(str(question_id))
+            
+            # Получаем историю диалога
+            context = take_history_dialog_from_db(chat_id)
+            await websocket.send(context)
+            
+            # Отправляем счетчик вопросов
+            count = count_questions_users.get(chat_id, 1)
+            await websocket.send(str(count))
+            
+            # Сохраняем сообщение пользователя
+            save_message_in_db(chat_id, "user", question)
+            
+            # Накапливаем ответ бота
+            bot_response = ""
+            generated_questions = []
+            is_questions_section = False
+            
+            while True:
+                try:
+                    response = await websocket.recv()
+                    if not response:
+                        break
+                        
+                    if response.startswith("\n\nВыберите следующий вопрос"):
+                        is_questions_section = True
+                        continue
+                        
+                    if is_questions_section:
+                        generated_questions.append(response)
+                    else:
+                        bot_response += response
+                        # Отправляем частичный ответ пользователю
+                        await bot.send_message(chat_id, response)
+                        
+                except websockets.exceptions.ConnectionClosed:
+                    break
+            
+            # Сохраняем полный ответ бота в историю
+            save_message_in_db(chat_id, "assistant", bot_response)
+            
+            # Сохраняем сгенерированные вопросы в контекст диалога
+            if chat_id not in dialogue_context:
+                dialogue_context[chat_id] = {}
+            dialogue_context[chat_id]['generated_questions'] = generated_questions
+            
+            # Если есть сгенерированные вопросы, создаем клавиатуру для выбора
+            if generated_questions:
+                markup = types.InlineKeyboardMarkup()
+                for i, question in enumerate(generated_questions, 1):
+                    # Убираем номер из начала вопроса для кнопки
+                    clean_question = question.split('. ', 1)[1] if '. ' in question else question
+                    markup.add(types.InlineKeyboardButton(text=f"{i}. {clean_question}", callback_data=f"gen_q_{i}"))
+                
+                await bot.send_message(
+                    chat_id,
+                    "Выберите следующий вопрос:",
+                    reply_markup=markup
+                )
+            
+            # Увеличиваем счетчик вопросов
+            count_questions_users[chat_id] = count + 1
+            
+    except Exception as e:
+        print(f"Ошибка при обработке вопроса: {e}")
+        await bot.send_message(chat_id, "Произошла ошибка при обработке вопроса. Пожалуйста, попробуйте позже.")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("gen_q_"))
+def handle_generated_question_selection(call):
+    """Обрабатывает выбор сгенерированного вопроса через inline-кнопку."""
+    chat_id = call.message.chat.id
+    if chat_id not in dialogue_context:
+        bot.answer_callback_query(call.id, "Пожалуйста, начните диалог заново")
+        return
+
+    user_data = dialogue_context[chat_id]
+    if 'generated_questions' not in user_data:
+        bot.answer_callback_query(call.id, "Не могу найти сгенерированные вопросы")
+        return
+
+    # Получаем индекс выбранного вопроса
+    selected_index = int(call.data.split('_')[2]) - 1
+    if selected_index >= len(user_data['generated_questions']):
+        bot.answer_callback_query(call.id, "Вопрос не найден")
+        return
+
+    selected_question = user_data['generated_questions'][selected_index]
+    # Убираем номер из начала вопроса
+    clean_question = selected_question.split('. ', 1)[1] if '. ' in selected_question else selected_question
+    
+    # Удаляем сообщение с кнопками
+    bot.delete_message(chat_id, call.message.message_id)
+    
+    # Запускаем обработку выбранного вопроса
+    process_custom_question(call.message, custom_question=clean_question)
 
 

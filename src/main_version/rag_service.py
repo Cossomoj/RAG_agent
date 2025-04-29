@@ -19,6 +19,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain.chains import create_retrieval_chain
 from langchain.retrievers import EnsembleRetriever
 import uvicorn
+import json
 
 load_dotenv()
 # Инициализация FastAPI
@@ -132,6 +133,50 @@ def get_prompt_from_db(question_id):
     finally:
         conn.close()
 
+async def generate_follow_up_questions(role, specialization, context, bot_answer):
+    """Генерирует три релевантных вопроса на основе контекста диалога."""
+    llm = GigaChat(
+        credentials=api_key,
+        model='GigaChat',
+        verify_ssl_certs=False,
+        profanity_check=False
+    )
+    
+    prompt = f"""Вы являетесь экспертом в роли {role} с специализацией {specialization}.
+
+На основе диалога предложи 3 релевантных вопроса для продолжения обсуждения.
+Вопросы должны быть:
+- Чёткими и логичными.
+- Не повторяться.
+- Длина вопроса максимум 100 символов
+- Пронумерованы (1, 2, 3).
+
+Контекст:
+- Вопрос пользователя: {context}
+- Ответ бота: {bot_answer}
+
+Верни только JSON в формате:
+{{
+    "questions": [
+        "1. [вопрос 1]",
+        "2. [вопрос 2]",
+        "3. [вопрос 3]"
+    ]
+}}"""
+
+    response = await llm.agenerate([prompt])
+    try:
+        # Пытаемся извлечь JSON из ответа
+        questions_json = json.loads(response.generations[0].text)
+        return questions_json["questions"]
+    except (json.JSONDecodeError, KeyError, IndexError):
+        # В случае ошибки возвращаем стандартные вопросы
+        return [
+            "1. Какой следующий шаг в этой теме?",
+            "2. Какие есть альтернативные решения?",
+            "3. Где найти примеры использования?"
+        ]
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """Обрабатывает WebSocket соединение и передает стриминг ответа GigaChat."""
@@ -172,36 +217,40 @@ async def websocket_endpoint(websocket: WebSocket):
         prompt_template=prompt_template
     )
     unwanted_chars = ["*", "**"]
+    full_answer = ""
+    
     if (count == 1):
         async for chunk in retrieval_chain.astream({'input': question}):
             if chunk:
-                    # Извлекаем ответ
                 answer = chunk.get("answer", "").strip()
-
-                    # Заменяем ненужные символы
                 for char in unwanted_chars:
                     answer = answer.replace(char, " ")
-                    
-                answer = " ".join(answer.split())  # Удаляем лишние пробелы
-                    
-                await websocket.send_text(answer)  # Отправляем очищенный текстовый ответ
+                answer = " ".join(answer.split())
+                full_answer += answer
+                await websocket.send_text(answer)
+                
+        # После отправки основного ответа генерируем и отправляем вопросы
+        follow_up_questions = await generate_follow_up_questions(role, specialization, question, full_answer)
+        await websocket.send_text("\n\nВыберите следующий вопрос: 1, 2, 3")
+        for question in follow_up_questions:
+            await websocket.send_text(question)
 
     elif(count > 1 and count < 10):
         for chunk in GigaChat(credentials=api_key,
-                              verify_ssl_certs=False,
-                                model='GigaChat-Max'
-                                ).stream(f"Использую контекст нашей прошлой беседы {context}, ответь на уточняющий вопрос {question}"):
-            answer = chunk.content.strip()  # Используем атрибут .content
-
-            # Заменяем ненужные символы
+                            verify_ssl_certs=False,
+                            model='GigaChat-Max'
+                            ).stream(f"Использую контекст нашей прошлой беседы {context}, ответь на уточняющий вопрос {question}"):
+            answer = chunk.content.strip()
             for char in unwanted_chars:
                 answer = answer.replace(char, " ")
-
-            # Удаляем лишние пробелы
-            answer = " ".join(answer.split())
-
-            # Отправляем ответ через WebSocket
+            full_answer += answer
             await websocket.send_text(answer)
+            
+        # После отправки основного ответа генерируем и отправляем вопросы
+        follow_up_questions = await generate_follow_up_questions(role, specialization, question, full_answer)
+        await websocket.send_text("\n\nВыберите следующий вопрос: 1, 2, 3")
+        for question in follow_up_questions:
+            await websocket.send_text(question)
 
     elif(count == 102):
         for chunk in GigaChat(credentials=api_key,
