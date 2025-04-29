@@ -330,6 +330,71 @@ class DatabaseOperations:
         """
         # Реализация запроса
 
+    # Методы для работы с сгенерированными вопросами
+    def save_generated_questions(self, user_id, original_question, original_answer, generated_questions):
+        """Сохраняет сгенерированные вопросы в базу данных."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        try:
+            for question in generated_questions:
+                cursor.execute("""
+                INSERT INTO Generated_questions 
+                (user_id, original_question, original_answer, generated_question)
+                VALUES (?, ?, ?, ?)
+                """, (user_id, original_question, original_answer, question))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def mark_question_selected(self, question_id):
+        """Отмечает вопрос как выбранный пользователем."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+            UPDATE Generated_questions 
+            SET selected = TRUE 
+            WHERE question_id = ?
+            """, (question_id,))
+            conn.commit()
+        finally:
+            conn.close()
+
+    def get_user_generated_questions(self, user_id, limit=10):
+        """Получает последние сгенерированные вопросы для пользователя."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+            SELECT question_id, original_question, original_answer, 
+                   generated_question, selected, created_at
+            FROM Generated_questions 
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+            """, (user_id, limit))
+            return cursor.fetchall()
+        finally:
+            conn.close()
+
+    def get_selected_questions_stats(self):
+        """Получает статистику по выбранным вопросам."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+            SELECT generated_question, 
+                   COUNT(*) as total_generated,
+                   SUM(CASE WHEN selected THEN 1 ELSE 0 END) as times_selected
+            FROM Generated_questions
+            GROUP BY generated_question
+            HAVING total_generated > 1
+            ORDER BY times_selected DESC
+            """)
+            return cursor.fetchall()
+        finally:
+            conn.close()
+
 class RAGDocumentManager:
     def __init__(self, base_path="src/main_version/txt_docs"):
         self.base_path = base_path
