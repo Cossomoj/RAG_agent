@@ -231,10 +231,7 @@ async def websocket_endpoint(websocket: WebSocket):
             
     # После отправки основного ответа генерируем и отправляем вопросы
     follow_up_questions = await generate_follow_up_questions(role, specialization, question, full_answer)
-    await websocket.send_text("\n\nВыберите следующий вопрос: 1, 2, 3")
-    for question in follow_up_questions:
-        await websocket.send_text(question)
-
+    await websocket.send_text(json.dumps({"questions": follow_up_questions}, ensure_ascii=False))
     await websocket.close()
 
 if __name__ == "__main__":

@@ -1221,88 +1221,76 @@ def handling_cached_requests(question_id, message, question, specialization):
     bot.send_message(chat_id=message_2.chat.id, text = "Пожалуйста, выберите дальнейшее действие", reply_markup=markup)
 
 async def websocket_question_from_user(question, message, role, specialization, question_id):
-    print(question)
-    wanted_simbols = [".", ":"]
-
+    """Отправляет вопрос через WebSocket и обрабатывает ответ."""
     chat_id = message.chat.id
-    print(chat_id)
-    if chat_id not in dialogue_context:
-        dialogue_context[chat_id] = []
-    dialogue_context[chat_id].append({"role": "user", "content": question})
-    save_message_in_db(chat_id, "user", question)
-    context_str = json.dumps(dialogue_context[chat_id], ensure_ascii=False, indent=4)
-    if chat_id not in count_questions_users:
-        count_questions_users[chat_id] = 0
-    count_questions_users[chat_id] += 1
-
-    async with websockets.connect(WEBSOCKET_URL) as websocket:
-        await websocket.send(question) # Отправляем вопрос
-        await websocket.send(role)
-        await websocket.send(specialization)
-        await websocket.send(str(question_id))
-        await websocket.send(context_str)
-        await websocket.send(str(count_questions_users[chat_id]))
-
-        try:
-            message_2 = bot.send_message(message.chat.id, "Ожидайте ответа...")
-            full_answer = ""
-            last_send_time = time.time()
-            answer_for_cache = []
-            answer_for_countinue_dialog = ""
+    try:
+        async with websockets.connect(WEBSOCKET_URL) as websocket:
+            # Отправляем необходимые данные
+            await websocket.send(question)
+            await websocket.send(role)
+            await websocket.send(specialization)
+            await websocket.send(str(question_id))
+            
+            # Получаем историю диалога
+            context = take_history_dialog_from_db(chat_id)
+            await websocket.send(context)
+            
+            # Отправляем счетчик вопросов
+            count = count_questions_users.get(chat_id, 1)
+            await websocket.send(str(count))
+            
+            # Сохраняем сообщение пользователя
+            save_message_in_db(chat_id, "user", question)
+            
+            # Накапливаем ответ бота
+            bot_response = ""
+            generated_questions = []
+            
             while True:
-                answer_part = await websocket.recv()  # Получаем ответ частями
-                if answer_part:
-                    for char in answer_part:
-                        if (char in wanted_simbols):
-                            answer_part += "\n"
-
-                    full_answer += answer_part
-                    if time.time() - last_send_time >= 1:
-                        try:
-                            message_2 = bot.send_message(chat_id=message_2.chat.id, text=full_answer, parse_mode="Markdown")
-                            answer_for_cache.append(full_answer)
-                            answer_for_countinue_dialog += full_answer
-                            full_answer = ""
-                            last_send_time = time.time()
-                        except telebot.apihelper.ApiTelegramException as e:
-                            if e.error_code == 429:
-                                retry_after = int(e.result.headers.get('Retry-After', 1))
-                                print(f"Rate limit exceeded. Retrying after {retry_after} seconds...")
-                                time.sleep(retry_after)
-                                message_2 = bot.send_message(chat_id=message_2.chat.id, text=full_answer, parse_mode="Markdown")
-                                answer_for_countinue_dialog += full_answer
-                                answer_for_cache.append(full_answer)
-                                last_send_time = time.time()
-                                full_answer = ""
-                else:
-                    print("Получено пустое сообщение от WebSocket.")
+                try:
+                    response = await websocket.recv()
+                    if not response:
+                        break
+                    # Пробуем распарсить как JSON с вопросами
+                    try:
+                        data = json.loads(response)
+                        if isinstance(data, dict) and "questions" in data:
+                            generated_questions = data["questions"]
+                            break
+                    except Exception:
+                        pass
+                    # Если не JSON, считаем это частью обычного ответа
+                    bot_response += response
+                    await bot.send_message(chat_id, response)
+                except websockets.exceptions.ConnectionClosed:
+                    break
             
-        except websockets.exceptions.ConnectionClosed:
-            if (full_answer != ""):
-                message_2 = bot.send_message(chat_id=message_2.chat.id, text=full_answer)
-                answer_for_cache.append(full_answer)
-                answer_for_countinue_dialog += full_answer
-            print("")
-            if(question_id != 777):
-                if(question_id not in [1, 2, 3, 4, 5, 18, 19, 20]):
-                    cache_dict[question_id] = answer_for_cache
-                else:
-                    if question_id not in cache_by_specialization:
-                        cache_by_specialization[question_id] = {}
-                    cache_by_specialization[question_id][specialization] = answer_for_cache
+            # Сохраняем полный ответ бота в историю
+            save_message_in_db(chat_id, "assistant", bot_response)
             
-        dialogue_context[chat_id].append({"role": "assistant", "content": answer_for_countinue_dialog})
-        save_message_in_db(chat_id, "assistant", answer_for_countinue_dialog)
-        markup = types.InlineKeyboardMarkup()
-        if(count_questions_users[chat_id] < 6):
-            button = [types.InlineKeyboardButton(text="Ввести уточняющее сообщение", callback_data="question_custom"),
-                    types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start")
-                ]
-        else:
-            button = [types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start")]
-
-        markup.add(*button)
-        bot.send_message(chat_id=message_2.chat.id, text = "Пожалуйста, выберите дальнейшее действие", reply_markup=markup)
+            # Сохраняем сгенерированные вопросы в контекст диалога
+            if chat_id not in dialogue_context:
+                dialogue_context[chat_id] = {}
+            dialogue_context[chat_id]['generated_questions'] = generated_questions
+            
+            # Если есть сгенерированные вопросы, создаем клавиатуру для выбора
+            if generated_questions:
+                markup = types.InlineKeyboardMarkup()
+                for i, question in enumerate(generated_questions, 1):
+                    clean_question = question.split('. ', 1)[1] if '. ' in question else question
+                    markup.add(types.InlineKeyboardButton(text=f"{i}. {clean_question}", callback_data=f"gen_q_{i}"))
+                await bot.send_message(
+                    chat_id,
+                    "Выберите следующий вопрос:",
+                    reply_markup=markup
+                )
+            
+            # Увеличиваем счетчик вопросов
+            count_questions_users[chat_id] = count + 1
+            
+    except Exception as e:
+        print(f"Ошибка при обработке вопроса: {e}")
+        await bot.send_message(chat_id, "Произошла ошибка при обработке вопроса. Пожалуйста, попробуйте позже.")
 
 current_timezone = time.tzname
 print(f"Текущий часовой пояс: {current_timezone}")     
@@ -1335,82 +1323,6 @@ def handle_question_selection(message):
     
     # Запускаем обработку выбранного вопроса
     process_custom_question(message, custom_question=clean_question)
-
-async def websocket_question_from_user(question, message, role, specialization, question_id):
-    """Отправляет вопрос через WebSocket и обрабатывает ответ."""
-    chat_id = message.chat.id
-    try:
-        async with websockets.connect(WEBSOCKET_URL) as websocket:
-            # Отправляем необходимые данные
-            await websocket.send(question)
-            await websocket.send(role)
-            await websocket.send(specialization)
-            await websocket.send(str(question_id))
-            
-            # Получаем историю диалога
-            context = take_history_dialog_from_db(chat_id)
-            await websocket.send(context)
-            
-            # Отправляем счетчик вопросов
-            count = count_questions_users.get(chat_id, 1)
-            await websocket.send(str(count))
-            
-            # Сохраняем сообщение пользователя
-            save_message_in_db(chat_id, "user", question)
-            
-            # Накапливаем ответ бота
-            bot_response = ""
-            generated_questions = []
-            is_questions_section = False
-            
-            while True:
-                try:
-                    response = await websocket.recv()
-                    if not response:
-                        break
-                        
-                    if response.startswith("\n\nВыберите следующий вопрос"):
-                        is_questions_section = True
-                        continue
-                        
-                    if is_questions_section:
-                        generated_questions.append(response)
-                    else:
-                        bot_response += response
-                        # Отправляем частичный ответ пользователю
-                        await bot.send_message(chat_id, response)
-                        
-                except websockets.exceptions.ConnectionClosed:
-                    break
-            
-            # Сохраняем полный ответ бота в историю
-            save_message_in_db(chat_id, "assistant", bot_response)
-            
-            # Сохраняем сгенерированные вопросы в контекст диалога
-            if chat_id not in dialogue_context:
-                dialogue_context[chat_id] = {}
-            dialogue_context[chat_id]['generated_questions'] = generated_questions
-            
-            # Если есть сгенерированные вопросы, создаем клавиатуру для выбора
-            if generated_questions:
-                markup = types.InlineKeyboardMarkup()
-                for i, question in enumerate(generated_questions, 1):
-                    # Убираем номер из начала вопроса для кнопки
-                    clean_question = question.split('. ', 1)[1] if '. ' in question else question
-                    markup.add(types.InlineKeyboardButton(text=f"{i}. {clean_question}", callback_data=f"gen_q_{i}"))
-                
-                await bot.send_message(
-                    chat_id,
-                    "Выберите следующий вопрос:",
-                    reply_markup=markup
-                )
-            
-            # Увеличиваем счетчик вопросов
-            count_questions_users[chat_id] = count + 1
-            
-    except Exception as e:
-        print(f"Ошибка при обработке вопроса: {e}")
-        await bot.send_message(chat_id, "Произошла ошибка при обработке вопроса. Пожалуйста, попробуйте позже.")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("gen_q_"))
 def handle_generated_question_selection(call):
