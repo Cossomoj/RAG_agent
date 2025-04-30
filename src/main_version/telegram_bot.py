@@ -1163,28 +1163,28 @@ def ask_custom_question(call):
 
 
 def process_custom_question(message, custom_question=None):   
-    """Обрабатывает пользовательский вопрос или предварительно заданный вопрос."""
     chat_id = message.chat.id
-    
-    if chat_id not in dialogue_context:
-        bot.reply_to(message, "Пожалуйста, начните диалог заново с команды /start")
-        return
-        
-    user_data = dialogue_context[chat_id]
-    if 'role' not in user_data or 'specialization' not in user_data:
+
+    # Попытка взять роль и специализацию из dialogue_context, иначе из user_data
+    user_ctx = dialogue_context.get(chat_id, {})
+    role = user_ctx.get('role') or user_data.get(chat_id, {}).get('role')
+    specialization = user_ctx.get('specialization') or user_data.get(chat_id, {}).get('specialization')
+
+    if not role or not specialization:
         bot.reply_to(message, "Пожалуйста, выберите роль и специализацию заново")
         return
-        
-    # Используем предоставленный вопрос или текст сообщения
+
+    # Сохраняем в dialogue_context для дальнейших шагов
+    dialogue_context[chat_id] = {'role': role, 'specialization': specialization}
+
     question = custom_question if custom_question else message.text
-    
-    # Запускаем асинхронную обработку вопроса
+
     asyncio.run(websocket_question_from_user(
         question=question,
         message=message,
-        role=user_data['role'],
-        specialization=user_data['specialization'],
-        question_id=777  # Используем специальный ID для пользовательских вопросов
+        role=role,
+        specialization=specialization,
+        question_id=777
     ))
 
 def handling_cached_requests(question_id, message, question, specialization):
