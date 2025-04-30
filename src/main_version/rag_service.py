@@ -219,56 +219,22 @@ async def websocket_endpoint(websocket: WebSocket):
     unwanted_chars = ["*", "**"]
     full_answer = ""
     
-    if (count == 1):
-        async for chunk in retrieval_chain.astream({'input': question}):
-            if chunk:
-                answer = chunk.get("answer", "").strip()
-                for char in unwanted_chars:
-                    answer = answer.replace(char, " ")
-                answer = " ".join(answer.split())
-                full_answer += answer
-                await websocket.send_text(answer)
-                
-        # После отправки основного ответа генерируем и отправляем вопросы
-        follow_up_questions = await generate_follow_up_questions(role, specialization, question, full_answer)
-        await websocket.send_text("\n\nВыберите следующий вопрос: 1, 2, 3")
-        for question in follow_up_questions:
-            await websocket.send_text(question)
-
-    elif(count > 1 and count < 10):
-        for chunk in GigaChat(credentials=api_key,
-                            verify_ssl_certs=False,
-                            model='GigaChat-Max'
-                            ).stream(f"Использую контекст нашей прошлой беседы {context}, ответь на уточняющий вопрос {question}"):
-            answer = chunk.content.strip()
+    # Всегда после ответа генерируем follow-up вопросы
+    async for chunk in retrieval_chain.astream({'input': question}):
+        if chunk:
+            answer = chunk.get("answer", "").strip()
             for char in unwanted_chars:
                 answer = answer.replace(char, " ")
+            answer = " ".join(answer.split())
             full_answer += answer
             await websocket.send_text(answer)
             
-        # После отправки основного ответа генерируем и отправляем вопросы
-        follow_up_questions = await generate_follow_up_questions(role, specialization, question, full_answer)
-        await websocket.send_text("\n\nВыберите следующий вопрос: 1, 2, 3")
-        for question in follow_up_questions:
-            await websocket.send_text(question)
+    # После отправки основного ответа генерируем и отправляем вопросы
+    follow_up_questions = await generate_follow_up_questions(role, specialization, question, full_answer)
+    await websocket.send_text("\n\nВыберите следующий вопрос: 1, 2, 3")
+    for question in follow_up_questions:
+        await websocket.send_text(question)
 
-    elif(count == 102):
-        for chunk in GigaChat(credentials=api_key,
-                              verify_ssl_certs=False,
-                                model='GigaChat'
-                                ).stream(f"Напомни мне пожалуйста вот об этой теме {context}"):
-            answer = chunk.content.strip()  # Используем атрибут .content
-
-            # Заменяем ненужные символы
-            for char in unwanted_chars:
-                answer = answer.replace(char, " ")
-
-            # Удаляем лишние пробелы
-            answer = " ".join(answer.split())
-
-            # Отправляем ответ через WebSocket
-            await websocket.send_text(answer)
-            
     await websocket.close()
 
 if __name__ == "__main__":
