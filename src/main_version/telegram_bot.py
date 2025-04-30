@@ -1221,31 +1221,21 @@ def handling_cached_requests(question_id, message, question, specialization):
     bot.send_message(chat_id=message_2.chat.id, text = "Пожалуйста, выберите дальнейшее действие", reply_markup=markup)
 
 async def websocket_question_from_user(question, message, role, specialization, question_id):
-    """Отправляет вопрос через WebSocket и обрабатывает ответ."""
     chat_id = message.chat.id
     try:
         async with websockets.connect(WEBSOCKET_URL) as websocket:
-            # Отправляем необходимые данные
             await websocket.send(question)
             await websocket.send(role)
             await websocket.send(specialization)
             await websocket.send(str(question_id))
-            
-            # Получаем историю диалога
             context = take_history_dialog_from_db(chat_id)
             await websocket.send(context)
-            
-            # Отправляем счетчик вопросов
             count = count_questions_users.get(chat_id, 1)
             await websocket.send(str(count))
-            
-            # Сохраняем сообщение пользователя
             save_message_in_db(chat_id, "user", question)
-            
-            # Накапливаем ответ бота
+
             bot_response = ""
             generated_questions = []
-            
             while True:
                 try:
                     response = await websocket.recv()
@@ -1257,40 +1247,39 @@ async def websocket_question_from_user(question, message, role, specialization, 
                         if isinstance(data, dict) and "questions" in data:
                             generated_questions = data["questions"]
                             break
-                    except Exception:
+                    except Exception as json_err:
+                        # Это не JSON, значит это обычный текст
                         pass
-                    # Если не JSON, считаем это частью обычного ответа
                     bot_response += response
                     await bot.send_message(chat_id, response)
                 except websockets.exceptions.ConnectionClosed:
                     break
-            
-            # Сохраняем полный ответ бота в историю
+
             save_message_in_db(chat_id, "assistant", bot_response)
-            
-            # Сохраняем сгенерированные вопросы в контекст диалога
+
             if chat_id not in dialogue_context:
                 dialogue_context[chat_id] = {}
             dialogue_context[chat_id]['generated_questions'] = generated_questions
-            
-            # Если есть сгенерированные вопросы, создаем клавиатуру для выбора
+
+            # Если есть сгенерированные вопросы, показываем их
             if generated_questions:
                 markup = types.InlineKeyboardMarkup()
                 for i, question in enumerate(generated_questions, 1):
                     clean_question = question.split('. ', 1)[1] if '. ' in question else question
                     markup.add(types.InlineKeyboardButton(text=f"{i}. {clean_question}", callback_data=f"gen_q_{i}"))
-                await bot.send_message(
-                    chat_id,
-                    "Выберите следующий вопрос:",
-                    reply_markup=markup
-                )
-            
-            # Увеличиваем счетчик вопросов
+                await bot.send_message(chat_id, "Выберите следующий вопрос:", reply_markup=markup)
+            else:
+                # Fallback: если вопросов нет, показываем стандартные кнопки
+                markup = types.InlineKeyboardMarkup()
+                markup.add(types.InlineKeyboardButton(text="Ввести уточняющее сообщение", callback_data="question_custom"))
+                markup.add(types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start"))
+                await bot.send_message(chat_id, "Пожалуйста, выберите дальнейшее действие", reply_markup=markup)
+
             count_questions_users[chat_id] = count + 1
-            
+
     except Exception as e:
         print(f"Ошибка при обработке вопроса: {e}")
-        await bot.send_message(chat_id, "Произошла ошибка при обработке вопроса. Пожалуйста, попробуйте позже.")
+        await bot.send_message(chat_id, f"Произошла ошибка при обработке вопроса: {e}")
 
 current_timezone = time.tzname
 print(f"Текущий часовой пояс: {current_timezone}")     
