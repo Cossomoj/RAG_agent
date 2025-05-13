@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 class="mb-4">Пользователи бота</h2>
+
+<div class="table-responsive">
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Имя пользователя</th>
+                <th>Полное имя</th>
+                <th>Дата регистрации</th>
+                <th>Последняя активность</th>
+                <th>Сообщений</th>
+                <th>Напоминаний</th>
+                <th>Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr>
+                <td>{{ user.user_id }}</td>
+                <td>{{ user.username or 'Не указано' }}</td>
+                <td>{{ user.user_fullname or 'Не указано' }}</td>
+                <td>{{ user.create_time|datetime or 'Не указано' }}</td>
+                <td>{{ user.last_activity|datetime if user.last_activity else 'Нет активности' }}</td>
+                <td>{{ user.message_count or 0 }}</td>
+                <td>{{ user.reminders_count or 0 }}</td>
+                <td>
+                    <button type="button" class="btn btn-sm btn-info" 
+                            onclick="showUserDetails({{ user.user_id }})">
+                        Подробнее
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Модальное окно для деталей пользователя -->
+<div class="modal fade" id="userDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Детали пользователя</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <ul class="nav nav-tabs" id="userTabs" role="tablist">
+                    <li class="nav-item">
+                        <a class="nav-link active" id="messages-tab" data-bs-toggle="tab" href="#messages" role="tab">
+                            Сообщения
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="reminders-tab" data-bs-toggle="tab" href="#reminders" role="tab">
+                            Напоминания
+                        </a>
+                    </li>
+                </ul>
+                <div class="tab-content mt-3" id="userTabContent">
+                    <div class="tab-pane fade show active" id="messages" role="tabpanel">
+                        <div id="userMessages"></div>
+                    </div>
+                    <div class="tab-pane fade" id="reminders" role="tabpanel">
+                        <div id="userReminders"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function formatDate(dateStr) {
+    if (!dateStr) return 'Не указано';
+    try {
+        const date = new Date(dateStr);
+        return date.toLocaleString();
+    } catch (e) {
+        return dateStr;
+    }
+}
+
+function showUserDetails(userId) {
+    fetch(`/users/${userId}`)
+        .then(response => response.json())
+        .then(data => {
+            // Отображаем сообщения
+            const messagesHtml = data.messages.map(msg => `
+                <div class="card mb-2">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <small class="text-muted">${formatDate(msg.time)}</small>
+                            <span class="badge ${msg.role === 'user' ? 'bg-primary' : 'bg-success'}">${msg.role}</span>
+                        </div>
+                        <p class="mb-0 mt-2">${msg.message}</p>
+                    </div>
+                </div>
+            `).join('');
+            document.getElementById('userMessages').innerHTML = messagesHtml || '<p class="text-muted">Нет сообщений</p>';
+
+            // Отображаем напоминания
+            const remindersHtml = data.reminders.map(rem => `
+                <div class="card mb-2">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <small class="text-muted">${formatDate(rem.time)}</small>
+                        </div>
+                        <p class="mb-0 mt-2">${rem.text}</p>
+                    </div>
+                </div>
+            `).join('');
+            document.getElementById('userReminders').innerHTML = remindersHtml || '<p class="text-muted">Нет напоминаний</p>';
+
+            // Показываем модальное окно
+            const modal = new bootstrap.Modal(document.getElementById('userDetailsModal'));
+            modal.show();
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Ошибка при загрузке данных пользователя');
+        });
+}
+</script>
+{% endblock %} 
