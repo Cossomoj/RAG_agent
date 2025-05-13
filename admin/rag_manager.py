@@ -2,7 +2,7 @@ import os
 from typing import Dict, List
 
 class RAGDocumentManager:
-    def __init__(self, base_path: str = 'src/main_version/txt_docs'):
+    def __init__(self, base_path: str = 'app/src/main_version/txt_docs'):
         self.base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', base_path))
         self.packs = {
             "pack_1": os.path.join(self.base_path, "docs_pack_1"),
