@@ -284,7 +284,7 @@ class DatabaseOperations:
         # Реализация запроса
 
 class RAGDocumentManager:
-    def __init__(self, base_path="src/main_version/txt_docs"):
+    def __init__(self, base_path="app/src/main_version/txt_docs"):
         self.base_path = base_path
         self.packs = {
             "pack_1": os.path.join(base_path, "docs_pack_1"),
