@@ -504,7 +504,7 @@ def handle_giga_mentor(call):
         types.InlineKeyboardButton(text="Как пользоваться", callback_data="whatido"),
         types.InlineKeyboardButton(text="Обратная связь", callback_data="feedback"),
         types.InlineKeyboardButton(text="Команда", callback_data="team"),
-        types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start")
+        types.InlineKeyboardButton(text="В начало", callback_data="start")
     ]
     markup.add(*roles)
 
@@ -529,7 +529,7 @@ def handle_restart_onboarding(call):
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
         types.InlineKeyboardButton(text="Изменить роль", callback_data="onboarding"),
-        types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start")
+        types.InlineKeyboardButton(text="В начало", callback_data="start")
     )
     
     # Отправляем сообщение с текущими данными и кнопками
@@ -560,7 +560,7 @@ def handle_personal_account(call):
         types.InlineKeyboardButton(text="Проактивный режим", callback_data="menu_rem"),
         types.InlineKeyboardButton(text="История сообщений", callback_data="question_777"),
         types.InlineKeyboardButton(text="Пройти онбординг заново", callback_data="restart_onboarding"),
-        types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start")
+        types.InlineKeyboardButton(text="В начало", callback_data="start")
     ]
     markup.add(*roles)
     
@@ -580,7 +580,7 @@ def handle_reminder(call):
     back_button = ([types.InlineKeyboardButton(text="Запланировать сообщение на тему", callback_data="rem_by_user"),
                    types.InlineKeyboardButton(text="Регулярные сообщения", callback_data="on_reminder"),
                    types.InlineKeyboardButton(text="Мои уведомления", callback_data="my_reminders"),
-                   types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start")])
+                   types.InlineKeyboardButton(text="В начало", callback_data="start")])
     markup.add(*back_button)
     bot.edit_message_text(chat_id = call.message.chat.id, message_id=call.message.message_id, text="Вы находитесь в разделе напоминания\nВыберите дальнейшие действия:", reply_markup=markup)
 
@@ -605,7 +605,7 @@ def handle_other(call):
         parse_mode="Markdown"
     )
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start"))
+    markup.add(types.InlineKeyboardButton(text="В начало", callback_data="start"))
     bot.send_message(call.message.chat.id, "Вы можете продолжить работу, вернувшись в начало:", reply_markup=markup)
 
 
@@ -621,7 +621,7 @@ def handle_other_buttons(call):
 @bot.callback_query_handler(func=lambda call: call.data == "team")
 def handle_team(call):
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start"))
+    markup.add(types.InlineKeyboardButton(text="В начало", callback_data="start"))
     bot.edit_message_text(
         chat_id = call.message.chat.id,
         message_id=call.message.message_id,
@@ -643,7 +643,7 @@ def handle_print_reminders(call):
         reminder_text = "У вас нет предстоящих напоминаний."
 
     markup = types.InlineKeyboardMarkup(row_width=1)
-    back_button = ([types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start")])
+    back_button = ([types.InlineKeyboardButton(text="В начало", callback_data="start")])
     markup.add(*back_button)
     bot.edit_message_text(chat_id = call.message.chat.id, message_id=call.message.message_id, text=f"➕ Запланированные сообщения, настроенные вами:\n{reminder_text}\n⏰ Регулярные сообщения от ИИ-агента:\n📅 Каждую пятницу в 19:00 вы будете получатьсообщение с анализом вашей истории диалога\n{'✅ Вкл' if current_status else '❌ Выкл'}", parse_mode="Markdown", reply_markup=markup)
 
@@ -660,7 +660,7 @@ def handle_on_reminder(call):
     other_buttons = [
         types.InlineKeyboardButton(text="Вкл", callback_data="rem_on"),
         types.InlineKeyboardButton(text="Выкл", callback_data="rem_of"),
-        types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start")
+        types.InlineKeyboardButton(text="В начало", callback_data="start")
     ]
     markup.add(*other_buttons)
 
@@ -692,7 +692,7 @@ def handle_reminder_toggle(call):
     other_buttons = [
         types.InlineKeyboardButton(text="Вкл", callback_data="rem_on"),
         types.InlineKeyboardButton(text="Выкл", callback_data="rem_of"),
-        types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start")
+        types.InlineKeyboardButton(text="В начало", callback_data="start")
     ]
     markup.add(*other_buttons)
 
@@ -854,7 +854,7 @@ async def check():
                         except websockets.exceptions.ConnectionClosed:
                             markup = types.InlineKeyboardMarkup(row_width=1)
                             question = [
-                                types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start"),
+                                types.InlineKeyboardButton(text="В начало", callback_data="start"),
                                 types.InlineKeyboardButton(text="Задать вопрос", callback_data="question_custom"),
                             ]
                             markup.add(*question)
@@ -958,7 +958,7 @@ async def check_for_daily_msg():
                                 # Создаем клавиатуру
                                 markup = types.InlineKeyboardMarkup(row_width=1)
                                 buttons = [
-                                    types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start"),
+                                    types.InlineKeyboardButton(text="В начало", callback_data="start"),
                                     types.InlineKeyboardButton(text="Задать вопрос", callback_data="question_custom"),
                                 ]
                                 markup.add(*buttons)
@@ -1054,7 +1054,7 @@ def handle_role(call):
                 types.InlineKeyboardButton(text="Что ожидается от меня", callback_data="questions_group_1"),
                 types.InlineKeyboardButton(text="Прочее", callback_data="questions_group_2"),
                 types.InlineKeyboardButton(text="Ввести свой вопрос", callback_data="question_custom"),
-                types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start")
+                types.InlineKeyboardButton(text="В начало", callback_data="start")
             ]
         else:
             questions = [
@@ -1063,7 +1063,7 @@ def handle_role(call):
                 types.InlineKeyboardButton(text="Что ожидается от меня", callback_data="question_20"),
                 types.InlineKeyboardButton(text="Прочее", callback_data="questions_group_2"),
                 types.InlineKeyboardButton(text="Ввести свой вопрос", callback_data="question_custom"),
-                types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start")
+                types.InlineKeyboardButton(text="В начало", callback_data="start")
             ]
     elif role == "Стажер":
         questions = [
@@ -1073,7 +1073,7 @@ def handle_role(call):
             types.InlineKeyboardButton(text="Посмотреть матрицу компетенций", callback_data="question_3"),
             types.InlineKeyboardButton(text="Прочее", callback_data="intern_questions_group"),
             types.InlineKeyboardButton(text="Ввести свой вопрос", callback_data="question_custom"),
-            types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start")
+            types.InlineKeyboardButton(text="В начало", callback_data="start")
         ]
     else:  # Специалист
         questions = [
@@ -1082,7 +1082,7 @@ def handle_role(call):
             types.InlineKeyboardButton(text="Посмотреть матрицу компетенций", callback_data="question_3"),
             types.InlineKeyboardButton(text="Прочее", callback_data="intern_questions_group"),
             types.InlineKeyboardButton(text="Ввести свой вопрос", callback_data="question_custom"),
-            types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start")
+            types.InlineKeyboardButton(text="В начало", callback_data="start")
         ]
     
     markup.add(*questions)
@@ -1215,7 +1215,7 @@ def handle_predefined_question_group(call):
             types.InlineKeyboardButton(text="Работа со стажерами/джунами", callback_data="group_1_question_3"),
             types.InlineKeyboardButton(text="Проведение 1-2-1", callback_data="group_1_question_4"),
             types.InlineKeyboardButton(text="Проведение встреч компетенции", callback_data="group_1_question_5"),
-            types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start")
+            types.InlineKeyboardButton(text="В начало", callback_data="start")
         ]
         markup.add(*questions)
         bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=f"Вы выбрали категорию: \nТеперь выберите вопрос:", reply_markup=markup)
@@ -1226,7 +1226,7 @@ def handle_predefined_question_group(call):
             types.InlineKeyboardButton(text="Как провести онбординг", callback_data="group_2_question_3"),
             types.InlineKeyboardButton(text="Оптимизация процессов разработки", callback_data="group_2_question_4"),
             types.InlineKeyboardButton(text="Советы по тайм-менеджменту", callback_data="group_2_question_5"),
-            types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start")
+            types.InlineKeyboardButton(text="В начало", callback_data="start")
         ]
         markup.add(*questions)
         bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=f"Вы выбрали категорию: \nТеперь выберите вопрос:", reply_markup=markup)
@@ -1414,7 +1414,7 @@ def handle_predefined_question(call):
 @bot.callback_query_handler(func=lambda call: call.data == "question_777")
 def hadl_print_in_development(call):
     markup = types.InlineKeyboardMarkup(row_width=1)
-    question = types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start")
+    question = types.InlineKeyboardButton(text="В начало", callback_data="start")
     markup.add(question)
     bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Мы активно работаем над этой функцией, ждите в ближайшем будующем!\nВаша команда разработки <3", reply_markup=markup)
 
@@ -1465,8 +1465,8 @@ def handling_cached_requests(question_id, message, question, specialization):
     dialogue_context[chat_id].append({"role": "assistant", "content": full_ans_for_context})
     save_message_in_db(chat_id, "assistant", full_ans_for_context)
     markup = types.InlineKeyboardMarkup()
-    button = [types.InlineKeyboardButton(text="Ввести уточняющее сообщение", callback_data="question_custom"),
-                    types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start")
+    button = [types.InlineKeyboardButton(text="Ввести вопрос", callback_data="question_custom"),
+                    types.InlineKeyboardButton(text="В начало", callback_data="start")
                 ]
     markup.add(*button)
     bot.send_message(chat_id=message_2.chat.id, text = "Пожалуйста, выберите дальнейшее действие", reply_markup=markup)
@@ -1546,11 +1546,11 @@ async def websocket_question_from_user(question, message, role, specialization, 
         save_message_in_db(chat_id, "assistant", answer_for_countinue_dialog)
         markup = types.InlineKeyboardMarkup()
         if(count_questions_users[chat_id] < 6):
-            button = [types.InlineKeyboardButton(text="Ввести уточняющее сообщение", callback_data="question_custom"),
-                    types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start")
+            button = [types.InlineKeyboardButton(text="Ввести вопрос", callback_data="question_custom"),
+                    types.InlineKeyboardButton(text="В начало", callback_data="start")
                 ]
         else:
-            button = [types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start")]
+            button = [types.InlineKeyboardButton(text="В начало", callback_data="start")]
 
         markup.add(*button)
         bot.send_message(chat_id=message_2.chat.id, text = "Пожалуйста, выберите дальнейшее действие", reply_markup=markup)
@@ -1582,13 +1582,13 @@ def handle_feedback(message):
         print(f"Ошибка при отправке отзыва: {e}")
 
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start"))
+    markup.add(types.InlineKeyboardButton(text="В начало", callback_data="start"))
     bot.send_message(chat_id, "Вы можете продолжить работу, вернувшись в начало:", reply_markup=markup)
 
 @require_onboarding
 def hadl_print_in_development_2(message):
     markup = types.InlineKeyboardMarkup(row_width=1)
-    question = types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start")
+    question = types.InlineKeyboardButton(text="В начало", callback_data="start")
     markup.add(question)
     bot.edit_message_text(chat_id=message.chat.id, message_id=message.message_id, text="Мы активно работаем над этой функцией, ждите в ближайшем будующем!\n Ваша команда разработки <3", reply_markup=markup)
 
@@ -1601,7 +1601,7 @@ def handle_intern_questions_group(call):
         types.InlineKeyboardButton(text="Лучшие практики", callback_data="intern_group_question_1"),
         types.InlineKeyboardButton(text="Что такое SDLC", callback_data="intern_group_question_2"),
         types.InlineKeyboardButton(text="Советы по тайм-менеджменту", callback_data="intern_group_question_3"),
-        types.InlineKeyboardButton(text="Вернуться в начало", callback_data="start")
+        types.InlineKeyboardButton(text="В начало", callback_data="start")
     ]
     markup.add(*questions)
     bot.edit_message_text(
