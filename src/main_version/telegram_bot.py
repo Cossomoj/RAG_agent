@@ -1169,7 +1169,7 @@ def choose_role(call):
     bot.clear_step_handler_by_chat_id(call.message.chat.id)
 
     if selected_role in ["Лид компетенций", "Специалист"]:
-        markup = types.InlineKeyboardMarkup(row_width=2)
+        markup = types.InlineKeyboardMarkup(row_width=1)
         specializations = [
             types.InlineKeyboardButton(text="Аналитик", callback_data="spec_analyst"),
             types.InlineKeyboardButton(text="Тестировщик", callback_data="spec_tester"),
