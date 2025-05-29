@@ -1049,8 +1049,8 @@ def handle_role(call):
     elif role == "Лид компетенции":
         if specialization == "Аналитик":
             questions = [
-                types.InlineKeyboardButton(text="Что я могу ожидать от специалиста компетенции", callback_data="question_4"),
-                types.InlineKeyboardButton(text="Что я могу ожидать от своего PO/PM специалиста", callback_data="question_5"),
+                types.InlineKeyboardButton(text="Что я могу ожидать от специалиста ", callback_data="question_4"),
+                types.InlineKeyboardButton(text="Что я могу ожидать от своего PO/PM ", callback_data="question_5"),
                 types.InlineKeyboardButton(text="Что ожидается от меня", callback_data="questions_group_1"),
                 types.InlineKeyboardButton(text="Прочее", callback_data="questions_group_2"),
                 types.InlineKeyboardButton(text="Ввести свой вопрос", callback_data="question_custom"),
@@ -1058,8 +1058,8 @@ def handle_role(call):
             ]
         else:
             questions = [
-                types.InlineKeyboardButton(text="Что я могу ожидать от специалиста компетенции", callback_data="question_18"),
-                types.InlineKeyboardButton(text="Что я могу ожидать от своего PO/PM специалиста", callback_data="question_19"),
+                types.InlineKeyboardButton(text="Что я могу ожидать от специалиста ", callback_data="question_18"),
+                types.InlineKeyboardButton(text="Что я могу ожидать от своего PO/PM ", callback_data="question_19"),
                 types.InlineKeyboardButton(text="Что ожидается от меня", callback_data="question_20"),
                 types.InlineKeyboardButton(text="Прочее", callback_data="questions_group_2"),
                 types.InlineKeyboardButton(text="Ввести свой вопрос", callback_data="question_custom"),
@@ -1381,16 +1381,16 @@ def handle_predefined_question(call):
         question = "Посмотерть матрицу компетенций"
         question_id = 3
     elif call.data == "question_4":
-        question = "Что я могу ожидать от специалиста компетенции"
+        question = "Что я могу ожидать от специалиста "
         question_id = 4
     elif call.data == "question_5":
-        question = "Что я могу ожидать от своего PO/PM специалиста"
+        question = "Что я могу ожидать от своего PO/PM "
         question_id = 5
     if call.data == "question_18":
-        question = "Что я могу ожидать от специалиста компетенции?"
+        question = "Что я могу ожидать от специалиста ?"
         question_id = 18
     elif call.data == "question_19":
-        question = "Что я могу ожидать от своего PO/PM специалиста"
+        question = "Что я могу ожидать от своего PO/PM "
         question_id = 19
     elif(call.data == "question_20"):
         question = "Что ожидается от меня?"
