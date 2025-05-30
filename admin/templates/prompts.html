@@ -58,6 +58,11 @@
                 <form id="editForm" method="POST">
                     <input type="hidden" id="editPromptId" name="prompt_id">
                     <div class="mb-3">
+                        <label for="editQuestionId" class="form-label">ID вопроса</label>
+                        <input type="number" class="form-control" id="editQuestionId" name="question_id" required min="1">
+                        <div class="form-text">Уникальный числовой идентификатор для вопроса</div>
+                    </div>
+                    <div class="mb-3">
                         <label for="editQuestionText" class="form-label">Вопрос</label>
                         <input type="text" class="form-control" id="editQuestionText" name="question_text" required>
                     </div>
@@ -81,6 +86,7 @@ function editPrompt(id) {
         .then(response => response.json())
         .then(data => {
             document.getElementById('editPromptId').value = data.question_id;
+            document.getElementById('editQuestionId').value = data.question_id;
             document.getElementById('editQuestionText').value = data.question_text;
             document.getElementById('editPromptTemplate').value = data.prompt_template;
             const modal = new bootstrap.Modal(document.getElementById('editModal'));

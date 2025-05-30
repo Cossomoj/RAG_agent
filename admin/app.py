@@ -3,6 +3,19 @@ from functools import wraps
 import os
 import sys
 from datetime import datetime
+import sqlite3
+
+# Добавляем путь к основному модулю бота
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'main_version'))
+
+# Импортируем функцию очистки кеша из основного файла бота
+try:
+    from telegram_bot import clear_all_cache
+except ImportError:
+    # Если не удается импортировать, создаем заглушку
+    def clear_all_cache():
+        print("Функция очистки кеша недоступна")
+        return False
 
 # Импортируем DatabaseOperations из локального файла
 from database import DatabaseOperations
@@ -93,11 +106,21 @@ def prompts():
 @login_required
 def add_prompt():
     if request.method == 'POST':
+        question_id = request.form['question_id']
         question_text = request.form['question_text']
         prompt_template = request.form['prompt_template']
-        db.add_prompt(question_text, prompt_template)
-        flash('Промпт успешно добавлен')
-        return redirect(url_for('prompts'))
+        
+        try:
+            db.add_prompt(int(question_id), question_text, prompt_template)
+            flash('Промпт успешно добавлен')
+            return redirect(url_for('prompts'))
+        except sqlite3.IntegrityError:
+            flash(f'Ошибка: Промпт с ID {question_id} уже существует')
+        except ValueError:
+            flash('Ошибка: ID вопроса должен быть числом')
+        except Exception as e:
+            flash(f'Ошибка при добавлении промпта: {str(e)}')
+    
     return render_template('add_prompt.html')
 
 # Добавляем новые маршруты для промптов
@@ -114,11 +137,18 @@ def delete_prompt(prompt_id):
 @login_required
 def edit_prompt(prompt_id):
     if request.method == 'POST':
+        new_question_id = request.form['question_id']
         question_text = request.form['question_text']
         prompt_template = request.form['prompt_template']
         try:
-            db.update_prompt(prompt_id, question_text, prompt_template)
+            db.update_prompt(prompt_id, int(new_question_id), question_text, prompt_template)
             flash('Промпт успешно обновлен')
+            return redirect(url_for('prompts'))
+        except sqlite3.IntegrityError:
+            flash(f'Ошибка: Промпт с ID {new_question_id} уже существует')
+            return redirect(url_for('prompts'))
+        except ValueError as e:
+            flash(f'Ошибка: {str(e)}')
             return redirect(url_for('prompts'))
         except Exception as e:
             flash(f'Ошибка при обновлении промпта: {str(e)}')
@@ -194,6 +224,21 @@ def user_details(user_id):
     if user:
         return jsonify(user)
     return jsonify({'error': 'Пользователь не найден'}), 404
+
+# Маршруты для системных операций
+@app.route('/system')
+@login_required
+def system():
+    return render_template('system.html')
+
+@app.route('/system/clear-cache', methods=['POST'])
+@login_required
+def clear_cache():
+    try:
+        clear_all_cache()
+        return jsonify({'success': True, 'message': 'Кеш успешно очищен'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Ошибка при очистке кеша: {str(e)}'})
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8002) 

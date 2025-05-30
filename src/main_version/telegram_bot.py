@@ -48,6 +48,26 @@ feedback_bot = telebot.TeleBot(FEEDBACK_BOT_TOKEN)
 cache_dict = {}
 cache_by_specialization = {}
 
+def clear_all_cache():
+    """
+    Функция для полной очистки всех кешей.
+    Очищает cache_dict и cache_by_specialization.
+    """
+    global cache_dict, cache_by_specialization
+    
+    try:
+        # Очищаем основной кеш
+        cache_dict.clear()
+        
+        # Очищаем кеш по специализациям
+        cache_by_specialization.clear()
+        
+        print("Все кеши успешно очищены")
+        return True
+    except Exception as e:
+        print(f"Ошибка при очистке кешей: {e}")
+        return False
+
 # Токен Telegram-бота
 bot = telebot.TeleBot(secret_key)
 # Словарь для хранения данных пользователя
