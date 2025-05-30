@@ -89,12 +89,22 @@ class DatabaseOperations:
             if cursor.rowcount == 0:
                 raise ValueError(f"Промпт с ID {prompt_id} не найден")
 
-    def get_all_users(self):
-        """Получение списка всех пользователей с их статистикой"""
+    def get_all_users(self, page=1, per_page=10, sort_by='last_activity', sort_order='desc'):
+        """Получение списка всех пользователей с их статистикой, пагинацией и сортировкой"""
         try:
             with self.get_db() as conn:
                 cursor = conn.cursor()
-                query = """
+                
+                # Валидация параметров сортировки
+                valid_sort_columns = ['user_id', 'username', 'user_fullname', 'create_time', 'last_activity', 'message_count', 'reminders_count']
+                if sort_by not in valid_sort_columns:
+                    sort_by = 'last_activity'
+                
+                if sort_order.lower() not in ['asc', 'desc']:
+                    sort_order = 'desc'
+                
+                # Основной запрос с сортировкой
+                query = f"""
                 SELECT 
                     u.user_id,
                     u.username,
@@ -107,11 +117,15 @@ class DatabaseOperations:
                 LEFT JOIN Message_history m ON u.user_id = m.user_id
                 LEFT JOIN Reminder r ON u.user_id = r.user_id
                 GROUP BY u.user_id
-                ORDER BY last_activity DESC
+                ORDER BY {sort_by} {sort_order.upper()}
+                LIMIT ? OFFSET ?
                 """
-                cursor.execute(query)
+                
+                offset = (page - 1) * per_page
+                cursor.execute(query, (per_page, offset))
                 columns = [description[0] for description in cursor.description]
                 users = []
+                
                 for row in cursor.fetchall():
                     user_dict = dict(zip(columns, row))
                     # Получаем последние сообщения пользователя
@@ -131,10 +145,32 @@ class DatabaseOperations:
                         for msg in cursor.fetchall()
                     ]
                     users.append(user_dict)
-                return users
+                
+                # Получаем общее количество пользователей для пагинации
+                cursor.execute("SELECT COUNT(*) FROM Users")
+                total_users = cursor.fetchone()[0]
+                
+                return {
+                    'users': users,
+                    'total': total_users,
+                    'page': page,
+                    'per_page': per_page,
+                    'total_pages': (total_users + per_page - 1) // per_page,
+                    'sort_by': sort_by,
+                    'sort_order': sort_order
+                }
+                
         except sqlite3.Error as e:
             print(f"Ошибка при получении пользователей: {e}")
-            return []
+            return {
+                'users': [],
+                'total': 0,
+                'page': 1,
+                'per_page': per_page,
+                'total_pages': 0,
+                'sort_by': sort_by,
+                'sort_order': sort_order
+            }
 
     def get_user_details(self, user_id):
         """Получение детальной информации о пользователе"""
@@ -196,4 +232,124 @@ class DatabaseOperations:
                 return user_details
         except sqlite3.Error as e:
             print(f"Ошибка при получении деталей пользователя: {e}")
-            return None 
+            return None
+
+    def get_statistics(self, days=30):
+        """Получение статистики за указанное количество дней"""
+        try:
+            with self.get_db() as conn:
+                cursor = conn.cursor()
+                
+                # Общие метрики
+                cursor.execute("SELECT COUNT(*) FROM Users")
+                total_users = cursor.fetchone()[0]
+                
+                cursor.execute("SELECT COUNT(*) FROM Message_history")
+                total_messages = cursor.fetchone()[0]
+                
+                cursor.execute("SELECT COUNT(*) FROM Reminder")
+                total_reminders = cursor.fetchone()[0]
+                
+                # Новые пользователи за период
+                cursor.execute("""
+                    SELECT COUNT(*) FROM Users 
+                    WHERE create_time >= datetime('now', '-{} days')
+                """.format(days))
+                new_users = cursor.fetchone()[0]
+                
+                # Активные пользователи за период (отправившие сообщения)
+                cursor.execute("""
+                    SELECT COUNT(DISTINCT user_id) FROM Message_history 
+                    WHERE time >= datetime('now', '-{} days')
+                """.format(days))
+                active_users = cursor.fetchone()[0]
+                
+                # Регистрации по дням за период
+                cursor.execute("""
+                    SELECT DATE(create_time) as date, COUNT(*) as count
+                    FROM Users 
+                    WHERE create_time >= datetime('now', '-{} days')
+                    GROUP BY DATE(create_time)
+                    ORDER BY date
+                """.format(days))
+                registrations_by_day = [{'date': row[0], 'count': row[1]} for row in cursor.fetchall()]
+                
+                # Сообщения по дням за период
+                cursor.execute("""
+                    SELECT DATE(time) as date, COUNT(*) as count
+                    FROM Message_history 
+                    WHERE time >= datetime('now', '-{} days') AND role = 'user'
+                    GROUP BY DATE(time)
+                    ORDER BY date
+                """.format(days))
+                messages_by_day = [{'date': row[0], 'count': row[1]} for row in cursor.fetchall()]
+                
+                # Топ активных пользователей за период
+                cursor.execute("""
+                    SELECT u.user_id, u.username, u.user_fullname, COUNT(m.message) as message_count
+                    FROM Users u
+                    LEFT JOIN Message_history m ON u.user_id = m.user_id 
+                    WHERE m.time >= datetime('now', '-{} days') AND m.role = 'user'
+                    GROUP BY u.user_id
+                    ORDER BY message_count DESC
+                    LIMIT 10
+                """.format(days))
+                top_users = [
+                    {
+                        'user_id': row[0],
+                        'username': row[1] or 'Не указано',
+                        'user_fullname': row[2] or 'Не указано',
+                        'message_count': row[3]
+                    }
+                    for row in cursor.fetchall()
+                ]
+                
+                # Статистика по специализациям
+                cursor.execute("""
+                    SELECT Specialization, COUNT(*) as count
+                    FROM Users 
+                    WHERE Specialization IS NOT NULL
+                    GROUP BY Specialization
+                    ORDER BY count DESC
+                """)
+                specializations = [{'name': row[0], 'count': row[1]} for row in cursor.fetchall()]
+                
+                # Статистика по ролям
+                cursor.execute("""
+                    SELECT Role, COUNT(*) as count
+                    FROM Users 
+                    WHERE Role IS NOT NULL
+                    GROUP BY Role
+                    ORDER BY count DESC
+                """)
+                roles = [{'name': row[0], 'count': row[1]} for row in cursor.fetchall()]
+                
+                return {
+                    'total_users': total_users,
+                    'total_messages': total_messages,
+                    'total_reminders': total_reminders,
+                    'new_users': new_users,
+                    'active_users': active_users,
+                    'registrations_by_day': registrations_by_day,
+                    'messages_by_day': messages_by_day,
+                    'top_users': top_users,
+                    'specializations': specializations,
+                    'roles': roles,
+                    'period_days': days
+                }
+                
+        except sqlite3.Error as e:
+            print(f"Ошибка при получении статистики: {e}")
+            return {
+                'total_users': 0,
+                'total_messages': 0,
+                'total_reminders': 0,
+                'new_users': 0,
+                'active_users': 0,
+                'registrations_by_day': [],
+                'messages_by_day': [],
+                'top_users': [],
+                'specializations': [],
+                'roles': [],
+                'period_days': days
+            } 

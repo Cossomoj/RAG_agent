@@ -4,18 +4,7 @@ import os
 import sys
 from datetime import datetime
 import sqlite3
-
-# Добавляем путь к основному модулю бота
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'main_version'))
-
-# Импортируем функцию очистки кеша из основного файла бота
-try:
-    from telegram_bot import clear_all_cache
-except ImportError:
-    # Если не удается импортировать, создаем заглушку
-    def clear_all_cache():
-        print("Функция очистки кеша недоступна")
-        return False
+import requests
 
 # Импортируем DatabaseOperations из локального файла
 from database import DatabaseOperations
@@ -214,8 +203,20 @@ def add_document():
 @app.route('/users')
 @login_required
 def users():
-    all_users = db.get_all_users()
-    return render_template('users.html', users=all_users)
+    # Получаем параметры из URL
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 10, type=int)
+    sort_by = request.args.get('sort_by', 'last_activity')
+    sort_order = request.args.get('sort_order', 'desc')
+    
+    # Ограничиваем количество записей на странице
+    if per_page > 100:
+        per_page = 100
+    if per_page < 5:
+        per_page = 5
+    
+    users_data = db.get_all_users(page=page, per_page=per_page, sort_by=sort_by, sort_order=sort_order)
+    return render_template('users.html', **users_data)
 
 @app.route('/users/<int:user_id>')
 @login_required
@@ -224,6 +225,22 @@ def user_details(user_id):
     if user:
         return jsonify(user)
     return jsonify({'error': 'Пользователь не найден'}), 404
+
+# Маршруты для статистики
+@app.route('/statistics')
+@login_required
+def statistics():
+    # Получаем параметр периода из URL (по умолчанию 30 дней)
+    days = request.args.get('days', 30, type=int)
+    
+    # Ограничиваем период разумными рамками
+    if days < 1:
+        days = 1
+    elif days > 365:
+        days = 365
+    
+    stats_data = db.get_statistics(days=days)
+    return render_template('statistics.html', **stats_data)
 
 # Маршруты для системных операций
 @app.route('/system')
@@ -235,8 +252,20 @@ def system():
 @login_required
 def clear_cache():
     try:
-        clear_all_cache()
-        return jsonify({'success': True, 'message': 'Кеш успешно очищен'})
+        # Делаем HTTP запрос к API бота
+        response = requests.post('http://localhost:8007/clear-cache', timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('success'):
+                return jsonify({'success': True, 'message': 'Кеш успешно очищен'})
+            else:
+                return jsonify({'success': False, 'error': data.get('error', 'Неизвестная ошибка')})
+        else:
+            return jsonify({'success': False, 'error': f'HTTP ошибка: {response.status_code}'})
+    except requests.exceptions.ConnectionError:
+        return jsonify({'success': False, 'error': 'Не удается подключиться к боту. Убедитесь, что бот запущен.'})
+    except requests.exceptions.Timeout:
+        return jsonify({'success': False, 'error': 'Превышено время ожидания ответа от бота.'})
     except Exception as e:
         return jsonify({'success': False, 'error': f'Ошибка при очистке кеша: {str(e)}'})
 

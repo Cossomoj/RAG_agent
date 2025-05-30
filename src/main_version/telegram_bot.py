@@ -12,6 +12,7 @@ import schedule
 from datetime import datetime, UTC, timedelta
 import threading
 import pytz
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 load_dotenv()
 
@@ -1665,6 +1666,42 @@ def handle_intern_group_questions(call):
             asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
     else:
         asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
+
+# Простой HTTP сервер для API очистки кеша
+class CacheAPIHandler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        if self.path == '/clear-cache':
+            try:
+                result = clear_all_cache()
+                response = {'success': True, 'message': 'Кеш успешно очищен'}
+                self.send_response(200)
+            except Exception as e:
+                response = {'success': False, 'error': str(e)}
+                self.send_response(500)
+            
+            self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps(response, ensure_ascii=False).encode('utf-8'))
+        else:
+            self.send_response(404)
+            self.end_headers()
+    
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+
+def start_cache_api_server():
+    server = HTTPServer(('localhost', 8007), CacheAPIHandler)
+    print("Cache API сервер запущен на порту 8007")
+    server.serve_forever()
+
+# Запускаем API сервер в отдельном потоке
+api_thread = threading.Thread(target=start_cache_api_server, daemon=True)
+api_thread.start()
 
 bot.polling(none_stop=False)
 
