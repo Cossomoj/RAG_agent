@@ -34,12 +34,12 @@ class DatabaseOperations:
             print(f"Ошибка при получении промптов: {e}")
             return []
 
-    def add_prompt(self, question_text, prompt_template):
+    def add_prompt(self, question_id, question_text, prompt_template):
         with self.get_db() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                'INSERT INTO Prompts (question_text, prompt_template) VALUES (?, ?)',
-                (question_text, prompt_template)
+                'INSERT INTO Prompts (question_id, question_text, prompt_template) VALUES (?, ?, ?)',
+                (question_id, question_text, prompt_template)
             )
             conn.commit()
             return cursor.lastrowid
@@ -54,16 +54,32 @@ class DatabaseOperations:
                 return dict(zip(columns, row))
             return None
 
-    def update_prompt(self, prompt_id, question_text, prompt_template):
+    def update_prompt(self, old_prompt_id, new_question_id, question_text, prompt_template):
         with self.get_db() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                'UPDATE Prompts SET question_text = ?, prompt_template = ? WHERE question_id = ?',
-                (question_text, prompt_template, prompt_id)
-            )
+            
+            # Если ID изменился, нужно проверить, что новый ID не занят
+            if old_prompt_id != new_question_id:
+                cursor.execute('SELECT 1 FROM Prompts WHERE question_id = ?', (new_question_id,))
+                if cursor.fetchone():
+                    raise ValueError(f"Промпт с ID {new_question_id} уже существует")
+                
+                # Удаляем старую запись и создаем новую
+                cursor.execute('DELETE FROM Prompts WHERE question_id = ?', (old_prompt_id,))
+                cursor.execute(
+                    'INSERT INTO Prompts (question_id, question_text, prompt_template) VALUES (?, ?, ?)',
+                    (new_question_id, question_text, prompt_template)
+                )
+            else:
+                # Просто обновляем существующую запись
+                cursor.execute(
+                    'UPDATE Prompts SET question_text = ?, prompt_template = ? WHERE question_id = ?',
+                    (question_text, prompt_template, old_prompt_id)
+                )
+            
             conn.commit()
-            if cursor.rowcount == 0:
-                raise ValueError(f"Промпт с ID {prompt_id} не найден")
+            if cursor.rowcount == 0 and old_prompt_id == new_question_id:
+                raise ValueError(f"Промпт с ID {old_prompt_id} не найден")
 
     def delete_prompt(self, prompt_id):
         with self.get_db() as conn:

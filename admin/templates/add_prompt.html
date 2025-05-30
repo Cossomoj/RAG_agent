@@ -10,6 +10,12 @@
             <div class="card-body">
                 <form method="POST">
                     <div class="mb-3">
+                        <label for="question_id" class="form-label">ID вопроса</label>
+                        <input type="number" class="form-control" id="question_id" name="question_id" 
+                               placeholder="Введите уникальный ID вопроса" required min="1">
+                        <div class="form-text">Уникальный числовой идентификатор для вопроса (например: 1, 2, 3...)</div>
+                    </div>
+                    <div class="mb-3">
                         <label for="question_text" class="form-label">Вопрос</label>
                         <input type="text" class="form-control" id="question_text" name="question_text" 
                                placeholder="Введите вопрос" required>
