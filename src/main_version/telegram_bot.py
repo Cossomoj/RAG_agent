@@ -16,7 +16,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 
 load_dotenv()
 
-DATABASE_URL = "/app/src/main_version/AI_agent.db"
+DATABASE_URL = "AI_agent.db"
 
 WEBSOCKET_URL = "ws://127.0.0.1:8000/ws"
 moscow_tz = pytz.timezone('Europe/Moscow')
@@ -29,23 +29,6 @@ FEEDBACK_BOT_TOKEN = os.getenv("FEEDBACK_BOT_TOKEN")
 FEEDBACK_CHAT_ID = os.getenv("FEEDBACK_CHAT_ID")
 
 feedback_bot = telebot.TeleBot(FEEDBACK_BOT_TOKEN)
-# cache_dict = {3 : ["Уровень Junior\nСофты:\n1. Желание учиться которое подтверждается делом.(Что изучено за последний год? Как это применяется?).\n2. Проактивная работа с заказчиком.(Инициатива по вопросам/запросу ОС должна поступать от специалиста).\n3. Умение принимать ОС.\n4. Многозадачность - в термин (многозадачность) вкладывается НЕ возможность в каждый момент времени думать сразу о нескольких задачах, а возможность переключаться между задачами/проектами (от 2х - оптимально, до 5ти - максимально) без сильной потери эффективности (что какая-то потеря эффективности будет - факт).",
-#                     "Харды:\n1. Знание json нотации.\n2. Знание Postman и Curl (любого инструмента отправки http запросов).\n3. Умение использовать User Story и Use Case.\n4. Понимание клиент-серверного взаимодействия.\n5. Владение  любым инструментом разметки макетов (пэинт/фотошоп/автокад/...).",
-#                     "Уровень Junior+ Middle-\nСофты:\n1. Желание учиться которое  подтверждается делом (Что изучено за последний год? Как это применяется?).\n2. Проактивная работа с заказчиком (Инициатива по вопросам/запросу ОС должна поступать от специалиста).\n3. Умение принимать ОС.\n4. Многозадачность (определение см. выше)",
-#                     "Харды:\n1. Знание json нотации.\n2. Знание Postman и Curl. (любого инструмента отправки http запросов).\n3. Умение использовать User Story и Use Case.\n4. Понимание клиент-серверного взаимодействия.\n5. Владение  любым инструментом разметки макетов (пэинт/фотошоп/автокад/...).\n6. Построение сиквенс диаграмм в UML нотации.\n7. Умение работать со сваггером/openAPI cхемами.",
-#                     "Уровень Middle+\nСофты:\n1. Желание учиться которое подтверждается делом.(Что изучено за последний год? Как это применяется?).\n2. Проактивная работа с заказчиком.(Инициатива по вопросам/запросу ОС должна поступать от специалиста).\n3. Умение принимать ОС.\n4. Умениедоносить своимысли до коллег.\n5. Умение объяснить заказчику возможные варианты реализации.",
-#                     "6. Многозадачность\n7. Умение выявить у себя недостаток знаний в определенном домене и закрыть его при необходимости\nХарды:\n1. Знание json и xml нотации.\n2. Знание Postman и Curl. Любого инструмента отправки http запросов.\n3. Умение использовать User Story и Use Case.\n4. Понимание клиент-серверного взаимодействия.\n5. Владение любым инструментом разметки макетов (пэинт/фотошоп/автокад/...).",
-#                     "6. Построение сиквенс диаграмм в UML нотации.\n7. Умение работать со сваггером/openAPI cхемами.\n8. Понимание синхронного и асинхронног взаимодействия на уровне, не просто знания протоколов, а для чего они реально нужны, когда применять одно, когда другое.\n9. Опыт работы с очередями (Rabbit, Kafka).\n10. Понимание плюсов и минусов микросервисов и монолита.",
-#                     "11. Понимание стейтлесс и стэйтфул сервисов.\n12. Понимание подхода API first.\n13. Опыт работы с Charles. (перехват и анализ клиент-серверных запросов).\n14. Опыт работы с реляционными и нереляционными базами, понимание разницы между ними, умение писать простые запросы.\n15. Умение программировать (скрипты, REST api методы) на скриптовом языке (python, js).\n16. Понимание принципов работы LLM.",
-#                     "Уровень Senior\nСофты:\n1. Желание учиться которое подтверждается делом.(Что изучено за последний год? Как это применяется?).\n2. Проактивная работа с заказчиком.(Инициатива по вопросам/запросу ОС должна поступать от специалиста).\n3. Умение принимать ОС.\n4. Умениедоносить своимысли до коллег.\n5. Умение объяснить заказчику возможные варианты реализации.",
-#                     "6. Многозадачность\n7. Умение выявить у себя недостаток знаний в определенном домене и закрыть его при необходимости.\n8. Понимание как работа влияет на проект в целом: что нужно сделать в первом приоритете, что можно поставить на паузу, чего можно не делать вообще.\n9. Умение сглаживать напряжение внутри команды, умение объяснить команде, что могут быть задачи интересные, но не полезные для проекта",
-#                     "Харды:\n1. Знание json и xml нотации.\n2. Знание Postman и Curl. Любого инструмента отправки http запросов.\n3. Умение использовать User Story и Use Case.\n4. Понимание клиент-серверного взаимодействия.\n5. Владение любым инструментом разметки макетов (пэинт/фотошоп/автокад/...).\n6. Построение сиквенс диаграмм в UML нотации.\n7. Умение работать со сваггером/openAPI cхемами.",
-#                     "8. Понимание синхронного и асинхронног взаимодействия на уровне, не просто знания протоколов, а для чего они реально нужны, когда применять одно, когда другое.\n9. Опыт работы с очередями (Rabbit, Kafka).\n10. Понимание плюсов и минусов микросервисов и монолита.\n11. Понимание стейтлесс и стэйтфул сервисов.\n12. Понимание подхода API first.",
-#                     "13. Опыт работы с Charles. (перехват и анализ клиент-серверных запросов).\n14. Опыт работы с реляционными и нереляционными базами, понимание разницы между ними, умение писать простые запросы.\n15. Умение программировать (скрипты, REST api методы) на скриптовом языке (python, js).\n16. Понимание принципов работы LLM.",
-#                     "17. Умение построить (возможно с командой) и понимать архитектуру проекта, понимать, что можно легко доработать, а что потребует серьезного изменения скоупа проекта.\n18. Понимание взаимодействия микросервисов между собой (ресты, очереди, service mesh).\n19. Понимание работы docker и kubernetes",
-#                     "Уровень Lead\nСофты:\n1. Желание учиться которое подтверждается делом.(Что изучено за последний год? Как это применяется?).\n2. Проактивная работа с заказчиком.(Инициатива по вопросам/запросу ОС должна поступать от специалиста).\n3. Умение принимать ОС.\n4. Умениедоносить своимысли до коллег.\n5. Умение объяснить заказчику возможные варианты реализации.",
-#                     "6. Многозадачность\n7. Умение выявить у себя недостаток знаний в определенном домене и закрыть его при необходимости.\n8. Понимание как работа влияет на проект в целом: что нужно сделать в первом приоритете, что можно поставить на паузу, чего можно не делать вообще.\n9. Умение сглаживать напряжение внутри команды, умение объяснить команде, что могут быть задачи интересные, но не полезные для проекта",
-#                     "10. Наставничество над коллегами из своей компетенции с понятным результатом - приобретением ими желаемых скиллов.\n11. Умение давать (ученикам) нетравматичную ОС.\n12. Умение проведения встреч one-2-one.\nХарды: Харды Senior и Lead не отличаются"]}
 cache_dict = {}
 cache_by_specialization = {}
 
@@ -57,30 +40,22 @@ def clear_all_cache():
     global cache_dict, cache_by_specialization
     
     try:
-        # Очищаем основной кеш
         cache_dict.clear()
-        
-        # Очищаем кеш по специализациям
         cache_by_specialization.clear()
-        
         print("Все кеши успешно очищены")
         return True
     except Exception as e:
         print(f"Ошибка при очистке кешей: {e}")
         return False
 
-# Токен Telegram-бота
 bot = telebot.TeleBot(secret_key)
-# Словарь для хранения данных пользователя
 user_data = {}
+suggested_questions_storage = {}
 
 def init_db():
-    # Подключаемся к базе данных (или создаем ее, если она не существует)
     conn = sqlite3.connect(DATABASE_URL)
     cursor = conn.cursor()
-
     try:
-        # Создаем таблицу Users
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS Users (
             user_id INTEGER PRIMARY KEY,
@@ -93,8 +68,6 @@ def init_db():
             is_onboarding BOOLEAN DEFAULT FALSE NOT NULL
         )
         ''')
-
-        # Создаем таблицу Reminder
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS Reminder (
         id_rem INTEGER PRIMARY KEY AUTOINCREMENT, 
@@ -104,8 +77,6 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES Users(user_id)
         )
         ''')
-
-        # Создаем таблицу Message_history
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS Message_history (
         user_id INTEGER, 
@@ -115,30 +86,21 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES Users(user_id)
         )
         ''')
-
-        # Фиксируем изменения в базе данных
         conn.commit()
     except Exception as e:
-        # В случае ошибки откатываем изменения
         conn.rollback()
         print(f"Ошибка при создании таблиц: {e}")
     finally:
-        # Закрываем соединение с базой данных
         conn.close()
 
-# Вызов функции для инициализации базы данных
 init_db()
 
 def require_onboarding(func):
-    """
-    Декоратор для проверки онбординга перед выполнением функции
-    """
     def wrapper(message, *args, **kwargs):
         if isinstance(message, types.CallbackQuery):
             chat_id = message.message.chat.id
         else:
             chat_id = message.chat.id
-            
         if not check_onboarding(chat_id):
             redirect_to_onboarding(message)
             return
@@ -148,8 +110,6 @@ def require_onboarding(func):
 @bot.message_handler(commands=['onboarding'])
 def start_onboarding(message):
     chat_id = message.chat.id
-    
-    # Создаем клавиатуру для выбора роли
     keyboard = types.InlineKeyboardMarkup()
     roles = [
         ("PO/PM", "role_for_db_po"),
@@ -157,10 +117,8 @@ def start_onboarding(message):
         ("Специалист", "role_for_db_spec"),
         ("Стажер", "role_for_db_intern")
     ]
-    
     for role_name, callback_data in roles:
         keyboard.add(types.InlineKeyboardButton(text=role_name, callback_data=callback_data))
-    
     bot.send_message(chat_id, "Выберите вашу роль:", reply_markup=keyboard)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("role_for_db_"))
@@ -1567,14 +1525,20 @@ async def websocket_question_from_user(question, message, role, specialization, 
         save_message_in_db(chat_id, "assistant", answer_for_countinue_dialog)
         markup = types.InlineKeyboardMarkup()
         if(count_questions_users[chat_id] < 6):
-            button = [types.InlineKeyboardButton(text="Ввести вопрос", callback_data="question_custom"),
+            button = [types.InlineKeyboardButton(text="Уточнить", callback_data="question_custom"),
                     types.InlineKeyboardButton(text="В начало", callback_data="start")
                 ]
         else:
             button = [types.InlineKeyboardButton(text="В начало", callback_data="start")]
 
         markup.add(*button)
-        bot.send_message(chat_id=message_2.chat.id, text = "Пожалуйста, выберите дальнейшее действие", reply_markup=markup)
+        bot.send_message(chat_id=message_2.chat.id, text = "Выберите дальнейшее действие", reply_markup=markup)
+
+        # Обрезаем ответ бота, чтобы избежать ошибок с длиной промпта
+        truncated_answer = (answer_for_countinue_dialog[:2000] + '...') if len(answer_for_countinue_dialog) > 2000 else answer_for_countinue_dialog
+
+        # Запускаем генерацию подсказанных вопросов
+        await generate_and_show_suggested_questions(chat_id, question, truncated_answer, role, specialization)
 
 current_timezone = time.tzname
 print(f"Текущий часовой пояс: {current_timezone}")     
@@ -1695,14 +1659,101 @@ class CacheAPIHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
 def start_cache_api_server():
-    server = HTTPServer(('localhost', 8007), CacheAPIHandler)
-    print("Cache API сервер запущен на порту 8007")
-    server.serve_forever()
+    server_address = ('', 8001)
+    httpd = HTTPServer(server_address, CacheAPIHandler)
+    print("Cache API server started on port 8001...")
+    httpd.serve_forever()
 
-# Запускаем API сервер в отдельном потоке
-api_thread = threading.Thread(target=start_cache_api_server, daemon=True)
-api_thread.start()
+async def generate_and_show_suggested_questions(chat_id, user_question, bot_answer, role, specialization):
+    print("Attempting to generate suggested questions...")
+    payload = {
+        "user_question": user_question,
+        "bot_answer": bot_answer,
+        "role": role,
+        "specialization": specialization
+    }
+    try:
+        print(f"Connecting to ws_suggest...")
+        async with websockets.connect("ws://127.0.0.1:8000/ws_suggest") as websocket:
+            await websocket.send(json.dumps(payload))
+            response = await websocket.recv()
+            print(f"Received from ws_suggest: {response}")
+            questions = json.loads(response)
 
-bot.polling(none_stop=False)
+            if isinstance(questions, dict) and "error" in questions:
+                print(f"Ошибка при генерации вопросов: {questions['error']}")
+                return
+
+            if isinstance(questions, list) and questions:
+                print(f"Successfully generated questions: {questions}")
+                suggested_questions_storage[chat_id] = questions
+                
+                markup = types.InlineKeyboardMarkup()
+                buttons = []
+                for i, q in enumerate(questions[:3]):
+                    buttons.append(types.InlineKeyboardButton(text=f"{i+1}", callback_data=f"suggested_question_{i}"))
+                
+                if buttons:
+                    markup.add(*buttons)
+                    questions_text = "\n".join([f"{i+1}. {q}" for i, q in enumerate(questions[:3])])
+                    print(f"Sending questions to user {chat_id}")
+                    bot.send_message(chat_id, f"Выберете следующий вопрос:\n{questions_text}", reply_markup=markup)
+            else:
+                print(f"No questions generated or response was not a list. Response: {questions}")
+
+
+    except Exception as e:
+        print(f"CRITICAL Error in generate_and_show_suggested_questions: {e}")
+
+@require_onboarding
+@bot.callback_query_handler(func=lambda call: call.data.startswith("suggested_question_"))
+def handle_suggested_question(call):
+    chat_id = call.message.chat.id
+    question_index = int(call.data.split("_")[-1])
+    
+    if chat_id in suggested_questions_storage and question_index < len(suggested_questions_storage[chat_id]):
+        question = suggested_questions_storage[chat_id][question_index]
+        
+        # Очищаем контекст диалога для нового вопроса
+        clear_dialog_context(chat_id)
+        
+        # Получаем роль и специализацию
+        conn = sqlite3.connect(DATABASE_URL)
+        cursor = conn.cursor()
+        cursor.execute("SELECT Role, Specialization FROM Users WHERE user_id = ?", (chat_id,))
+        user_info = cursor.fetchone()
+        conn.close()
+        
+        role = user_info[0] if user_info else "Пользователь"
+        specialization = user_info[1] if user_info else "Не указана"
+        
+        bot.send_message(chat_id, f"Вы выбрали вопрос: {question}")
+        
+        # Отправляем вопрос на обработку
+        asyncio.run(websocket_question_from_user(question, call.message, role, specialization, 777))
+        
+        # Удаляем предложенные вопросы после выбора
+        if chat_id in suggested_questions_storage:
+            del suggested_questions_storage[chat_id]
+            
+        # Убираем кнопки с вопросами
+        bot.edit_message_reply_markup(chat_id=call.message.chat.id, message_id=call.message.message_id, reply_markup=None)
+    else:
+        bot.answer_callback_query(call.id, "Не удалось найти вопрос. Пожалуйста, попробуйте снова.")
+
+if __name__ == '__main__':
+    # Запуск API сервера в отдельном потоке
+    api_thread = threading.Thread(target=start_cache_api_server, daemon=True)
+    api_thread.start()
+    
+    # Запуск планировщика в отдельном потоке
+    scheduler_thread = threading.Thread(target=run_async_task, daemon=True)
+    scheduler_thread.start()
+
+    # Запуск планировщика для хакатона
+    hack_scheduler_thread = threading.Thread(target=run_async_task_for_hack, daemon=True)
+    hack_scheduler_thread.start()
+
+    bot.polling(none_stop=True)
 
 

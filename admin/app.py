@@ -95,18 +95,23 @@ def prompts():
 @login_required
 def add_prompt():
     if request.method == 'POST':
-        question_id = request.form['question_id']
-        question_text = request.form['question_text']
-        prompt_template = request.form['prompt_template']
+        question_text = request.form.get('question_text', '').strip()
+        prompt_template = request.form.get('prompt_template', '').strip()
+        
+        if not question_text:
+            flash('Ошибка: Текст вопроса обязателен для заполнения')
+            return render_template('add_prompt.html')
+            
+        if not prompt_template:
+            flash('Ошибка: Шаблон промпта обязателен для заполнения')
+            return render_template('add_prompt.html')
         
         try:
-            db.add_prompt(int(question_id), question_text, prompt_template)
+            # Генерируем ID автоматически (например, следующий доступный ID)
+            question_id = db.get_next_available_id()  # Нужно добавить этот метод в DatabaseOperations
+            db.add_prompt(question_id, question_text, prompt_template)
             flash('Промпт успешно добавлен')
             return redirect(url_for('prompts'))
-        except sqlite3.IntegrityError:
-            flash(f'Ошибка: Промпт с ID {question_id} уже существует')
-        except ValueError:
-            flash('Ошибка: ID вопроса должен быть числом')
         except Exception as e:
             flash(f'Ошибка при добавлении промпта: {str(e)}')
     
@@ -126,9 +131,24 @@ def delete_prompt(prompt_id):
 @login_required
 def edit_prompt(prompt_id):
     if request.method == 'POST':
-        new_question_id = request.form['question_id']
-        question_text = request.form['question_text']
-        prompt_template = request.form['prompt_template']
+        # Безопасное получение данных из формы
+        new_question_id = request.form.get('question_id', '').strip()
+        question_text = request.form.get('question_text', '').strip()
+        prompt_template = request.form.get('prompt_template', '').strip()
+        
+        # Проверяем, что все обязательные поля заполнены
+        if not new_question_id:
+            flash('Ошибка: ID вопроса обязателен для заполнения')
+            return redirect(url_for('prompts'))
+            
+        if not question_text:
+            flash('Ошибка: Текст вопроса обязателен для заполнения')
+            return redirect(url_for('prompts'))
+            
+        if not prompt_template:
+            flash('Ошибка: Шаблон промпта обязателен для заполнения')
+            return redirect(url_for('prompts'))
+        
         try:
             db.update_prompt(prompt_id, int(new_question_id), question_text, prompt_template)
             flash('Промпт успешно обновлен')
