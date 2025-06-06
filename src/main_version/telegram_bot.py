@@ -1243,10 +1243,10 @@ def handle_predefined_question_group_1(call):
         question_id = 10
 
     if (question_id in cache_dict):
-            handling_cached_requests(question_id, call.message, question, specialization)
+            asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
     elif (question_id in cache_by_specialization):
         if(specialization in cache_by_specialization[question_id]):
-            handling_cached_requests(question_id, call.message, question, specialization)
+            asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
         else:
             asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
     else:
@@ -1286,10 +1286,10 @@ def handle_predefined_question_group_2(call):
         question_id = 24
 
     if (question_id in cache_dict):
-            handling_cached_requests(question_id, call.message, question, specialization)
+            asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
     elif (question_id in cache_by_specialization):
         if(specialization in cache_by_specialization[question_id]):
-            handling_cached_requests(question_id, call.message, question, specialization)
+            asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
         else:
             asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
     else:
@@ -1323,10 +1323,10 @@ def handle_predefined_question_group_2(call):
         question_id = 17
 
     if (question_id in cache_dict):
-            handling_cached_requests(question_id, call.message, question, specialization)
+            asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
     elif (question_id in cache_by_specialization):
         if(specialization in cache_by_specialization[question_id]):
-            handling_cached_requests(question_id, call.message, question, specialization)
+            asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
         else:
             asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
     else:
@@ -1380,10 +1380,10 @@ def handle_predefined_question(call):
     
 
     if (question_id in cache_dict):
-            handling_cached_requests(question_id, call.message, question, specialization)
+            asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
     elif (question_id in cache_by_specialization):
         if(specialization in cache_by_specialization[question_id]):
-            handling_cached_requests(question_id, call.message, question, specialization)
+            asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
         else:
             asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
     else:
@@ -1417,7 +1417,7 @@ def process_custom_question(message):
     question = message.text
     asyncio.run(websocket_question_from_user(question, message, role, specialization, question_id))
 
-def handling_cached_requests(question_id, message, question, specialization):
+async def handling_cached_requests(question_id, message, question, specialization):
     print("Кешированное сообщение")
 
     if (question_id not in [1, 2, 3, 4, 5, 18, 19, 20]):
@@ -1443,6 +1443,23 @@ def handling_cached_requests(question_id, message, question, specialization):
     
     dialogue_context[chat_id].append({"role": "assistant", "content": full_ans_for_context})
     save_message_in_db(chat_id, "assistant", full_ans_for_context)
+    
+    # Получаем роль пользователя из базы данных
+    conn = sqlite3.connect(DATABASE_URL)
+    cursor = conn.cursor()
+    cursor.execute("SELECT Role, Specialization FROM Users WHERE user_id = ?", (chat_id,))
+    user_info = cursor.fetchone()
+    conn.close()
+    
+    role = user_info[0] if user_info else "Пользователь"
+    user_specialization = user_info[1] if user_info else specialization
+    
+    # Обрезаем ответ бота, чтобы избежать ошибок с длиной промпта
+    truncated_answer = (full_ans_for_context[:2000] + '...') if len(full_ans_for_context) > 2000 else full_ans_for_context
+    
+    # Запускаем генерацию подсказанных вопросов
+    await generate_and_show_suggested_questions(chat_id, question, truncated_answer, role, user_specialization)
+    
     markup = types.InlineKeyboardMarkup()
     button = [types.InlineKeyboardButton(text="Ввести вопрос", callback_data="question_custom"),
                     types.InlineKeyboardButton(text="В начало", callback_data="start")
@@ -1532,13 +1549,13 @@ async def websocket_question_from_user(question, message, role, specialization, 
             button = [types.InlineKeyboardButton(text="В начало", callback_data="start")]
 
         markup.add(*button)
-        bot.send_message(chat_id=message_2.chat.id, text = "Выберите дальнейшее действие", reply_markup=markup)
-
         # Обрезаем ответ бота, чтобы избежать ошибок с длиной промпта
         truncated_answer = (answer_for_countinue_dialog[:2000] + '...') if len(answer_for_countinue_dialog) > 2000 else answer_for_countinue_dialog
 
         # Запускаем генерацию подсказанных вопросов
         await generate_and_show_suggested_questions(chat_id, question, truncated_answer, role, specialization)
+
+        bot.send_message(chat_id=message_2.chat.id, text = "Выберите дальнейшее действие", reply_markup=markup)
 
 current_timezone = time.tzname
 print(f"Текущий часовой пояс: {current_timezone}")     
@@ -1622,10 +1639,10 @@ def handle_intern_group_questions(call):
         question_id = 24
 
     if (question_id in cache_dict):
-        handling_cached_requests(question_id, call.message, question, specialization)
+        asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
     elif (question_id in cache_by_specialization):
         if(specialization in cache_by_specialization[question_id]):
-            handling_cached_requests(question_id, call.message, question, specialization)
+            asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
         else:
             asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
     else:
