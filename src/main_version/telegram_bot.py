@@ -926,7 +926,7 @@ async def check_for_daily_msg():
             current_time = now.strftime("%H:%M")
             
             # Проверяем, пятница ли сейчас (4) и время 19:00
-            if current_day == 5 and current_time == "9:00":
+            if current_day == 5 and current_time == "9:30":
                 conn = sqlite3.connect(DATABASE_URL)
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
