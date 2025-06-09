@@ -13,8 +13,21 @@ from datetime import datetime, UTC, timedelta
 import threading
 import pytz
 from http.server import HTTPServer, BaseHTTPRequestHandler
+import logging
 
 load_dotenv()
+
+# Настройка логирования
+log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+logging.basicConfig(
+    level=getattr(logging, log_level, logging.INFO),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('telegram_bot.log', encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 DATABASE_URL = "/app/src/main_version/AI_agent.db"
 
@@ -63,10 +76,10 @@ def clear_all_cache():
         # Очищаем кеш по специализациям
         cache_by_specialization.clear()
         
-        print("Все кеши успешно очищены")
+        logger.info("Все кеши успешно очищены")
         return True
     except Exception as e:
-        print(f"Ошибка при очистке кешей: {e}")
+        logger.error(f"Ошибка при очистке кешей: {e}")
         return False
 
 # Токен Telegram-бота
@@ -118,10 +131,11 @@ def init_db():
 
         # Фиксируем изменения в базе данных
         conn.commit()
+        logger.info("База данных инициализирована успешно")
     except Exception as e:
         # В случае ошибки откатываем изменения
         conn.rollback()
-        print(f"Ошибка при создании таблиц: {e}")
+        logger.error(f"Ошибка при создании таблиц: {e}")
     finally:
         # Закрываем соединение с базой данных
         conn.close()
@@ -357,9 +371,10 @@ def save_message_in_db(chat_id, role, message):
         ''', (chat_id, role, message, time))
         conn.commit()
         conn.close()
+        logger.debug(f"Сообщение сохранено в БД для пользователя {chat_id}")
     except sqlite3.Error as e:
         # Обработка ошибок базы данных
-        print( f"Ошибка при сохранении сообщения в историю: {e}")
+        logger.error(f"Ошибка при сохранении сообщения в историю для пользователя {chat_id}: {e}")
 
 def take_history_dialog_from_db(chat_id):
     try:
@@ -390,13 +405,15 @@ def take_history_dialog_from_db(chat_id):
         
         # Проверяем результат и преобразуем в строку
         if result is None or result[0] is None:
+            logger.info(f"История сообщений пустая для пользователя {chat_id}")
             return "История сообщений пустая"
         
         # fetchone() возвращает кортеж, берем первый элемент
+        logger.debug(f"Получена история диалога для пользователя {chat_id}")
         return str(result[0])
         
     except Exception as e:
-        print(f"Ошибка при получении истории диалога: {e}")
+        logger.error(f"Ошибка при получении истории диалога для пользователя {chat_id}: {e}")
         return "История сообщений недоступна"
     finally:
         if conn:
@@ -414,7 +431,7 @@ def check_onboarding(user_id):
         conn.close()
         return result[0] if result else False
     except Exception as e:
-        print(f"Ошибка при проверке онбординга: {e}")
+        logger.error(f"Ошибка при проверке онбординга для пользователя {user_id}: {e}")
         return False
 
 def redirect_to_onboarding(message):
@@ -447,7 +464,7 @@ def send_welcome(message):
     existing_user = cursor.fetchone()
 
     if existing_user:
-        print(f"Пользователь с ID {user_id} уже существует в базе данных.")
+        logger.info(f"Пользователь с ID {user_id} уже существует в базе данных")
         # Обновляем данные пользователя на случай, если они изменились
         cursor.execute("""
             UPDATE Users 
@@ -462,7 +479,7 @@ def send_welcome(message):
             VALUES(?, ?, ?, ?, ?)
         """, (user_id, username, user_fullname, True, False))
         
-        print(f"Пользователь с ID {user_id} успешно добавлен в базу данных.")
+        logger.info(f"Пользователь с ID {user_id} успешно добавлен в базу данных")
     
     conn.commit()
     conn.close()
@@ -918,6 +935,7 @@ threading.Thread(target=run_async_task, daemon=True).start()
 
 # Асинхронная функция для проверки и отправки напоминаний
 async def check_for_daily_msg():
+    logger.info("Запуск функции check_for_daily_msg")
     while True:
         try:
             # Получаем текущую дату и время в московском часовом поясе
@@ -925,8 +943,12 @@ async def check_for_daily_msg():
             current_day = now.weekday()  # 0 - понедельник, 4 - пятница
             current_time = now.strftime("%H:%M")
             
+            # Логируем текущее состояние для отладки
+            logger.debug(f"Текущий день недели: {current_day}, время: {current_time}")
+            
             # Проверяем, пятница ли сейчас (4) и время 19:00
-            if current_day == 0 and current_time == "10:00":
+            if current_day == 0 and current_time == "19:40":
+                logger.info("Наступило время для отправки еженедельных сообщений")
                 conn = sqlite3.connect(DATABASE_URL)
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
@@ -935,19 +957,26 @@ async def check_for_daily_msg():
                 cursor.execute("SELECT * FROM Users WHERE reminder = TRUE;")
                 users_results = cursor.fetchall()
                 conn.close()
+                
+                logger.info(f"Найдено {len(users_results)} пользователей с включенными напоминаниями")
 
                 # Отправляем сообщение каждому пользователю
                 for user in users_results:
                     chat_id = user['user_id']
                     wanted_simbols = [".", ":"]
                     
+                    logger.info(f"Обработка пользователя {chat_id}")
+                    
                     # Получаем историю диалога пользователя
                     context_str = take_history_dialog_from_db(chat_id)
-                    print(f"context_str type: {type(context_str)}")
+                    logger.debug(f"Тип context_str для пользователя {chat_id}: {type(context_str)}")
+                    
                     if context_str is None:
                         context_str = "История сообщений пустая"
+                        logger.warning(f"История сообщений пуста для пользователя {chat_id}")
                     elif not isinstance(context_str, str):
                         context_str = str(context_str)  # преобразуем в строку
+                        logger.warning(f"Преобразован тип context_str в строку для пользователя {chat_id}")
                     
                     question_id = 777  # Изменено с 666 на 777 для корректной обработки
                     role = 'Аналитик'   
@@ -956,6 +985,7 @@ async def check_for_daily_msg():
                     question = 'without'
                     
                     try:
+                        logger.debug(f"Подключение к WebSocket для пользователя {chat_id}")
                         async with websockets.connect(WEBSOCKET_URL) as websocket:
                             await websocket.send(question)
                             await websocket.send(role)
@@ -974,11 +1004,14 @@ async def check_for_daily_msg():
                                                 answer_part += "\n"
                                         full_answer += answer_part
                                     else:
-                                        print("Получено пустое сообщение от WebSocket.")
+                                        logger.warning(f"Получено пустое сообщение от WebSocket для пользователя {chat_id}")
                             except websockets.exceptions.ConnectionClosed:
+                                logger.info(f"WebSocket соединение закрыто для пользователя {chat_id}")
                                 # Создаем клавиатуру
                                 if full_answer is None or full_answer == "":
                                     full_answer = "История сообщений пустая"
+                                    logger.warning(f"Пустой ответ от AI для пользователя {chat_id}")
+                                    
                                 markup = types.InlineKeyboardMarkup(row_width=1)
                                 buttons = [
                                     types.InlineKeyboardButton(text="В начало", callback_data="start"),
@@ -989,25 +1022,25 @@ async def check_for_daily_msg():
                                 try:
                                     # Отправляем сообщение
                                     bot.send_message(chat_id=chat_id, text=full_answer, reply_markup=markup)
-                                    print(f"Пятничное сообщение отправлено пользователю {chat_id}")
+                                    logger.info(f"Еженедельное сообщение успешно отправлено пользователю {chat_id}")
                                 except telebot.apihelper.ApiException as e:
                                     if "Forbidden: bot was blocked by the user" in str(e):
-                                        print(f"Пользователь {chat_id} заблокировал бота.")
+                                        logger.warning(f"Пользователь {chat_id} заблокировал бота")
                                     else:
-                                        print(f"Ошибка при отправке сообщения: {e}")
+                                        logger.error(f"Ошибка при отправке сообщения пользователю {chat_id}: {e}")
                     except Exception as e:
-                        print(f"Ошибка при обработке пользователя {chat_id}: {e}")
+                        logger.error(f"Ошибка при обработке пользователя {chat_id}: {e}")
                 
                 # После отправки всем пользователям ждем до следующего дня, 
                 # чтобы не отправить сообщения дважды (спим 23 часа)
-                print("Пятничные сообщения отправлены, ожидание до следующей проверки...")
+                logger.info("Все еженедельные сообщения отправлены, ожидание до следующей проверки (23 часа)")
                 await asyncio.sleep(23 * 60 * 60)  # 23 часа
                 
             # Проверяем время каждую минуту
             await asyncio.sleep(60)
         
         except Exception as e:
-            print(f"Общая ошибка в check_for_daily_msg: {e}")
+            logger.error(f"Общая ошибка в check_for_daily_msg: {e}", exc_info=True)
             await asyncio.sleep(60)
 
 async def start_for_hack():
@@ -1699,7 +1732,7 @@ class CacheAPIHandler(BaseHTTPRequestHandler):
 
 def start_cache_api_server():
     server = HTTPServer(('localhost', 8007), CacheAPIHandler)
-    print("Cache API сервер запущен на порту 8007")
+    logger.info("Cache API сервер запущен на порту 8007")
     server.serve_forever()
 
 # Запускаем API сервер в отдельном потоке
