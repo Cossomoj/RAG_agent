@@ -174,6 +174,8 @@ def start_onboarding(message):
     
     for role_name, callback_data in roles:
         keyboard.add(types.InlineKeyboardButton(text=role_name, callback_data=callback_data))
+    # Добавляем кнопку "В начало"
+    keyboard.add(types.InlineKeyboardButton(text="В начало", callback_data="start"))
     
     bot.send_message(chat_id, "Выберите вашу роль:", reply_markup=keyboard)
 
@@ -233,7 +235,9 @@ def handle_role_selection(call):
         
         for spec_name, callback_data in specializations:
             keyboard.add(types.InlineKeyboardButton(text=spec_name, callback_data=callback_data))
-        
+        # Добавляем кнопку "В начало"
+        keyboard.add(types.InlineKeyboardButton(text="В начало", callback_data="start"))
+    
         bot.edit_message_text(
             chat_id=chat_id,
             message_id=call.message.message_id,
@@ -496,7 +500,13 @@ def send_welcome(message):
     
     bot.send_message(
         message.chat.id, 
-        f"Добро пожаловать, {user_fullname}! Нажмите кнопку ниже, чтобы начать:", 
+        f"Добро пожаловать в GigaMentor, {user_fullname}! 🤖\n\n"
+        f"Я - ваш персональный ИИ-ассистент. Для взаимодействия со мной:\n\n"
+        f"1️⃣ Нажмите кнопку 'Начать'\n"
+        f"2️⃣ При первом входе выберите одну из ролей:\n"
+        f"• PO/PM   • Лид компетенции   • Специалист   • Стажёр\n"
+        f"3️⃣ Далее выберите специализацию:\n"
+        f"• Аналитик   • Тестировщик   • Web-разработчик   • Java-разработчик   • Python-разработчик",
         reply_markup=markup
     )
 
@@ -546,7 +556,11 @@ def handle_giga_mentor(call):
     ]
     markup.add(*roles)
 
-    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="GigaMentor", reply_markup=markup)
+   bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=(
+        "'Как пользоваться' - для просмотра краткой инструкции по использованию\n"
+        "'Обратная связь' - для отправки обратной связи\n"
+        "'Команда' - для просмотра контактов команды разработки"
+    ), reply_markup=markup)
 
 @require_onboarding
 @bot.callback_query_handler(func=lambda call: call.data == "restart_onboarding")
@@ -574,10 +588,12 @@ def handle_restart_onboarding(call):
     bot.edit_message_text(
         chat_id=chat_id,
         message_id=call.message.message_id,
-        text=f"Ваша текущая роль: {role}\nВаша специализация: {specialization}\n\nВыберите действие:",
+        text=f"Ваша текущая роль: {role}\nВаша специализация: {specialization}\n\n"
+             f"Для изменения ранее выбранной роли / специализации:\n"
+             f"Выберите 'Изменить роль'",
+            
         reply_markup=markup
     )
-
 @require_onboarding
 @bot.callback_query_handler(func=lambda call: call.data == "onboarding")
 def handle_pop_up_onboarding(call):
@@ -1146,7 +1162,10 @@ def handle_role(call):
     bot.edit_message_text(
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
-        text=f"Вы выбрали роль: {role}\nСпециализация: {specialization}\nТеперь выберите вопрос:",
+        text=(f"Вы выбрали роль: {role}\nСпециализация: {specialization}\n\n"
+              f"Чтобы задать вопрос:\n"
+              f"• Выберите из списка готовых вопросов или 'Прочее' с дополнительными темами\n"
+              f"• Или нажмите 'Ввести свой вопрос' для свободного вопроса"),
         reply_markup=markup
     )
 
@@ -1251,8 +1270,13 @@ def choose_role(call):
 
         ]
         markup.add(*quesions)
-        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=f"Вы выбрали роль: {selected_role}\nТеперь выберите вопрос:", reply_markup=markup)
-
+        bot.edit_message_text(chat_id = call.message.chat.id, message_id=call.message.message_id, text=(
+        "Вы находитесь в разделе напоминания\n\n"
+        "Выберите:\n"
+        "•'Запланировать сообщение на тему' - для создания единоразового сообщения\n"
+        "•'Регулярные сообщения' - для настройки регулярных сообщений\n"
+        "•'Мои уведомления' - для просмотра существующих уведомлений"
+    ), reply_markup=markup)
 
 # Обработчик предопределенных вопросов
 @require_onboarding
