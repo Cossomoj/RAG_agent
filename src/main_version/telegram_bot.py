@@ -29,7 +29,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-DATABASE_URL = "/app/src/main_version/AI_agent.db"
+DATABASE_URL = "AI_agent.db"
 
 WEBSOCKET_URL = "ws://127.0.0.1:8000/ws"
 moscow_tz = pytz.timezone('Europe/Moscow')
@@ -1764,5 +1764,3 @@ api_thread = threading.Thread(target=start_cache_api_server, daemon=True)
 api_thread.start()
 
 bot.polling(none_stop=False)
-
-
