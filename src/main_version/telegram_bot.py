@@ -556,7 +556,7 @@ def handle_giga_mentor(call):
     ]
     markup.add(*roles)
 
-   bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=(
+    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=(
         "'Как пользоваться' - для просмотра краткой инструкции по использованию\n"
         "'Обратная связь' - для отправки обратной связи\n"
         "'Команда' - для просмотра контактов команды разработки"
