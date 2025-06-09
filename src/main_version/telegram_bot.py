@@ -920,13 +920,13 @@ threading.Thread(target=run_async_task, daemon=True).start()
 async def check_for_daily_msg():
     while True:
         try:
-            # Получаем текущую дату и время
-            now = datetime.now()
+            # Получаем текущую дату и время в московском часовом поясе
+            now = datetime.now(moscow_tz)
             current_day = now.weekday()  # 0 - понедельник, 4 - пятница
             current_time = now.strftime("%H:%M")
             
             # Проверяем, пятница ли сейчас (4) и время 19:00
-            if current_day == 5 and current_time == "9:30":
+            if current_day == 0 and current_time == "10:00":
                 conn = sqlite3.connect(DATABASE_URL)
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
@@ -949,7 +949,7 @@ async def check_for_daily_msg():
                     elif not isinstance(context_str, str):
                         context_str = str(context_str)  # преобразуем в строку
                     
-                    question_id = 666   
+                    question_id = 777  # Изменено с 666 на 777 для корректной обработки
                     role = 'Аналитик'   
                     specialization = 'Специалист'
                     count_for_pro_activity = 101
@@ -977,7 +977,7 @@ async def check_for_daily_msg():
                                         print("Получено пустое сообщение от WebSocket.")
                             except websockets.exceptions.ConnectionClosed:
                                 # Создаем клавиатуру
-                                if full_answer is None:
+                                if full_answer is None or full_answer == "":
                                     full_answer = "История сообщений пустая"
                                 markup = types.InlineKeyboardMarkup(row_width=1)
                                 buttons = [
@@ -998,9 +998,10 @@ async def check_for_daily_msg():
                     except Exception as e:
                         print(f"Ошибка при обработке пользователя {chat_id}: {e}")
                 
-                # После отправки всем пользователям ждем чуть больше минуты, 
-                # чтобы не отправить сообщения дважды
-                await asyncio.sleep(70)
+                # После отправки всем пользователям ждем до следующего дня, 
+                # чтобы не отправить сообщения дважды (спим 23 часа)
+                print("Пятничные сообщения отправлены, ожидание до следующей проверки...")
+                await asyncio.sleep(23 * 60 * 60)  # 23 часа
                 
             # Проверяем время каждую минуту
             await asyncio.sleep(60)
