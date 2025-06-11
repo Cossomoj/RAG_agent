@@ -86,6 +86,7 @@ def clear_all_cache():
 bot = telebot.TeleBot(secret_key)
 # Словарь для хранения данных пользователя
 user_data = {}
+suggested_questions_storage = {}
 
 def init_db():
     # Подключаемся к базе данных (или создаем ее, если она не существует)
@@ -1345,10 +1346,14 @@ def handle_predefined_question_group_1(call):
         question_id = 10
 
     if (question_id in cache_dict):
-            handling_cached_requests(question_id, call.message, question, specialization)
+            #mplusk1
+            asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
+            #mplusk2
     elif (question_id in cache_by_specialization):
         if(specialization in cache_by_specialization[question_id]):
-            handling_cached_requests(question_id, call.message, question, specialization)
+            #mplusk1
+            asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
+            #mplusk2
         else:
             asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
     else:
@@ -1388,10 +1393,14 @@ def handle_predefined_question_group_2(call):
         question_id = 24
 
     if (question_id in cache_dict):
-            handling_cached_requests(question_id, call.message, question, specialization)
+            #mplusk1
+            asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
+            #mplusk2
     elif (question_id in cache_by_specialization):
         if(specialization in cache_by_specialization[question_id]):
-            handling_cached_requests(question_id, call.message, question, specialization)
+            #mplusk1
+            asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
+            #mplusk2
         else:
             asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
     else:
@@ -1425,10 +1434,14 @@ def handle_predefined_question_group_2(call):
         question_id = 17
 
     if (question_id in cache_dict):
-            handling_cached_requests(question_id, call.message, question, specialization)
+            #mplusk1
+            asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
+            #mplusk2
     elif (question_id in cache_by_specialization):
         if(specialization in cache_by_specialization[question_id]):
-            handling_cached_requests(question_id, call.message, question, specialization)
+            #mplusk1
+            asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
+            #mplusk2
         else:
             asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
     else:
@@ -1482,10 +1495,14 @@ def handle_predefined_question(call):
     
 
     if (question_id in cache_dict):
-            handling_cached_requests(question_id, call.message, question, specialization)
+            #mplusk1
+            asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
+            #mplusk2
     elif (question_id in cache_by_specialization):
         if(specialization in cache_by_specialization[question_id]):
-            handling_cached_requests(question_id, call.message, question, specialization)
+            #mplusk1
+            asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
+            #mplusk2
         else:
             asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
     else:
@@ -1502,6 +1519,8 @@ def hadl_print_in_development(call):
 @require_onboarding
 @bot.callback_query_handler(func=lambda call: call.data == "question_custom")
 def ask_custom_question(call):
+    chat_id = call.message.chat.id
+    clear_dialog_context(chat_id)
     bot.send_message(call.message.chat.id, "Введите ваш вопрос:")
     bot.register_next_step_handler(call.message, process_custom_question)
 
@@ -1519,7 +1538,7 @@ def process_custom_question(message):
     question = message.text
     asyncio.run(websocket_question_from_user(question, message, role, specialization, question_id))
 
-def handling_cached_requests(question_id, message, question, specialization):
+async def handling_cached_requests(question_id, message, question, specialization):
     print("Кешированное сообщение")
 
     if (question_id not in [1, 2, 3, 4, 5, 18, 19, 20]):
@@ -1536,7 +1555,7 @@ def handling_cached_requests(question_id, message, question, specialization):
         count_questions_users[chat_id] = 0
     count_questions_users[chat_id] += 1
     save_message_in_db(chat_id, "user", question)
-
+    #mplusk1
     # Отправляем каждую часть с задержкой
     for i in arr:
         message_2 = bot.send_message(chat_id=message.chat.id, text=i)
@@ -1545,6 +1564,23 @@ def handling_cached_requests(question_id, message, question, specialization):
     
     dialogue_context[chat_id].append({"role": "assistant", "content": full_ans_for_context})
     save_message_in_db(chat_id, "assistant", full_ans_for_context)
+    
+    # Получаем роль пользователя из базы данных
+    conn = sqlite3.connect(DATABASE_URL)
+    cursor = conn.cursor()
+    cursor.execute("SELECT Role, Specialization FROM Users WHERE user_id = ?", (chat_id,))
+    user_info = cursor.fetchone()
+    conn.close()
+    
+    role = user_info[0] if user_info else "Пользователь"
+    user_specialization = user_info[1] if user_info else specialization
+    
+    # Обрезаем ответ бота, чтобы избежать ошибок с длиной промпта
+    truncated_answer = (full_ans_for_context[:2000] + '...') if len(full_ans_for_context) > 2000 else full_ans_for_context
+    
+    # Запускаем генерацию подсказанных вопросов
+    await generate_and_show_suggested_questions(chat_id, question, truncated_answer, role, user_specialization)
+    
     markup = types.InlineKeyboardMarkup()
     button = [types.InlineKeyboardButton(text="Ввести вопрос", callback_data="question_custom"),
                     types.InlineKeyboardButton(text="В начало", callback_data="start")
@@ -1552,6 +1588,7 @@ def handling_cached_requests(question_id, message, question, specialization):
     markup.add(*button)
     bot.send_message(chat_id=message_2.chat.id, text = "Пожалуйста, выберите дальнейшее действие", reply_markup=markup)
 
+    #mplusk2
 async def websocket_question_from_user(question, message, role, specialization, question_id):
     print(question)
     wanted_simbols = [".", ":"]
@@ -1626,16 +1663,23 @@ async def websocket_question_from_user(question, message, role, specialization, 
         dialogue_context[chat_id].append({"role": "assistant", "content": answer_for_countinue_dialog})
         save_message_in_db(chat_id, "assistant", answer_for_countinue_dialog)
         markup = types.InlineKeyboardMarkup()
-        if(count_questions_users[chat_id] < 6):
-            button = [types.InlineKeyboardButton(text="Ввести вопрос", callback_data="question_custom"),
+        if(count_questions_users[chat_id] < 3):
+            button = [types.InlineKeyboardButton(text="Ввести свой вопрос", callback_data="question_custom"),
                     types.InlineKeyboardButton(text="В начало", callback_data="start")
                 ]
         else:
             button = [types.InlineKeyboardButton(text="В начало", callback_data="start")]
 
         markup.add(*button)
-        bot.send_message(chat_id=message_2.chat.id, text = "Пожалуйста, выберите дальнейшее действие", reply_markup=markup)
+        #mplusk1
+        truncated_answer = (answer_for_countinue_dialog[:2000] + '...') if len(answer_for_countinue_dialog) > 2000 else answer_for_countinue_dialog
 
+        # Запускаем генерацию подсказанных вопросов
+        await generate_and_show_suggested_questions(chat_id, question, truncated_answer, role, specialization)
+
+        bot.send_message(chat_id=message_2.chat.id, text = "Выберите дальнейшее действие", reply_markup=markup)
+
+        #mplusk2
 current_timezone = time.tzname
 print(f"Текущий часовой пояс: {current_timezone}")     
 current_timenow = datetime.now(moscow_tz).strftime("%H:%M")
@@ -1718,10 +1762,14 @@ def handle_intern_group_questions(call):
         question_id = 24
 
     if (question_id in cache_dict):
-        handling_cached_requests(question_id, call.message, question, specialization)
+        #mplusk1
+        asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
+        #mplusk2
     elif (question_id in cache_by_specialization):
         if(specialization in cache_by_specialization[question_id]):
-            handling_cached_requests(question_id, call.message, question, specialization)
+            #mplusk1
+            asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
+            #mplusk2
         else:
             asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
     else:
@@ -1759,6 +1807,85 @@ def start_cache_api_server():
     logger.info("Cache API сервер запущен на порту 8007")
     server.serve_forever()
 
+#mplusk1
+async def generate_and_show_suggested_questions(chat_id, user_question, bot_answer, role, specialization):
+    print("Attempting to generate suggested questions...")
+    payload = {
+        "user_question": user_question,
+        "bot_answer": bot_answer,
+        "role": role,
+        "specialization": specialization
+    }
+    try:
+        print(f"Connecting to ws_suggest...")
+        async with websockets.connect("ws://127.0.0.1:8000/ws_suggest") as websocket:
+            await websocket.send(json.dumps(payload))
+            response = await websocket.recv()
+            print(f"Received from ws_suggest: {response}")
+            questions = json.loads(response)
+
+            if isinstance(questions, dict) and "error" in questions:
+                print(f"Ошибка при генерации вопросов: {questions['error']}")
+                return
+
+            if isinstance(questions, list) and questions:
+                print(f"Successfully generated questions: {questions}")
+                suggested_questions_storage[chat_id] = questions
+                
+                markup = types.InlineKeyboardMarkup()
+                buttons = []
+                for i, q in enumerate(questions[:3]):
+                    buttons.append(types.InlineKeyboardButton(text=f"{i+1}", callback_data=f"suggested_question_{i}"))
+                
+                if buttons:
+                    markup.add(*buttons)
+                    questions_text = "\n".join([f"{i+1}. {q}" for i, q in enumerate(questions[:3])])
+                    print(f"Sending questions to user {chat_id}")
+                    bot.send_message(chat_id, f"Выберете следующий вопрос:\n{questions_text}", reply_markup=markup)
+            else:
+                print(f"No questions generated or response was not a list. Response: {questions}")
+
+
+    except Exception as e:
+        print(f"CRITICAL Error in generate_and_show_suggested_questions: {e}")
+
+@require_onboarding
+@bot.callback_query_handler(func=lambda call: call.data.startswith("suggested_question_"))
+def handle_suggested_question(call):
+    chat_id = call.message.chat.id
+    question_index = int(call.data.split("_")[-1])
+    
+    if chat_id in suggested_questions_storage and question_index < len(suggested_questions_storage[chat_id]):
+        question = suggested_questions_storage[chat_id][question_index]
+        
+        # Очищаем контекст диалога для нового вопроса
+        clear_dialog_context(chat_id)
+        
+        # Получаем роль и специализацию
+        conn = sqlite3.connect(DATABASE_URL)
+        cursor = conn.cursor()
+        cursor.execute("SELECT Role, Specialization FROM Users WHERE user_id = ?", (chat_id,))
+        user_info = cursor.fetchone()
+        conn.close()
+        
+        role = user_info[0] if user_info else "Пользователь"
+        specialization = user_info[1] if user_info else "Не указана"
+        
+        bot.send_message(chat_id, f"Вы выбрали вопрос: {question}")
+        
+        # Отправляем вопрос на обработку
+        asyncio.run(websocket_question_from_user(question, call.message, role, specialization, 777))
+        
+        # Удаляем предложенные вопросы после выбора
+        if chat_id in suggested_questions_storage:
+            del suggested_questions_storage[chat_id]
+            
+        # Убираем кнопки с вопросами
+        bot.edit_message_reply_markup(chat_id=call.message.chat.id, message_id=call.message.message_id, reply_markup=None)
+    else:
+        bot.answer_callback_query(call.id, "Не удалось найти вопрос. Пожалуйста, попробуйте снова.")
+
+#mplusk2
 # Запускаем API сервер в отдельном потоке
 api_thread = threading.Thread(target=start_cache_api_server, daemon=True)
 api_thread.start()

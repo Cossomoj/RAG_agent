@@ -3,6 +3,8 @@ from dotenv import load_dotenv
 import string
 import asyncio
 import sqlite3
+import json
+import re
 from fastapi import FastAPI, WebSocket
 import websockets
 from langchain_community.document_loaders import TextLoader
@@ -103,7 +105,7 @@ def create_retrieval_chain_from_folder(role, specialization, question_id, embedd
 
     llm = GigaChat(
         credentials=api_key,
-        model='GigaChat-Max',
+        model='GigaChat',
         verify_ssl_certs=False,
         profanity_check=False
     )
@@ -133,7 +135,61 @@ def get_prompt_from_db(question_id):
             return None
     finally:
         conn.close()
+#mplusk1
+@app.websocket("/ws_suggest")
+async def websocket_suggest_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    print("ws_suggest: connection accepted")
+    data = await websocket.receive_text()
+    print(f"ws_suggest: received data: {data}")
+    payload = json.loads(data)
+    
+    user_question = payload.get("user_question")
+    bot_answer = payload.get("bot_answer")
+    role = payload.get("role")
+    specialization = payload.get("specialization")
 
+    prompt_template = get_prompt_from_db(999)
+    if not prompt_template:
+        print("ws_suggest: ERROR - Prompt 999 not found")
+        await websocket.send_text(json.dumps({"error": "Prompt not found"}))
+        await websocket.close()
+        return
+
+    template = string.Template(prompt_template)
+    filled_prompt = template.substitute(
+        user_question=user_question,
+        bot_answer=bot_answer,
+        role=role,
+        specialization=specialization
+    )
+
+    llm = GigaChat(
+        credentials=api_key,
+        model='GigaChat',
+        verify_ssl_certs=False,
+        profanity_check=False
+    )
+    
+    try:
+        print(f"ws_suggest: Invoking GigaChat with prompt...")
+        response = await llm.ainvoke(filled_prompt)
+        print(f"ws_suggest: GigaChat raw response: {response.content}")
+        
+        # Удаляем нумерацию, чтобы обеспечить корректный парсинг
+        cleaned_response = re.sub(r'^\s*\d+\.\s*', '', response.content, flags=re.MULTILINE)
+        questions = [q.strip() for q in cleaned_response.split('\n') if q.strip()]
+        print(f"ws_suggest: Parsed questions: {questions}")
+
+        await websocket.send_text(json.dumps(questions))
+        print(f"ws_suggest: Sent questions to client: {json.dumps(questions)}")
+    except Exception as e:
+        print(f"ws_suggest: ERROR in GigaChat call: {e}")
+        await websocket.send_text(json.dumps({"error": str(e)}))
+    finally:
+        await websocket.close()
+        print("ws_suggest: connection closed")
+#mplusk2
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """Обрабатывает WebSocket соединение и передает стриминг ответа GigaChat."""
