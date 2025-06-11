@@ -105,7 +105,7 @@ def create_retrieval_chain_from_folder(role, specialization, question_id, embedd
 
     llm = GigaChat(
         credentials=api_key,
-        model='GigaChat',
+        model='GigaChat-Max',
         verify_ssl_certs=False,
         profanity_check=False
     )
