@@ -22,9 +22,11 @@ from langchain.chains import create_retrieval_chain
 from langchain.retrievers import EnsembleRetriever
 import uvicorn
 
-DATABASE_URL = "/app/src/main_version/AI_agent.db"
+DATABASE_URL = "AI_agent.db"
 
 load_dotenv()
+
+
 # Инициализация FastAPI
 app = FastAPI()
 
@@ -105,7 +107,7 @@ def create_retrieval_chain_from_folder(role, specialization, question_id, embedd
 
     llm = GigaChat(
         credentials=api_key,
-        model='GigaChat',
+        model='GigaChat-2',
         verify_ssl_certs=False,
         profanity_check=False
     )
@@ -135,6 +137,242 @@ def get_prompt_from_db(question_id):
             return None
     finally:
         conn.close()
+
+
+
+def get_best_retriever_for_role_spec(role, specialization):
+    """
+    Выбирает лучший retriever на основе роли и специализации
+    """
+    role_lower = role.lower() if role else ""
+    spec_lower = specialization.lower() if specialization else ""
+    
+    # Маппинг ролей на retrievers
+    if 'стажер' in role_lower or 'специалист' in role_lower:
+        return embedding_retriever_1  # docs_pack_1
+    elif 'лид' in role_lower:
+        return embedding_retriever_2  # docs_pack_2
+    elif 'po' in role_lower or 'pm' in role_lower:
+        return embedding_retriever_3  # docs_pack_3
+    else:
+        # Если роль неопределенная, выбираем по специализации
+        if spec_lower in ['аналитик', 'тестировщик', 'python', 'java', 'web']:
+            return embedding_retriever_1  # Начинаем с базовых документов
+        else:
+            return embedding_retriever_full  # Полная база для неопределенных случаев
+
+async def generate_semantic_search_queries(question, role, specialization):
+    """
+    Генерирует семантически связанные поисковые запросы для улучшения векторного поиска
+    """
+    # Создаем LLM для генерации альтернативных запросов
+    llm = GigaChat(
+        credentials=api_key,
+        model='GigaChat-2',
+        verify_ssl_certs=False,
+        profanity_check=False
+    )
+    
+    # Промпт для генерации альтернативных поисковых запросов
+    query_generation_prompt = f"""
+Дан вопрос: "{question}"
+Роль пользователя: {role if role else "не указана"}
+Специализация: {specialization if specialization else "не указана"}
+
+Сгенерируй 4-5 альтернативных поисковых запросов для поиска в корпоративной базе знаний по карьерному развитию в IT.
+
+Альтернативные запросы должны:
+1. Включать точные фразы из корпоративных документов
+2. Фокусироваться на конкретных практиках и процентах
+3. Использовать ключевые термины: "рассказывать о своей работе", "маркетинг", "80-85%", "15-20%", "конференции", "митапы", "пруфы", "хвастаетесь"
+4. Быть короткими и точными для векторного поиска
+5. Покрывать разные аспекты продвижения достижений
+
+Примеры ТОЧНЫХ запросов из документов:
+- "рассказывать о своей работе навык"
+- "80-85% делание работы 15-20% маркетинг"
+- "конференции митапы пруфы хвастаетесь достижениями"
+- "маркетинг того что вы сделали"
+- "куда можно сходить рассказать о работе"
+
+Ответь только списком из 4-5 запросов, каждый с новой строки, без нумерации и дополнительного текста:
+"""
+    
+    try:
+        response = await llm.ainvoke(query_generation_prompt)
+        alternative_queries = [q.strip() for q in response.content.split('\n') if q.strip()]
+        
+        # Добавляем исходный вопрос в начало списка
+        all_queries = [question] + alternative_queries
+        
+        print(f"Сгенерированы поисковые запросы:")
+        for i, query in enumerate(all_queries, 1):
+            print(f"  {i}. {query}")
+        
+        return all_queries
+        
+    except Exception as e:
+        print(f"Ошибка при генерации альтернативных запросов: {e}")
+        return [question]  # Возвращаем только исходный вопрос в случае ошибки
+
+async def enhanced_vector_search(question, role, specialization, embedding_retriever, top_k=5):
+    """
+    Улучшенный векторный поиск с использованием множественных семантических запросов
+    """
+    # Генерируем альтернативные поисковые запросы
+    search_queries = await generate_semantic_search_queries(question, role, specialization)
+    
+    # Собираем все найденные документы
+    all_docs = []
+    doc_scores = {}  # Для подсчета "голосов" за каждый документ
+    
+    for query in search_queries:
+        try:
+            # Выполняем поиск для каждого запроса
+            docs = await embedding_retriever.ainvoke(query)
+            
+            # Добавляем документы с весами (первые запросы важнее)
+            weight = 1.0 / (search_queries.index(query) + 1)  # Убывающий вес
+            
+            for i, doc in enumerate(docs):
+                doc_id = doc.metadata.get('source', '') + str(hash(doc.page_content[:100]))
+                
+                # Увеличиваем счетчик для документа
+                if doc_id not in doc_scores:
+                    doc_scores[doc_id] = {
+                        'doc': doc,
+                        'score': 0,
+                        'query_matches': []
+                    }
+                
+                # Добавляем взвешенный балл (документы в топе получают больше баллов)
+                position_weight = 1.0 / (i + 1)
+                doc_scores[doc_id]['score'] += weight * position_weight
+                doc_scores[doc_id]['query_matches'].append(query)
+        
+        except Exception as e:
+            print(f"Ошибка поиска для запроса '{query}': {e}")
+            continue
+    
+    # Сортируем документы по общему счету
+    sorted_docs = sorted(doc_scores.values(), key=lambda x: x['score'], reverse=True)
+    
+    # Возвращаем топ-K документов
+    result_docs = [item['doc'] for item in sorted_docs[:top_k]]
+    
+    print(f"\nРезультаты улучшенного векторного поиска:")
+    for i, item in enumerate(sorted_docs[:top_k], 1):
+        doc = item['doc']
+        score = item['score']
+        source = doc.metadata.get('source', 'Неизвестно')
+        print(f"  {i}. Счет: {score:.3f} | Источник: {source.split('/')[-1]}")
+        print(f"     Совпадения с запросами: {len(item['query_matches'])}")
+        print(f"     Запросы: {item['query_matches'][:2]}")  # Показываем первые 2 запроса
+        print(f"     Содержимое: {doc.page_content[:150]}...")
+        print()
+    
+    return result_docs
+
+async def create_enhanced_retrieval_chain(role, specialization, question_id, embedding_retriever, prompt_template):
+    """
+    Создает улучшенную retrieval chain с семантическим векторным поиском
+    """
+    # Заполнение шаблона промпта
+    template = string.Template(prompt_template)
+    filled_prompt = template.substitute(
+        role=role,
+        specialization=specialization
+    )
+    
+    # Создание LLM
+    llm = GigaChat(
+        credentials=api_key,
+        model='GigaChat-2',
+        verify_ssl_certs=False,
+        profanity_check=False
+    )
+    
+    # Создаем кастомную функцию для обработки запроса
+    async def enhanced_retrieval_process(input_data):
+        question = input_data.get('input', '')
+        
+        print(f"Обрабатываем вопрос с улучшенным векторным поиском: {question}")
+        
+        # Выполняем улучшенный векторный поиск
+        relevant_docs = await enhanced_vector_search(question, role, specialization, embedding_retriever)
+        
+        # Формируем контекст из найденных документов
+        context = "\n\n".join([doc.page_content for doc in relevant_docs])
+        
+        # Создаем финальный промпт
+        final_prompt = f"""{filled_prompt}
+
+Контекст из корпоративных документов:
+{context}
+
+Вопрос пользователя: {question}
+
+Ответь на вопрос, используя информацию из контекста. Если информация в контексте релевантна вопросу, обязательно используй её в ответе."""
+        
+        print(f"Отправляем запрос в GigaChat...")
+        
+        # Получаем ответ от LLM
+        response = await llm.ainvoke(final_prompt)
+        
+        return {"answer": response.content}
+    
+    return enhanced_retrieval_process
+
+async def create_enhanced_retrieval_chain_for_suggestions(role, specialization, user_question, bot_answer, embedding_retriever, prompt_template):
+    """
+    Создает улучшенную retrieval chain для генерации связанных вопросов (промпт 999)
+    """
+    # Заполнение шаблона промпта со всеми необходимыми переменными
+    template = string.Template(prompt_template)
+    filled_prompt = template.substitute(
+        role=role,
+        specialization=specialization,
+        user_question=user_question,
+        bot_answer=bot_answer
+    )
+    
+    # Создание LLM
+    llm = GigaChat(
+        credentials=api_key,
+        model='GigaChat-2',
+        verify_ssl_certs=False,
+        profanity_check=False
+    )
+    
+    # Создаем кастомную функцию для обработки запроса
+    async def enhanced_suggestions_process(input_data):
+        search_query = input_data.get('input', '')
+        
+        print(f"Генерируем связанные вопросы с улучшенным векторным поиском: {search_query}")
+        
+        # Выполняем улучшенный векторный поиск
+        relevant_docs = await enhanced_vector_search(search_query, role, specialization, embedding_retriever)
+        
+        # Формируем контекст из найденных документов
+        context = "\n\n".join([doc.page_content for doc in relevant_docs])
+        
+        # Создаем финальный промпт с контекстом
+        final_prompt = f"""{filled_prompt}
+
+Дополнительный контекст из корпоративных документов:
+{context}
+
+Используй этот контекст для генерации более релевантных и специфичных вопросов, связанных с ролью {role} и специализацией {specialization}."""
+        
+        print(f"Отправляем запрос в GigaChat для генерации связанных вопросов...")
+        
+        # Получаем ответ от LLM
+        response = await llm.ainvoke(final_prompt)
+        
+        return {"answer": response.content}
+    
+    return enhanced_suggestions_process
+
 #mplusk1
 @app.websocket("/ws_suggest")
 async def websocket_suggest_endpoint(websocket: WebSocket):
@@ -156,16 +394,57 @@ async def websocket_suggest_endpoint(websocket: WebSocket):
         await websocket.close()
         return
 
-    template = string.Template(prompt_template)
-    filled_prompt = template.substitute(
-        user_question=user_question,
-        bot_answer=bot_answer,
-        role=role,
-        specialization=specialization
-    )
+    # Всегда используем RAG для генерации связанных вопросов (промпт 999)
+    use_rag = True
+    print(f"ws_suggest: Using RAG for question generation")
+    
+    if use_rag:
+        # Используем RAG для более точной генерации вопросов
+        embedding_retriever = get_best_retriever_for_role_spec(role, specialization)
+        
+        # Создаем специальную retrieval chain для генерации связанных вопросов (промпт 999)
+        retrieval_chain = await create_enhanced_retrieval_chain_for_suggestions(
+            role=role,
+            specialization=specialization,
+            user_question=user_question,
+            bot_answer=bot_answer,
+            embedding_retriever=embedding_retriever,
+            prompt_template=prompt_template
+        )
+        
+        try:
+            print("ws_suggest: Using RAG-enhanced question generation...")
+            # Формируем запрос для поиска релевантных документов
+            search_query = f"Вопросы по теме: {user_question}. Роль: {role}. Специализация: {specialization}"
+            
+            # Вызываем функцию напрямую, так как она возвращает функцию
+            response = await retrieval_chain({'input': search_query})
+            raw_response = response.get('answer', '')
+            print(f"ws_suggest: RAG response: {raw_response}")
+            
+            # Парсим ответ
+            cleaned_response = re.sub(r'^\s*\d+\.\s*', '', raw_response, flags=re.MULTILINE)
+            questions = [q.strip() for q in cleaned_response.split('\n') if q.strip() and len(q.strip()) > 10]
+            
+            # Ограничиваем до 5 вопросов
+            questions = questions[:5]
+            
+        except Exception as e:
+            print(f"ws_suggest: ERROR in RAG call: {e}, falling back to direct LLM")
+            use_rag = False
+    
+    if not use_rag:
+        # Используем прямое обращение к LLM без RAG
+        template = string.Template(prompt_template)
+        filled_prompt = template.substitute(
+            user_question=user_question,
+            bot_answer=bot_answer,
+            role=role,
+            specialization=specialization
+        )
 
-    # Добавляем инструкции по генерации релевантных вопросов
-    question_generation_guidance = f"""
+        # Добавляем инструкции по генерации релевантных вопросов
+        question_generation_guidance = f"""
 Учитывая, что пользователь имеет роль '{role}' и специализацию '{specialization}',
 сгенерируйте 3-5 релевантных вопросов, которые:
 1. Соответствуют текущему контексту диалога
@@ -176,33 +455,34 @@ async def websocket_suggest_endpoint(websocket: WebSocket):
 
 Формат ответа: каждый вопрос с новой строки, без нумерации.
 """
-    filled_prompt += question_generation_guidance
+        filled_prompt += question_generation_guidance
 
-    llm = GigaChat(
-        credentials=api_key,
-        model='GigaChat',
-        verify_ssl_certs=False,
-        profanity_check=False
-    )
-    
-    try:
-        print(f"ws_suggest: Invoking GigaChat with prompt...")
-        response = await llm.ainvoke(filled_prompt)
-        print(f"ws_suggest: GigaChat raw response: {response.content}")
+        llm = GigaChat(
+            credentials=api_key,
+            model='GigaChat-2',
+            verify_ssl_certs=False,
+            profanity_check=False
+        )
         
-        # Удаляем нумерацию, чтобы обеспечить корректный парсинг
-        cleaned_response = re.sub(r'^\s*\d+\.\s*', '', response.content, flags=re.MULTILINE)
-        questions = [q.strip() for q in cleaned_response.split('\n') if q.strip()]
-        print(f"ws_suggest: Parsed questions: {questions}")
+        try:
+            print(f"ws_suggest: Using direct LLM for question generation...")
+            response = await llm.ainvoke(filled_prompt)
+            print(f"ws_suggest: LLM response: {response.content}")
+            
+            # Удаляем нумерацию, чтобы обеспечить корректный парсинг
+            cleaned_response = re.sub(r'^\s*\d+\.\s*', '', response.content, flags=re.MULTILINE)
+            questions = [q.strip() for q in cleaned_response.split('\n') if q.strip()]
+        except Exception as e:
+            print(f"ws_suggest: ERROR in LLM call: {e}")
+            await websocket.send_text(json.dumps({"error": str(e)}))
+            await websocket.close()
+            return
 
-        await websocket.send_text(json.dumps(questions))
-        print(f"ws_suggest: Sent questions to client: {json.dumps(questions)}")
-    except Exception as e:
-        print(f"ws_suggest: ERROR in GigaChat call: {e}")
-        await websocket.send_text(json.dumps({"error": str(e)}))
-    finally:
-        await websocket.close()
-        print("ws_suggest: connection closed")
+    print(f"ws_suggest: Final questions: {questions}")
+    await websocket.send_text(json.dumps(questions))
+    print(f"ws_suggest: Sent questions to client: {json.dumps(questions)}")
+    await websocket.close()
+    print("ws_suggest: connection closed")
 #mplusk2
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -226,6 +506,15 @@ async def websocket_endpoint(websocket: WebSocket):
     if not prompt_template:
         prompt_template = get_prompt_from_db(777)
     
+    # Для специальных промптов 777, 888 всегда используем RAG
+    use_rag_for_special = question_id in [777, 888]
+    if use_rag_for_special:
+        print(f"Special prompt {question_id}: Using RAG with enhanced vector search")
+        print(f"Question: {question}")
+        print(f"Role: {role}")
+        print(f"Specialization: {specialization}")
+        print(f"Context: {context[:100] if context else 'None'}...")
+
     # Выбираем соответствующий retriever в зависимости от question_id
     embedding_retriever = embedding_retriever_full
     if question_id in [1, 2, 3, 22, 23, 24]:
@@ -236,40 +525,61 @@ async def websocket_endpoint(websocket: WebSocket):
         embedding_retriever = embedding_retriever_3
     elif question_id in [21]:
         embedding_retriever = embedding_retriever_full
+    elif question_id in [777, 888] and use_rag_for_special:
+        # Для специальных промптов выбираем retriever на основе роли/специализации
+        embedding_retriever = get_best_retriever_for_role_spec(role, specialization)
 
-    # Создаем retrieval_chain только для вопросов, которые его используют (НЕ для ID=888)
+    # Создаем retrieval_chain для вопросов, которые его используют
     retrieval_chain = None
-    if question_id != 888:
-        retrieval_chain = create_retrieval_chain_from_folder(
-            role=role,
-            specialization=specialization,
-            question_id=question_id,
-            embedding_retriever=embedding_retriever,
-            prompt_template=prompt_template
-        )
+    should_use_rag = (
+        question_id not in [777, 888, 999] or  # Обычные промпты всегда используют RAG
+        (question_id in [777, 888] and use_rag_for_special)  # Специальные только при релевантности
+    )
+    
+    if should_use_rag:
+        # Для специальных промптов используем улучшенный поиск
+        if question_id in [777, 888] and use_rag_for_special:
+            retrieval_chain = await create_enhanced_retrieval_chain(
+                role=role,
+                specialization=specialization,
+                question_id=question_id,
+                embedding_retriever=embedding_retriever,
+                prompt_template=prompt_template
+            )
+        else:
+            retrieval_chain = create_retrieval_chain_from_folder(
+                role=role,
+                specialization=specialization,
+                question_id=question_id,
+                embedding_retriever=embedding_retriever,
+                prompt_template=prompt_template
+            )
     
     unwanted_chars = ["*", "**"]
     
-    # Специальная обработка для свободного ввода с ID=888
-    if question_id == 888:
-        # Используем GigaChat напрямую с промптом и контекстом
-        print(f"Обрабатываем свободный вопрос (ID=888) с контекстом: {context[:100]}...")
+    # Эта ветка больше не используется, так как промпты 777,888 всегда используют RAG
+    if False:  # question_id in [777, 888] and not use_rag_for_special:
+        print(f"Обрабатываем специальный промпт {question_id} БЕЗ RAG...")
         
-        # Формируем промпт с контекстом
+        # Формируем промпт
         template = string.Template(prompt_template)
         filled_prompt = template.substitute(
             role=role,
             specialization=specialization
         )
         
-        # Добавляем контекст диалога если есть
-        if context and context != "[]":
-            context_info = f"\n\nКонтекст предыдущих сообщений:\n{context}\n\n"
-            full_prompt = filled_prompt + context_info + f"Вопрос пользователя: {question}"
+        # Для ID=888 добавляем контекст диалога
+        if question_id == 888:
+            if context and context != "[]":
+                context_info = f"\n\nКонтекст предыдущих сообщений:\n{context}\n\n"
+                full_prompt = filled_prompt + context_info + f"Вопрос пользователя: {question}"
+            else:
+                full_prompt = filled_prompt + f"\n\nВопрос пользователя: {question}"
         else:
+            # Для ID=777 просто добавляем вопрос
             full_prompt = filled_prompt + f"\n\nВопрос пользователя: {question}"
         
-        print("\n--- PROMPT ДЛЯ LLM ---\n")
+        print(f"\n--- PROMPT ДЛЯ LLM (ID={question_id}, без RAG) ---\n")
         print(full_prompt)
         print("\n--- КОНЕЦ PROMPT ---\n")
         
@@ -280,7 +590,7 @@ async def websocket_endpoint(websocket: WebSocket):
             async for chunk in GigaChat(
                 credentials=api_key,
                 verify_ssl_certs=False,
-                model='GigaChat'
+                model='GigaChat-2'
             ).astream(full_prompt):
                 if chunk and chunk.content:
                     chunk_count += 1
@@ -301,22 +611,76 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.send_text("Извините, не удалось получить ответ. Попробуйте переформулировать вопрос.")
                 
         except Exception as e:
-            print(f"ОШИБКА при работе с GigaChat для ID=888: {e}")
+            print(f"ОШИБКА при работе с GigaChat для ID={question_id}: {e}")
             await websocket.send_text(f"Произошла ошибка при обработке вопроса: {str(e)}")
     
-    elif (count == 1):
-        async for chunk in retrieval_chain.astream({'input': question}):
-            if chunk:
-                    # Извлекаем ответ
-                answer = chunk.get("answer", "").strip()
+    elif should_use_rag and retrieval_chain is not None:
+        # Используем RAG для обычных промптов или для специальных промптов при релевантности
+        print(f"Используем RAG для промпта {question_id}")
+        
+        # Для специальных промптов используем улучшенный векторный поиск
+        if question_id in [777, 888]:
+            print(f"Используем улучшенный векторный поиск для промпта {question_id}")
+            enhanced_question = question
+        else:
+            enhanced_question = question
+        
+        # Для промпта 888 добавляем контекст к вопросу
+        if question_id == 888 and context and context != "[]":
+            enhanced_question = f"Контекст предыдущих сообщений: {context}\n\nТекущий вопрос: {enhanced_question}"
+            print(f"Промпт 888 с контекстом: {enhanced_question[:200]}...")
+            
+        # Проверяем, используется ли улучшенный поиск
+        if question_id in [777, 888] and use_rag_for_special:
+            # Для улучшенного поиска используем прямой вызов функции
+            result = await retrieval_chain({'input': enhanced_question})
+            answer = result.get("answer", "").strip()
+            
+            # Заменяем ненужные символы
+            for char in unwanted_chars:
+                answer = answer.replace(char, " ")
+            
+            answer = " ".join(answer.split())  # Удаляем лишние пробелы
+            
+            # Отправляем ответ целиком для лучшей читаемости
+            await websocket.send_text(answer)
+        else:
+            # Стандартный стриминг для обычных промптов
+            async for chunk in retrieval_chain.astream({'input': enhanced_question}):
+                if chunk:
+                        # Извлекаем ответ
+                    answer = chunk.get("answer", "").strip()
 
-                    # Заменяем ненужные символы
-                for char in unwanted_chars:
-                    answer = answer.replace(char, " ")
-                    
-                answer = " ".join(answer.split())  # Удаляем лишние пробелы
-                    
-                await websocket.send_text(answer)  # Отправляем очищенный текстовый ответ
+                        # Заменяем ненужные символы
+                    for char in unwanted_chars:
+                        answer = answer.replace(char, " ")
+                        
+                    answer = " ".join(answer.split())  # Удаляем лишние пробелы
+                        
+                    await websocket.send_text(answer)  # Отправляем очищенный текстовый ответ
+
+    elif not should_use_rag and question_id not in [777, 888]:
+        # Fallback для обычных промптов без RAG (не должно происходить)
+        print(f"ВНИМАНИЕ: Обычный промпт {question_id} обрабатывается без RAG!")
+        template = string.Template(prompt_template)
+        filled_prompt = template.substitute(role=role, specialization=specialization)
+        full_prompt = filled_prompt + f"\n\nВопрос пользователя: {question}"
+        
+        try:
+            async for chunk in GigaChat(
+                credentials=api_key,
+                verify_ssl_certs=False,
+                model='GigaChat-2'
+            ).astream(full_prompt):
+                if chunk and chunk.content:
+                    answer = chunk.content.strip()
+                    for char in unwanted_chars:
+                        answer = answer.replace(char, " ")
+                    answer = " ".join(answer.split())
+                    await websocket.send_text(answer)
+        except Exception as e:
+            print(f"ОШИБКА при fallback для промпта {question_id}: {e}")
+            await websocket.send_text(f"Произошла ошибка: {str(e)}")
 
     elif(count > 1 and count < 10):
         for chunk in GigaChat(credentials=api_key,
@@ -339,7 +703,7 @@ async def websocket_endpoint(websocket: WebSocket):
     elif(count == 101):
         for chunk in GigaChat(credentials=api_key,
                               verify_ssl_certs=False,
-                                model='GigaChat'
+                                model='GigaChat-2'
                                 ).stream(f"Использую историю нашей с тобой беседы {context}, придумай мне тему для обсуждения"):
             answer = chunk.content.strip()  # Используем атрибут .content
 
@@ -358,7 +722,7 @@ async def websocket_endpoint(websocket: WebSocket):
         print("zashlo")
         for chunk in GigaChat(credentials=api_key,
                               verify_ssl_certs=False,
-                                model='GigaChat'
+                                model='GigaChat-2'
                                 ).stream(f"Напомни мне пожалуйста вот об этой теме {context}"):
             answer = chunk.content.strip()  # Используем атрибут .content
 
@@ -371,6 +735,16 @@ async def websocket_endpoint(websocket: WebSocket):
 
             # Отправляем ответ через WebSocket
             await websocket.send_text(answer)
+    else:
+        # Обработка случая, когда не попали ни в одно условие
+        print(f"ВНИМАНИЕ: Не найдена подходящая логика обработки!")
+        print(f"question_id: {question_id}")
+        print(f"count: {count}")
+        print(f"should_use_rag: {should_use_rag}")
+        print(f"use_rag_for_special: {use_rag_for_special if question_id in [777, 888] else 'N/A'}")
+        print(f"retrieval_chain is not None: {retrieval_chain is not None}")
+        
+        await websocket.send_text("Извините, произошла ошибка при обработке запроса. Попробуйте еще раз.")
             
     await websocket.close()
 

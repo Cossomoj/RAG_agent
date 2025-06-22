@@ -29,7 +29,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-DATABASE_URL = "/app/src/main_version/AI_agent.db"
+DATABASE_URL = "AI_agent.db"
 
 WEBSOCKET_URL = "ws://127.0.0.1:8000/ws"
 moscow_tz = pytz.timezone('Europe/Moscow')
@@ -567,6 +567,7 @@ def handle_start(call):
     markup = types.InlineKeyboardMarkup(row_width=1)
     roles = [
         types.InlineKeyboardButton(text="Задать вопрос", callback_data="menu_qr"),
+        types.InlineKeyboardButton(text="🚀 Мини-приложение", web_app=types.WebAppInfo(url="https://restocorp.ru")),
         types.InlineKeyboardButton(text="Личный кабинет", callback_data="personal_account"),
         types.InlineKeyboardButton(text="GigaMentor", callback_data="giga_mentor")
     ]
