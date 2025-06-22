@@ -28,6 +28,10 @@ logger = logging.getLogger(__name__)
 DATABASE_URL = "/home/user1/sqlite_data_rag/AI_agent.db"
 WEBSOCKET_URL = "ws://213.171.25.85:8000/ws"
 
+# Кеш для ответов (аналогично Telegram боту)
+cache_dict = {}
+cache_by_specialization = {}
+
 # Роли и специализации (синхронизированы с телеграм ботом)
 ROLES = [
     {"value": "PO/PM", "label": "PO/PM"},
@@ -48,161 +52,266 @@ SPECIALIZATIONS = [
 QUESTIONS_BY_ROLE = {
     "PO/PM": [
         {
-            "id": "po_question_1",
+            "id": "15",
             "title": "Что я могу ожидать от специалиста",
             "category": "Взаимодействие",
             "preview": "Ожидания от работы со специалистами команды",
             "text": "Что я могу ожидать от специалиста"
         },
         {
-            "id": "po_question_2", 
+            "id": "16", 
             "title": "Что я могу ожидать от лида компетенции",
             "category": "Взаимодействие",
             "preview": "Ожидания от работы с лидами компетенций",
             "text": "Что я могу ожидать от лида компетенции"
         },
         {
-            "id": "po_question_3",
+            "id": "17",
             "title": "Что ожидается от меня",
             "category": "Обязанности",
             "preview": "Обязанности и ожидания от роли PO/PM",
             "text": "Что ожидается от меня"
+        },
+        {
+            "id": "777",
+            "title": "Что еще ты умеешь?",
+            "category": "Дополнительно",
+            "preview": "Дополнительные возможности и функции системы",
+            "text": "Что еще ты умеешь?"
         }
     ],
     "Лид компетенции": {
         "Аналитик": [
             {
-                "id": "question_4",
+                "id": "4",
                 "title": "Что я могу ожидать от специалиста",
                 "category": "Взаимодействие",
                 "preview": "Ожидания от работы со специалистами",
                 "text": "Что я могу ожидать от специалиста"
             },
             {
-                "id": "question_5",
+                "id": "5",
                 "title": "Что я могу ожидать от своего PO/PM",
                 "category": "Взаимодействие",
                 "preview": "Ожидания от работы с PO/PM",
                 "text": "Что я могу ожидать от своего PO/PM"
             },
             {
-                "id": "questions_group_1",
-                "title": "Что ожидается от меня",
+                "id": "6",
+                "title": "Поиск кандидатов на работу",
                 "category": "Обязанности",
-                "preview": "Обязанности лида-аналитика",
-                "text": "Что ожидается от меня",
-                "subcategory": [
-                    "Поиск кандидатов на работу",
-                    "Проведение собеседований", 
-                    "Работа со стажерами/джунами",
-                    "Проведение 1-2-1",
-                    "Проведение встреч компетенции"
-                ]
+                "preview": "Что ожидается от лида при поиске кандидатов",
+                "text": "Что ожидается от лида компетенции аналитики при поиске кандидатов на работу?"
             },
             {
-                "id": "questions_group_2",
-                "title": "Прочее",
+                "id": "7",
+                "title": "Проведение собеседований",
+                "category": "Обязанности",
+                "preview": "Что ожидается от лида при собеседованиях",
+                "text": "Что ожидается от лида компетенции аналитики при проведении собеседований?"
+            },
+            {
+                "id": "8",
+                "title": "Работа со стажерами/джунами",
+                "category": "Обязанности",
+                "preview": "Что ожидается от лида при работе со стажерами",
+                "text": "Что ожидается от лида компетенции аналитики при работе со стажерами и джунами?"
+            },
+            {
+                "id": "9",
+                "title": "Проведение 1-2-1",
+                "category": "Обязанности",
+                "preview": "Что ожидается от лида при проведении 1-2-1",
+                "text": "Что ожидается от лида компетенции при проведение 1-2-1?"
+            },
+            {
+                "id": "10",
+                "title": "Проведение встреч компетенции",
+                "category": "Обязанности",
+                "preview": "Что ожидается от лида при встречах компетенции",
+                "text": "Что ожидается от лида компетенции при проведение встречи компетенции?"
+            },
+            {
+                "id": "11",
+                "title": "Построение структуры компетенции",
                 "category": "Дополнительно",
-                "preview": "Дополнительные вопросы и задачи",
-                "text": "Прочее",
-                "subcategory": [
-                    "Построение структуры компетенции",
-                    "Создание ИПР",
-                    "Как провести онбординг", 
-                    "Оптимизация процессов разработки",
-                    "Советы по тайм-менеджменту"
-                ]
+                "preview": "Построение структуры компетенции",
+                "text": "Что ожидается от лида компетенции при построение структуры компетенции?"
+            },
+            {
+                "id": "12",
+                "title": "Создание ИПР",
+                "category": "Дополнительно",
+                "preview": "Создание индивидуального плана развития",
+                "text": "Что ожидается от лида компетенции при создании ИПР?"
+            },
+            {
+                "id": "13",
+                "title": "Как провести онбординг",
+                "category": "Дополнительно",
+                "preview": "Онбординг нового сотрудника",
+                "text": "Как лид компетенции аналитики должен проводить онбординг нового сотрудника?"
+            },
+            {
+                "id": "14",
+                "title": "Оптимизация процессов разработки",
+                "category": "Дополнительно",
+                "preview": "Оптимизация процессов разработки",
+                "text": "Как лид компетенции аналитики должен оптимизировать процессы разработки?"
             }
         ],
         "default": [
             {
-                "id": "question_18",
+                "id": "18",
                 "title": "Что я могу ожидать от специалиста",
                 "category": "Взаимодействие",
                 "preview": "Ожидания от работы со специалистами",
                 "text": "Что я могу ожидать от специалиста"
             },
             {
-                "id": "question_19", 
+                "id": "19", 
                 "title": "Что я могу ожидать от своего PO/PM",
                 "category": "Взаимодействие",
                 "preview": "Ожидания от работы с PO/PM",
                 "text": "Что я могу ожидать от своего PO/PM"
             },
             {
-                "id": "question_20",
+                "id": "20",
                 "title": "Что ожидается от меня",
                 "category": "Обязанности",
                 "preview": "Обязанности лида компетенции",
                 "text": "Что ожидается от меня"
             },
             {
-                "id": "questions_group_2",
-                "title": "Прочее",
+                "id": "11",
+                "title": "Построение структуры компетенции",
                 "category": "Дополнительно",
-                "preview": "Дополнительные вопросы и задачи",
-                "text": "Прочее",
-                "subcategory": [
-                    "Построение структуры компетенции",
-                    "Создание ИПР",
-                    "Как провести онбординг",
-                    "Оптимизация процессов разработки", 
-                    "Советы по тайм-менеджменту"
-                ]
+                "preview": "Построение структуры компетенции",
+                "text": "Что ожидается от лида компетенции при построение структуры компетенции?"
+            },
+            {
+                "id": "12",
+                "title": "Создание ИПР",
+                "category": "Дополнительно",
+                "preview": "Создание индивидуального плана развития",
+                "text": "Что ожидается от лида компетенции при создании ИПР?"
+            },
+            {
+                "id": "13",
+                "title": "Как провести онбординг",
+                "category": "Дополнительно",
+                "preview": "Онбординг нового сотрудника",
+                "text": "Как лид компетенции аналитики должен проводить онбординг нового сотрудника?"
+            },
+            {
+                "id": "14",
+                "title": "Оптимизация процессов разработки",
+                "category": "Дополнительно",
+                "preview": "Оптимизация процессов разработки",
+                "text": "Как лид компетенции аналитики должен оптимизировать процессы разработки?"
+            },
+            {
+                "id": "24",
+                "title": "Советы по тайм-менеджменту",
+                "category": "Дополнительно",
+                "preview": "Советы по тайм-менеджменту",
+                "text": "Советы по тайм-менеджменту для стажеров"
             }
         ]
     },
     "Стажер": [
         {
-            "id": "question_1",
+            "id": "1",
             "title": "Что я могу ожидать от PO/PM",
             "category": "Взаимодействие",
             "preview": "Ожидания от работы с PO/PM",
             "text": "Что я могу ожидать от PO/PM"
         },
         {
-            "id": "question_2",
+            "id": "2",
             "title": "Что я могу ожидать от своего лида",
             "category": "Взаимодействие",
             "preview": "Ожидания от работы с лидом команды",
             "text": "Что я могу ожидать от своего лида"
         },
         {
-            "id": "question_21",
+            "id": "21",
             "title": "Рекомендации для стажеров",
             "category": "Развитие",
             "preview": "Полезные советы для стажеров",
             "text": "Рекомендации для стажеров"
         },
         {
-            "id": "question_3",
+            "id": "3",
             "title": "Посмотреть матрицу компетенций",
             "category": "Развитие",
             "preview": "Матрица навыков и компетенций",
             "text": "Посмотреть матрицу компетенций"
+        },
+        {
+            "id": "22",
+            "title": "Лучшие практики",
+            "category": "Прочее",
+            "preview": "Лучшие практики для стажеров",
+            "text": "Лучшие практики для стажеров"
+        },
+        {
+            "id": "23",
+            "title": "Что такое SDLC",
+            "category": "Прочее",
+            "preview": "Жизненный цикл разработки программного обеспечения",
+            "text": "Что такое SDLC"
+        },
+        {
+            "id": "24",
+            "title": "Советы по тайм-менеджменту",
+            "category": "Прочее",
+            "preview": "Советы по тайм-менеджменту для стажеров",
+            "text": "Советы по тайм-менеджменту для стажеров"
         }
     ],
     "Специалист": [
         {
-            "id": "question_1", 
+            "id": "1", 
             "title": "Что я могу ожидать от своего PO/PM",
             "category": "Взаимодействие",
             "preview": "Ожидания от работы с PO/PM",
             "text": "Что я могу ожидать от своего PO/PM"
         },
         {
-            "id": "question_2",
+            "id": "2",
             "title": "Что я могу ожидать от своего Лида",
             "category": "Взаимодействие",
             "preview": "Ожидания от работы с лидом команды",
             "text": "Что я могу ожидать от своего Лида"
         },
         {
-            "id": "question_3",
+            "id": "3",
             "title": "Посмотреть матрицу компетенций",
             "category": "Развитие",
             "preview": "Матрица навыков и компетенций",
             "text": "Посмотреть матрицу компетенций"
+        },
+        {
+            "id": "22",
+            "title": "Лучшие практики",
+            "category": "Прочее",
+            "preview": "Лучшие практики для специалистов",
+            "text": "Лучшие практики для стажеров"
+        },
+        {
+            "id": "23",
+            "title": "Что такое SDLC",
+            "category": "Прочее",
+            "preview": "Жизненный цикл разработки программного обеспечения",
+            "text": "Что такое SDLC"
+        },
+        {
+            "id": "24",
+            "title": "Советы по тайм-менеджменту",
+            "category": "Прочее",
+            "preview": "Советы по тайм-менеджменту для специалистов",
+            "text": "Советы по тайм-менеджменту для стажеров"
         }
     ]
 }
@@ -215,6 +324,46 @@ def get_db_connection():
         return conn
     except Exception as e:
         logger.error(f"Ошибка подключения к БД: {e}")
+        return None
+
+def clear_all_cache():
+    """Функция для полной очистки всех кешей (аналогично Telegram боту)"""
+    global cache_dict, cache_by_specialization
+    
+    try:
+        cache_dict.clear()
+        cache_by_specialization.clear()
+        logger.info("Все кеши успешно очищены")
+        return True
+    except Exception as e:
+        logger.error(f"Ошибка при очистке кешей: {e}")
+        return False
+
+async def handle_cached_request(question_id, question, user_id, role, specialization):
+    """Обработка кешированного запроса (аналогично Telegram боту)"""
+    try:
+        if question_id in cache_dict:
+            # Используем общий кеш
+            cached_answer = cache_dict[question_id]
+            logger.info(f"Найден ответ в общем кеше для question_id={question_id}")
+        elif question_id in cache_by_specialization and specialization in cache_by_specialization[question_id]:
+            # Используем кеш по специализации
+            cached_answer = cache_by_specialization[question_id][specialization]
+            logger.info(f"Найден ответ в кеше по специализации для question_id={question_id}, specialization={specialization}")
+        else:
+            return None
+        
+        # Сохраняем в историю
+        save_to_history(user_id, question, cached_answer, role, specialization)
+        
+        return {
+            "answer": cached_answer,
+            "suggested_questions": [],
+            "cached": True
+        }
+        
+    except Exception as e:
+        logger.error(f"Ошибка при работе с кешем: {e}")
         return None
 
 def get_question_id_from_text(question_text):
@@ -230,6 +379,14 @@ def get_question_id_from_text(question_text):
         "Что я могу ожидать от специалиста ?": "18", # question_18 (с пробелом и ? как в боте)
         "Что ожидается от меня?": "20",              # question_20
         "Рекомендации для стажеров": "21",           # question_21
+        
+        # Дополнительные вопросы для стажеров (группа intern_questions_group)
+        "Лучшие практики для стажеров": "22",        # intern_group_question_1
+        "Что такое SDLC": "23",                      # intern_group_question_2
+        "Советы по тайм-менеджменту для стажеров": "24", # intern_group_question_3
+        
+        # Специальные вопросы
+        "Что еще ты умеешь?": "777",                 # question_777
         
         # Альтернативные варианты для веб-приложения (без опечаток)
         "Что я могу ожидать от своего PO/PM": "1",
@@ -330,6 +487,23 @@ async def send_websocket_question(question, user_id, role="", specialization="",
             
             logger.info(f"Получен ответ от RAG сервиса: '{full_answer[:100]}...' (длина: {len(full_answer)})")
             
+            # Кешируем ответ (аналогично Telegram боту)
+            if question_id and int(question_id) not in [777, 888, 999]:
+                answer_for_cache = full_answer.strip()
+                question_id_int = int(question_id)
+                
+                # Определяем тип кеширования на основе question_id
+                if question_id_int in [1, 2, 3, 4, 5, 18, 19, 20, 21]:
+                    # Кешируем по специализации
+                    if question_id_int not in cache_by_specialization:
+                        cache_by_specialization[question_id_int] = {}
+                    cache_by_specialization[question_id_int][specialization] = answer_for_cache
+                    logger.info(f"Ответ закеширован по специализации: question_id={question_id_int}, specialization={specialization}")
+                else:
+                    # Общий кеш
+                    cache_dict[question_id_int] = answer_for_cache
+                    logger.info(f"Ответ закеширован в общем кеше: question_id={question_id_int}")
+            
             return {
                 "answer": full_answer.strip(),
                 "suggested_questions": []
@@ -350,15 +524,16 @@ def ask_question():
         user_id = data.get('user_id', 'guest')
         role = data.get('role', '')
         specialization = data.get('specialization', '')
+        question_id = data.get('question_id', None)  # Добавляем поддержку question_id
         
         if not question:
             return jsonify({"error": "Вопрос не может быть пустым"}), 400
         
-        # Отправляем вопрос через WebSocket
+        # Отправляем вопрос через WebSocket с учетом question_id
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         result = loop.run_until_complete(
-            send_websocket_question(question, user_id, role, specialization)
+            send_websocket_question(question, user_id, role, specialization, question_id)
         )
         loop.close()
         
@@ -369,6 +544,54 @@ def ask_question():
         
     except Exception as e:
         logger.error(f"Ошибка обработки вопроса: {e}")
+        return jsonify({"error": "Внутренняя ошибка сервера"}), 500
+
+@app.route('/api/ask_library', methods=['POST'])
+def ask_library_question():
+    """Обработка вопроса из библиотеки с кешированием (аналогично Telegram боту)"""
+    try:
+        data = request.get_json()
+        question = data.get('question', '').strip()
+        user_id = data.get('user_id', 'guest')
+        role = data.get('role', '')
+        specialization = data.get('specialization', '')
+        question_id = data.get('question_id', None)
+        
+        if not question:
+            return jsonify({"error": "Вопрос не может быть пустым"}), 400
+        
+        if not question_id:
+            return jsonify({"error": "Для библиотечных вопросов обязателен question_id"}), 400
+        
+        question_id_int = int(question_id)
+        
+        # Проверяем кеш сначала (аналогично Telegram боту)
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        cached_result = loop.run_until_complete(
+            handle_cached_request(question_id_int, question, user_id, role, specialization)
+        )
+        
+        if cached_result:
+            logger.info(f"Возвращаем кешированный ответ для question_id={question_id_int}")
+            loop.close()
+            return jsonify(cached_result)
+        
+        # Если в кеше нет, отправляем запрос к RAG сервису
+        logger.info(f"Кеш не найден, отправляем запрос к RAG сервису для question_id={question_id_int}")
+        result = loop.run_until_complete(
+            send_websocket_question(question, user_id, role, specialization, question_id)
+        )
+        loop.close()
+        
+        # Сохраняем в историю
+        save_to_history(user_id, question, result.get('answer', ''), role, specialization)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Ошибка обработки библиотечного вопроса: {e}")
         return jsonify({"error": "Внутренняя ошибка сервера"}), 500
 
 @app.route('/api/questions', methods=['GET'])

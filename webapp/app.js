@@ -832,17 +832,78 @@ function renderQuestions() {
             <div class="question-preview">${preview}</div>
         `;
         
-        div.onclick = () => useQuestionDirectly(index);
+        div.onclick = async () => await useQuestionDirectly(index);
         questionsList.appendChild(div);
     });
 }
 
-// Использование вопроса напрямую
-function useQuestionDirectly(index) {
+// Использование вопроса напрямую из библиотеки с кешированием
+async function useQuestionDirectly(index) {
     const questions = AppState.questions || [];
     const question = questions[index];
-    document.getElementById('question-input').value = question.text;
-    showScreen('ask-question');
+    
+    if (!question) {
+        showAlert('Вопрос не найден');
+        return;
+    }
+    
+    // Показываем заданный вопрос
+    displayAskedQuestion(question.text);
+    
+    // Показываем полноэкранный лоадер
+    showLoader();
+    
+    try {
+        const userId = AppState.user?.id || 'guest';
+        
+        // Используем специальный endpoint для библиотечных вопросов с кешированием
+        const response = await fetch(`${CONFIG.API_BASE_URL}/ask_library`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                question: question.text,
+                question_id: question.id, // Передаем ID вопроса для кеширования
+                user_id: userId,
+                role: AppState.profile.role,
+                specialization: AppState.profile.specialization
+            })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            displayAnswer(data.answer, data.suggested_questions);
+            
+            // Добавляем в локальную историю
+            AppState.history.unshift({
+                id: Date.now(),
+                question: question.text,
+                answer: data.answer,
+                timestamp: new Date(),
+                role: AppState.profile.role,
+                specialization: AppState.profile.specialization,
+                cached: data.cached || false
+            });
+            
+            // Перезагружаем историю из БД с задержкой
+            setTimeout(async () => {
+                await loadHistory();
+                console.log('✅ История обновлена из БД');
+            }, 500);
+            
+            // Переходим к экрану с ответом
+            showScreen('ask-question');
+        } else {
+            throw new Error('Ошибка получения ответа');
+        }
+    } catch (error) {
+        console.error('Ошибка отправки библиотечного вопроса:', error);
+        showAlert('Ошибка получения ответа. Попробуйте снова.');
+    } finally {
+        // Скрываем полноэкранный лоадер
+        hideLoader();
+    }
 }
 
 // Получение названия категории

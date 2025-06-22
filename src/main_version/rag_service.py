@@ -275,7 +275,7 @@ async def enhanced_vector_search(question, role, specialization, embedding_retri
 
 async def create_enhanced_retrieval_chain(role, specialization, question_id, embedding_retriever, prompt_template):
     """
-    Создает улучшенную retrieval chain с семантическим векторным поиском
+    Создает улучшенную retrieval chain с семантическим векторным поиском и поддержкой стриминга
     """
     # Заполнение шаблона промпта
     template = string.Template(prompt_template)
@@ -292,20 +292,29 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
         profanity_check=False
     )
     
-    # Создаем кастомную функцию для обработки запроса
-    async def enhanced_retrieval_process(input_data):
-        question = input_data.get('input', '')
+    # Создаем объект, который поддерживает метод astream
+    class EnhancedRetrievalChain:
+        def __init__(self, llm, filled_prompt, role, specialization, embedding_retriever):
+            self.llm = llm
+            self.filled_prompt = filled_prompt
+            self.role = role
+            self.specialization = specialization
+            self.embedding_retriever = embedding_retriever
         
-        print(f"Обрабатываем вопрос с улучшенным векторным поиском: {question}")
-        
-        # Выполняем улучшенный векторный поиск
-        relevant_docs = await enhanced_vector_search(question, role, specialization, embedding_retriever)
-        
-        # Формируем контекст из найденных документов
-        context = "\n\n".join([doc.page_content for doc in relevant_docs])
-        
-        # Создаем финальный промпт
-        final_prompt = f"""{filled_prompt}
+        async def astream(self, input_data):
+            """Асинхронный стриминг для улучшенного поиска"""
+            question = input_data.get('input', '')
+            
+            print(f"Обрабатываем вопрос с улучшенным векторным поиском: {question}")
+            
+            # Выполняем улучшенный векторный поиск
+            relevant_docs = await enhanced_vector_search(question, self.role, self.specialization, self.embedding_retriever)
+            
+            # Формируем контекст из найденных документов
+            context = "\n\n".join([doc.page_content for doc in relevant_docs])
+            
+            # Создаем финальный промпт
+            final_prompt = f"""{self.filled_prompt}
 
 Контекст из корпоративных документов:
 {context}
@@ -313,15 +322,15 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
 Вопрос пользователя: {question}
 
 Ответь на вопрос, используя информацию из контекста. Если информация в контексте релевантна вопросу, обязательно используй её в ответе."""
-        
-        print(f"Отправляем запрос в GigaChat...")
-        
-        # Получаем ответ от LLM
-        response = await llm.ainvoke(final_prompt)
-        
-        return {"answer": response.content}
+            
+            print(f"Отправляем запрос в GigaChat с стримингом...")
+            
+            # Используем стриминг LLM
+            async for chunk in self.llm.astream(final_prompt):
+                if chunk and chunk.content:
+                    yield {"answer": chunk.content}
     
-    return enhanced_retrieval_process
+    return EnhancedRetrievalChain(llm, filled_prompt, role, specialization, embedding_retriever)
 
 async def create_enhanced_retrieval_chain_for_suggestions(role, specialization, user_question, bot_answer, embedding_retriever, prompt_template):
     """
@@ -630,34 +639,19 @@ async def websocket_endpoint(websocket: WebSocket):
             enhanced_question = f"Контекст предыдущих сообщений: {context}\n\nТекущий вопрос: {enhanced_question}"
             print(f"Промпт 888 с контекстом: {enhanced_question[:200]}...")
             
-        # Проверяем, используется ли улучшенный поиск
-        if question_id in [777, 888] and use_rag_for_special:
-            # Для улучшенного поиска используем прямой вызов функции
-            result = await retrieval_chain({'input': enhanced_question})
-            answer = result.get("answer", "").strip()
-            
-            # Заменяем ненужные символы
-            for char in unwanted_chars:
-                answer = answer.replace(char, " ")
-            
-            answer = " ".join(answer.split())  # Удаляем лишние пробелы
-            
-            # Отправляем ответ целиком для лучшей читаемости
-            await websocket.send_text(answer)
-        else:
-            # Стандартный стриминг для обычных промптов
-            async for chunk in retrieval_chain.astream({'input': enhanced_question}):
-                if chunk:
-                        # Извлекаем ответ
-                    answer = chunk.get("answer", "").strip()
+        # Используем стриминг для всех промптов одинаково
+        async for chunk in retrieval_chain.astream({'input': enhanced_question}):
+            if chunk:
+                # Извлекаем ответ
+                answer = chunk.get("answer", "").strip()
 
-                        # Заменяем ненужные символы
-                    for char in unwanted_chars:
-                        answer = answer.replace(char, " ")
-                        
-                    answer = " ".join(answer.split())  # Удаляем лишние пробелы
-                        
-                    await websocket.send_text(answer)  # Отправляем очищенный текстовый ответ
+                # Заменяем ненужные символы
+                for char in unwanted_chars:
+                    answer = answer.replace(char, " ")
+                    
+                answer = " ".join(answer.split())  # Удаляем лишние пробелы
+                    
+                await websocket.send_text(answer)  # Отправляем очищенный текстовый ответ
 
     elif not should_use_rag and question_id not in [777, 888]:
         # Fallback для обычных промптов без RAG (не должно происходить)
