@@ -22,7 +22,7 @@ from langchain.chains import create_retrieval_chain
 from langchain.retrievers import EnsembleRetriever
 import uvicorn
 
-DATABASE_URL = "AI_agent.db"
+DATABASE_URL = "/app/src/main_version/AI_agent.db"
 
 load_dotenv()
 
