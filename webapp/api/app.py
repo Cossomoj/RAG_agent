@@ -514,13 +514,8 @@ async def send_websocket_question(question, user_id, role="", specialization="",
                     if answer_part:
                         empty_message_count = 0  # Сбрасываем счетчик пустых сообщений
                         logger.debug(f"Получена часть ответа: '{answer_part[:100]}...' (длина: {len(answer_part)})")
-                        # Обрабатываем символы для форматирования (как в телеграм боте)
-                        wanted_simbols = [".", ":"]
-                        for char in answer_part:
-                            if char in wanted_simbols:
-                                answer_part += "\n"
                         
-                        # ТОЧНО как в телеграм-боте: просто накапливаем части
+                        # ТОЧНО как в телеграм-боте: просто накапливаем части БЕЗ изменения
                         full_answer += answer_part
                     else:
                         # Пустое сообщение может означать конец потока
@@ -542,12 +537,28 @@ async def send_websocket_question(question, user_id, role="", specialization="",
             
             # После завершения цикла сохраняем весь накопленный ответ
             if full_answer != "":
-                answer_for_cache.append(full_answer)
+                # В телеграм-боте answer_for_cache накапливает части по времени
+                # Здесь мы сохраняем весь полученный ответ как одну часть
+                answer_for_cache = [full_answer]  # Массив с одним элементом - полным ответом
                 answer_for_continue_dialog = full_answer
             
             logger.info(f"Получен ответ от RAG сервиса: '{answer_for_continue_dialog[:200]}...' (длина: {len(answer_for_continue_dialog)})")
             logger.info(f"Последние 100 символов ответа: '{answer_for_continue_dialog[-100:]}'")
             logger.info(f"Количество частей в answer_for_cache: {len(answer_for_cache)}")
+            
+            # Дополнительная диагностика для проблемы с неполными ответами
+            if len(answer_for_continue_dialog) < 500:
+                logger.warning(f"ВНИМАНИЕ: Короткий ответ! Длина: {len(answer_for_continue_dialog)}")
+                logger.warning(f"Полный ответ: '{answer_for_continue_dialog}'")
+            
+            # Проверяем, заканчивается ли ответ корректно
+            if not answer_for_continue_dialog.endswith(('.', '!', '?', ':', ';')):
+                logger.warning(f"ВНИМАНИЕ: Ответ может быть обрезан! Последние символы: '{answer_for_continue_dialog[-20:]}'")
+            
+            # Проверяем наличие ключевых слов из примера
+            keywords = ['SDLC', 'Software Development Life Cycle', 'этапы', 'разработки']
+            found_keywords = [kw for kw in keywords if kw.lower() in answer_for_continue_dialog.lower()]
+            logger.info(f"Найденные ключевые слова: {found_keywords}")
             
             # Кешируем ответы только для предопределенных вопросов (как в телеграм боте)
             if question_id and int(question_id) not in [777, 888]:

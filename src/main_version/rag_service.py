@@ -289,7 +289,7 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
     # Создание LLM
     llm = GigaChat(
         credentials=api_key,
-        model='GigaChat-Pro',
+        model='GigaChat',
         verify_ssl_certs=False,
         profanity_check=False
     )
@@ -698,7 +698,7 @@ async def websocket_endpoint(websocket: WebSocket):
     elif(count > 1 and count < 10):
         for chunk in GigaChat(credentials=api_key,
                               verify_ssl_certs=False,
-                                model='GigaChat-Max'
+                                model='GigaChat'
                                 ).stream(f"Использую контекст нашей прошлой беседы {context}, ответь на уточняющий вопрос {question}"):
             answer = chunk.content.strip()  # Используем атрибут .content
 

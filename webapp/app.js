@@ -468,92 +468,132 @@ const SuggestedQuestionsState = {
 function formatAnswerText(text) {
     if (!text) return '';
     
-    // Убираем лишние пробелы и нормализуем переносы строк
-    let formatted = text.trim().replace(/\s+/g, ' ');
+    let formatted = text.trim();
     
-    // Удаляем символы # в начале строки и подряд идущие #
-    formatted = formatted.replace(/#+/g, '');
-    formatted = formatted.replace(/^\s*#+/gm, '');
+    // Нормализуем переносы строк
+    formatted = formatted.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     
-    // Добавляем переносы перед нумерованными списками (1., 2., 3. и т.д.)
-    formatted = formatted.replace(/(\S)\s*(\d+\.\s+)/g, '$1\n\n$2');
+    // Убираем лишние пробелы, но сохраняем структуру
+    formatted = formatted.replace(/[ \t]+/g, ' ');
     
-    // Добавляем переносы перед маркированными списками (-, *, •)
-    formatted = formatted.replace(/(\S)\s*([-*•]\s+)/g, '$1\n\n$2');
+    // Добавляем переносы перед нумерованными пунктами (1., 2., и т.д.)
+    formatted = formatted.replace(/([.!?])\s*(\d+\.)/g, '$1\n\n$2');
     
-    // Добавляем переносы только после точек, если следующее предложение очень длинное (более 80 символов)
-    formatted = formatted.replace(/\.\s+([А-ЯA-Z][^.!?]{80,})/g, '.\n\n$1');
+    // Добавляем переносы перед заголовками (заглавные слова с двоеточием)
+    formatted = formatted.replace(/([.!?])\s*([А-ЯA-Z][а-яa-z\s]+:)(?!\s*\d)/g, '$1\n\n$2');
     
-    // Добавляем переносы после двоеточий для лучшей структуры
-    formatted = formatted.replace(/:\s+([А-ЯA-Z][^:]{50,})/g, ':\n\n$1');
+    // Разбиваем длинные предложения на абзацы
+    formatted = formatted.replace(/([.!?])\s+([А-ЯA-Z][^.!?]{100,})/g, '$1\n\n$2');
     
-    // Убираем множественные переносы строк (более 2 подряд)
+    // Убираем лишние переносы
     formatted = formatted.replace(/\n{3,}/g, '\n\n');
     
     return formatted.trim();
 }
 
-// Преобразование Markdown в HTML
+// Преобразование текста в HTML с правильным форматированием
 function convertMarkdownToHtml(text) {
     if (!text) return '';
-    
-    let html = text;
-    
-    // Жирный текст: **текст** или __текст__
-    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/__(.*?)__/g, '<strong>$1</strong>');
-    
-    // Курсивный текст: *текст* или _текст_
-    html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
-    html = html.replace(/_(.*?)_/g, '<em>$1</em>');
-    
-    // Заголовки: ### Заголовок
-    html = html.replace(/^### (.*$)/gm, '<h3>$1</h3>');
-    html = html.replace(/^## (.*$)/gm, '<h2>$1</h2>');
-    html = html.replace(/^# (.*$)/gm, '<h1>$1</h1>');
-    
-    // Код: `код`
-    html = html.replace(/`(.*?)`/g, '<code>$1</code>');
-    
-    // Обработка нумерованных списков
-    const numberedListItems = [];
-    html = html.replace(/^\d+\.\s+(.*)$/gm, (match, content) => {
-        numberedListItems.push(`<li>${content.trim()}</li>`);
-        return `NUMBERED_LIST_ITEM_${numberedListItems.length - 1}`;
-    });
-    
-    // Обработка маркированных списков  
-    const bulletListItems = [];
-    html = html.replace(/^[-*•]\s+(.*)$/gm, (match, content) => {
-        bulletListItems.push(`<li>${content.trim()}</li>`);
-        return `BULLET_LIST_ITEM_${bulletListItems.length - 1}`;
-    });
-    
-    // Переносы строк в параграфы
-    html = html.replace(/\n\n/g, '</p><p>');
-    html = '<p>' + html + '</p>';
-    
-    // Восстанавливаем нумерованные списки
-    if (numberedListItems.length > 0) {
-        let numberedListHtml = '<ol>' + numberedListItems.join('') + '</ol>';
-        html = html.replace(/NUMBERED_LIST_ITEM_\d+/g, '');
-        html = html.replace(/<p><\/p>/g, '');
-        html += numberedListHtml;
+    let html = text
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/`(.*?)`/g, '<code>$1</code>');
+
+    // Разбиваем на строки
+    const lines = html.split(/\n/);
+    let result = [];
+    let buffer = [];
+    let listType = null;
+    let inParagraph = false;
+
+    function flushBuffer() {
+        if (buffer.length === 0) return;
+        if (listType === 'ol') {
+            result.push('<ol>' + buffer.map(item => `<li>${item}</li>`).join('') + '</ol><br>');
+        } else if (listType === 'ul') {
+            result.push('<ul>' + buffer.map(item => `<li>${item}</li>`).join('') + '</ul><br>');
+        }
+        buffer = [];
+        listType = null;
     }
-    
-    // Восстанавливаем маркированные списки
-    if (bulletListItems.length > 0) {
-        let bulletListHtml = '<ul>' + bulletListItems.join('') + '</ul>';
-        html = html.replace(/BULLET_LIST_ITEM_\d+/g, '');
-        html = html.replace(/<p><\/p>/g, '');
-        html += bulletListHtml;
+
+    function flushParagraph() {
+        if (inParagraph) {
+            result.push('</p><br>');
+            inParagraph = false;
+        }
     }
-    
-    // Убираем пустые параграфы
-    html = html.replace(/<p><\/p>/g, '');
-    html = html.replace(/<p>\s*<\/p>/g, '');
-    
-    return html;
+
+    for (let i = 0; i < lines.length; i++) {
+        let line = lines[i].trim();
+        if (!line) {
+            flushBuffer();
+            flushParagraph();
+            continue;
+        }
+        // Markdown заголовки
+        if (/^###\s*(.+)/.test(line)) {
+            flushBuffer(); flushParagraph();
+            result.push(`<h3>${line.replace(/^###\s*/, '')}</h3><br>`);
+            continue;
+        }
+        if (/^##\s*(.+)/.test(line)) {
+            flushBuffer(); flushParagraph();
+            result.push(`<h2>${line.replace(/^##\s*/, '')}</h2><br>`);
+            continue;
+        }
+        if (/^#\s*(.+)/.test(line)) {
+            flushBuffer(); flushParagraph();
+            result.push(`<h1>${line.replace(/^#\s*/, '')}</h1><br>`);
+            continue;
+        }
+        // Заголовок с двоеточием
+        if (/^[А-ЯA-Z][а-яa-z\s]+:$/.test(line)) {
+            flushBuffer(); flushParagraph();
+            result.push(`<h4>${line}</h4><br>`);
+            continue;
+        }
+        // Нумерованный список
+        const numMatch = line.match(/^(\d+)\.\s*(.+)$/);
+        if (numMatch) {
+            if (listType !== 'ol') flushBuffer();
+            listType = 'ol';
+            buffer.push(numMatch[2]);
+            continue;
+        }
+        // Маркированный список
+        const bulletMatch = line.match(/^[-*•]\s*(.+)$/);
+        if (bulletMatch) {
+            if (listType !== 'ul') flushBuffer();
+            listType = 'ul';
+            buffer.push(bulletMatch[1]);
+            continue;
+        }
+        // Если строка не список и не заголовок
+        flushBuffer();
+        // Новый абзац, если предыдущий закончился или это начало
+        if (!inParagraph) {
+            result.push('<p>');
+            inParagraph = true;
+        } else {
+            // Если строка начинается с заглавной и предыдущая строка закончилась на точку — новый абзац
+            const prev = lines[i-1] ? lines[i-1].trim() : '';
+            if (prev && /[.!?]$/.test(prev) && /^[А-ЯA-Z]/.test(line)) {
+                result.push('</p><br><p>');
+            } else {
+                result.push(' ');
+            }
+        }
+        result.push(line);
+    }
+    flushBuffer();
+    flushParagraph();
+    // Убираем лишние <br> внутри списков и между абзацами
+    let finalHtml = result.join('');
+    finalHtml = finalHtml.replace(/(<\/ul>|<\/ol>)<br>/g, '$1');
+    finalHtml = finalHtml.replace(/<br><br>/g, '<br>');
+    finalHtml = finalHtml.replace(/<p>\s*<\/p>/g, '');
+    return finalHtml;
 }
 
 // Отображение предыдущих вопросов из истории
