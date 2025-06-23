@@ -107,7 +107,7 @@ def create_retrieval_chain_from_folder(role, specialization, question_id, embedd
 
     llm = GigaChat(
         credentials=api_key,
-        model='GigaChat-2',
+        model='GigaChat',
         verify_ssl_certs=False,
         profanity_check=False
     )
@@ -168,7 +168,7 @@ async def generate_semantic_search_queries(question, role, specialization):
     # Создаем LLM для генерации альтернативных запросов
     llm = GigaChat(
         credentials=api_key,
-        model='GigaChat-2',
+        model='GigaChat',
         verify_ssl_certs=False,
         profanity_check=False
     )
@@ -289,7 +289,7 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
     # Создание LLM
     llm = GigaChat(
         credentials=api_key,
-        model='GigaChat-2',
+        model='GigaChat',
         verify_ssl_certs=False,
         profanity_check=False
     )
@@ -350,7 +350,7 @@ async def create_enhanced_retrieval_chain_for_suggestions(role, specialization, 
     # Создание LLM
     llm = GigaChat(
         credentials=api_key,
-        model='GigaChat-2',
+        model='GigaChat',
         verify_ssl_certs=False,
         profanity_check=False
     )
@@ -470,7 +470,7 @@ async def websocket_suggest_endpoint(websocket: WebSocket):
 
         llm = GigaChat(
             credentials=api_key,
-            model='GigaChat-2',
+            model='GigaChat',
             verify_ssl_certs=False,
             profanity_check=False
         )
@@ -593,7 +593,7 @@ async def websocket_endpoint(websocket: WebSocket):
             async for chunk in GigaChat(
                 credentials=api_key,
                 verify_ssl_certs=False,
-                model='GigaChat-2'
+                model='GigaChat'
             ).astream(full_prompt):
                 if chunk and chunk.content:
                     chunk_count += 1
@@ -658,7 +658,7 @@ async def websocket_endpoint(websocket: WebSocket):
             async for chunk in GigaChat(
                 credentials=api_key,
                 verify_ssl_certs=False,
-                model='GigaChat-2'
+                model='GigaChat'
             ).astream(full_prompt):
                 if chunk and chunk.content:
                     answer = chunk.content.strip()
@@ -691,7 +691,7 @@ async def websocket_endpoint(websocket: WebSocket):
     elif(count == 101):
         for chunk in GigaChat(credentials=api_key,
                               verify_ssl_certs=False,
-                                model='GigaChat-2'
+                                model='GigaChat'
                                 ).stream(f"Использую историю нашей с тобой беседы {context}, придумай мне тему для обсуждения"):
             answer = chunk.content.strip()  # Используем атрибут .content
 
@@ -710,7 +710,7 @@ async def websocket_endpoint(websocket: WebSocket):
         print("zashlo")
         for chunk in GigaChat(credentials=api_key,
                               verify_ssl_certs=False,
-                                model='GigaChat-2'
+                                model='GigaChat'
                                 ).stream(f"Напомни мне пожалуйста вот об этой теме {context}"):
             answer = chunk.content.strip()  # Используем атрибут .content
 
