@@ -259,23 +259,79 @@ def system():
 @app.route('/system/clear-cache', methods=['POST'])
 @login_required
 def clear_cache():
+    """Очистка кешей всех систем одновременно"""
+    results = {'bot': None, 'webapp': None}
+    errors = []
+    
+    # 1. Очищаем кеш телеграм-бота
     try:
-        # Делаем HTTP запрос к API бота
         response = requests.post('http://localhost:8007/clear-cache', timeout=10)
         if response.status_code == 200:
             data = response.json()
             if data.get('success'):
-                return jsonify({'success': True, 'message': 'Кеш успешно очищен'})
+                results['bot'] = 'успешно'
             else:
-                return jsonify({'success': False, 'error': data.get('error', 'Неизвестная ошибка')})
+                results['bot'] = f"ошибка: {data.get('error', 'неизвестная ошибка')}"
+                errors.append(f"Бот: {data.get('error', 'неизвестная ошибка')}")
         else:
-            return jsonify({'success': False, 'error': f'HTTP ошибка: {response.status_code}'})
+            results['bot'] = f'HTTP ошибка: {response.status_code}'
+            errors.append(f'Бот: HTTP ошибка {response.status_code}')
     except requests.exceptions.ConnectionError:
-        return jsonify({'success': False, 'error': 'Не удается подключиться к боту. Убедитесь, что бот запущен.'})
+        results['bot'] = 'не удается подключиться'
+        errors.append('Бот: не удается подключиться (возможно, не запущен)')
     except requests.exceptions.Timeout:
-        return jsonify({'success': False, 'error': 'Превышено время ожидания ответа от бота.'})
+        results['bot'] = 'превышено время ожидания'
+        errors.append('Бот: превышено время ожидания')
     except Exception as e:
-        return jsonify({'success': False, 'error': f'Ошибка при очистке кеша: {str(e)}'})
+        results['bot'] = f'ошибка: {str(e)}'
+        errors.append(f'Бот: {str(e)}')
+    
+    # 2. Очищаем кеш веб-приложения
+    try:
+        response = requests.post('http://localhost:5000/api/clear-cache', timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('success'):
+                results['webapp'] = 'успешно'
+            else:
+                results['webapp'] = f"ошибка: {data.get('error', 'неизвестная ошибка')}"
+                errors.append(f"Веб-приложение: {data.get('error', 'неизвестная ошибка')}")
+        else:
+            results['webapp'] = f'HTTP ошибка: {response.status_code}'
+            errors.append(f'Веб-приложение: HTTP ошибка {response.status_code}')
+    except requests.exceptions.ConnectionError:
+        results['webapp'] = 'не удается подключиться'
+        errors.append('Веб-приложение: не удается подключиться (возможно, не запущено)')
+    except requests.exceptions.Timeout:
+        results['webapp'] = 'превышено время ожидания'
+        errors.append('Веб-приложение: превышено время ожидания')
+    except Exception as e:
+        results['webapp'] = f'ошибка: {str(e)}'
+        errors.append(f'Веб-приложение: {str(e)}')
+    
+    # 3. Формируем ответ
+    if not errors:
+        return jsonify({
+            'success': True, 
+            'message': f'Кеши успешно очищены: телеграм-бот ({results["bot"]}), веб-приложение ({results["webapp"]})'
+        })
+    elif len(errors) == 2:
+        return jsonify({
+            'success': False, 
+            'error': f'Не удалось очистить кеши: {"; ".join(errors)}'
+        })
+    else:
+        # Частичный успех
+        successful = []
+        if results['bot'] == 'успешно':
+            successful.append('телеграм-бот')
+        if results['webapp'] == 'успешно':
+            successful.append('веб-приложение')
+        
+        return jsonify({
+            'success': True, 
+            'message': f'Частично успешно: очищены кеши {", ".join(successful)}. Ошибки: {"; ".join(errors)}'
+        })
 
 @app.route('/system/send-message', methods=['POST'])
 @login_required

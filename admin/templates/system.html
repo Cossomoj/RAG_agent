@@ -16,10 +16,10 @@
                     <i class="bi bi-trash"></i> Очистка кеша
                 </h5>
                 <p class="card-text">
-                    Полная очистка кеша ответов бота. Это действие удалит все сохраненные ответы и заставит бота генерировать их заново.
+                    Полная очистка кеша ответов <strong>всех систем</strong>: телеграм-бота и веб-приложения. Это действие удалит все сохраненные ответы и заставит системы генерировать их заново.
                 </p>
                 <div class="alert alert-warning" role="alert">
-                    <strong>Внимание!</strong> Это действие нельзя отменить. После очистки кеша первые ответы пользователей будут генерироваться дольше.
+                    <strong>Внимание!</strong> Это действие нельзя отменить. После очистки кеша первые ответы пользователей будут генерироваться дольше в обеих системах.
                 </div>
                 <button type="button" class="btn btn-danger" onclick="clearCache()">
                     <i class="bi bi-trash"></i> Очистить кеш
@@ -55,9 +55,9 @@
 
 <script>
 function clearCache() {
-    if (confirm('Вы уверены, что хотите очистить весь кеш? Это действие нельзя отменить.')) {
+    if (confirm('Вы уверены, что хотите очистить кеш всех систем (телеграм-бот + веб-приложение)? Это действие нельзя отменить.')) {
         const resultDiv = document.getElementById('cache-result');
-        resultDiv.innerHTML = '<div class="alert alert-info">Очистка кеша...</div>';
+        resultDiv.innerHTML = '<div class="alert alert-info">Очистка кешей всех систем...</div>';
         
         fetch('/system/clear-cache', {
             method: 'POST',
