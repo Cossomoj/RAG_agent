@@ -485,6 +485,7 @@ async def send_websocket_question(question, user_id, role="", specialization="",
                 logger.info(f"Контекст диалога для пользователя {user_id}: {context[:100]}...")
             
             logger.info(f"Отправляем вопрос: '{question}' с question_id: {question_id}, role: '{role}', specialization: '{specialization}'")
+            logger.info(f"WebSocket URL: {WEBSOCKET_URL}")
             
             # Отправляем данные в том же порядке, что ожидает RAG-сервис
             await websocket.send(question)          # 1. question
@@ -494,8 +495,10 @@ async def send_websocket_question(question, user_id, role="", specialization="",
             await websocket.send(context)           # 5. context (теперь с реальным контекстом для id=888)
             await websocket.send("1")               # 6. count (1 для первого вопроса)
             
-            # Получаем потоковый ответ (аналогично телеграм боту)
+            # Получаем потоковый ответ (ТОЧНО как в телеграм боте)
             full_answer = ""
+            answer_for_cache = []
+            answer_for_continue_dialog = ""
             empty_message_count = 0
             max_empty_messages = 10  # Максимум пустых сообщений подряд
             
@@ -510,12 +513,14 @@ async def send_websocket_question(question, user_id, role="", specialization="",
                     
                     if answer_part:
                         empty_message_count = 0  # Сбрасываем счетчик пустых сообщений
+                        logger.debug(f"Получена часть ответа: '{answer_part[:100]}...' (длина: {len(answer_part)})")
                         # Обрабатываем символы для форматирования (как в телеграм боте)
                         wanted_simbols = [".", ":"]
                         for char in answer_part:
                             if char in wanted_simbols:
                                 answer_part += "\n"
                         
+                        # ТОЧНО как в телеграм-боте: просто накапливаем части
                         full_answer += answer_part
                     else:
                         # Пустое сообщение может означать конец потока
@@ -535,28 +540,33 @@ async def send_websocket_question(question, user_id, role="", specialization="",
                 logger.info("WebSocket соединение закрыто")
                 pass  # WebSocket закрылся - это нормально
             
-            logger.info(f"Получен ответ от RAG сервиса: '{full_answer[:100]}...' (длина: {len(full_answer)})")
+            # После завершения цикла сохраняем весь накопленный ответ
+            if full_answer != "":
+                answer_for_cache.append(full_answer)
+                answer_for_continue_dialog = full_answer
+            
+            logger.info(f"Получен ответ от RAG сервиса: '{answer_for_continue_dialog[:200]}...' (длина: {len(answer_for_continue_dialog)})")
+            logger.info(f"Последние 100 символов ответа: '{answer_for_continue_dialog[-100:]}'")
+            logger.info(f"Количество частей в answer_for_cache: {len(answer_for_cache)}")
             
             # Кешируем ответы только для предопределенных вопросов (как в телеграм боте)
             if question_id and int(question_id) not in [777, 888]:
-                # Сохраняем ответ как массив из одного элемента (как в телеграм боте)
-                answer_for_cache = [full_answer.strip()]
                 question_id_int = int(question_id)
                 
                 # Определяем тип кеширования точно как в телеграм боте
                 if question_id_int not in [1, 2, 3, 4, 5, 18, 19, 20]:
-                    # Общий кеш
+                    # Общий кеш - используем массив частей ответа
                     cache_dict[question_id_int] = answer_for_cache
                     logger.info(f"Ответ закеширован в общем кеше: question_id={question_id_int}")
                 else:
-                    # Кешируем по специализации
+                    # Кешируем по специализации - используем массив частей ответа
                     if question_id_int not in cache_by_specialization:
                         cache_by_specialization[question_id_int] = {}
                     cache_by_specialization[question_id_int][specialization] = answer_for_cache
                     logger.info(f"Ответ закеширован по специализации: question_id={question_id_int}, specialization={specialization}")
             
             return {
-                "answer": full_answer.strip(),
+                "answer": answer_for_continue_dialog.strip(),
                 "suggested_questions": []
             }
     except Exception as e:

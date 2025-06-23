@@ -289,7 +289,7 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
     # Создание LLM
     llm = GigaChat(
         credentials=api_key,
-        model='GigaChat',
+        model='GigaChat-Pro',
         verify_ssl_certs=False,
         profanity_check=False
     )
