@@ -21,12 +21,68 @@ const AppState = {
 
 // Инициализация приложения
 document.addEventListener('DOMContentLoaded', async function() {
+    initViewportFixes();
     initTelegramWebApp();
     await loadRolesAndSpecializations();
     await loadUserProfile();
     await loadHistory();
     await loadQuestions();
 });
+
+// Исправления для viewport на разных устройствах
+function initViewportFixes() {
+    // Фиксы для iOS Safari
+    function setVhProperty() {
+        const vh = window.innerHeight * 0.01;
+        document.documentElement.style.setProperty('--vh', `${vh}px`);
+    }
+    
+    // Установка при загрузке
+    setVhProperty();
+    
+    // Обновление при изменении размера окна (поворот экрана)
+    window.addEventListener('resize', debounce(setVhProperty, 100));
+    window.addEventListener('orientationchange', () => {
+        setTimeout(setVhProperty, 100);
+    });
+    
+    // Предотвращение масштабирования при двойном тапе
+    let lastTouchEnd = 0;
+    document.addEventListener('touchend', function (event) {
+        const now = (new Date()).getTime();
+        if (now - lastTouchEnd <= 300) {
+            event.preventDefault();
+        }
+        lastTouchEnd = now;
+    }, false);
+    
+    // Улучшенная обработка фокуса на мобильных устройствах
+    const inputs = document.querySelectorAll('input, textarea, select');
+    inputs.forEach(input => {
+        input.addEventListener('focus', function() {
+            // Небольшая задержка для корректной работы на iOS
+            setTimeout(() => {
+                this.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'center' 
+                });
+            }, 300);
+        });
+    });
+}
+
+// Утилита debounce для оптимизации производительности
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
 
 // Инициализация Telegram Web App
 function initTelegramWebApp() {
@@ -778,6 +834,13 @@ const LibraryState = {};
 
 // Загрузка готовых вопросов
 async function loadQuestions() {
+    const questionsList = document.getElementById('questions-list');
+    
+    // Показываем скелетоны загрузки
+    if (questionsList) {
+        showQuestionsLoadingSkeleton(questionsList);
+    }
+    
     try {
         const params = new URLSearchParams();
         if (AppState.profile.role) {
@@ -792,10 +855,12 @@ async function loadQuestions() {
         
         if (response.ok) {
             AppState.questions = await response.json();
-            renderQuestions();
         }
     } catch (error) {
         console.error('Ошибка загрузки вопросов:', error);
+    } finally {
+        // Всегда рендерим результат (даже если произошла ошибка)
+        renderQuestions();
     }
 }
 
@@ -811,9 +876,9 @@ function renderQuestions() {
         emptyState.className = 'empty-state';
         emptyState.innerHTML = `
             <div style="text-align: center; padding: 40px 20px; color: var(--tg-theme-hint-color);">
-                <div style="font-size: 48px; margin-bottom: 16px;">📝</div>
-                <h3 style="margin: 0 0 8px 0; font-size: 18px;">Вопросы не найдены</h3>
-                <p style="margin: 0; font-size: 14px;">Заполните профиль для получения персонализированных вопросов</p>
+                <div style="font-size: 48px; margin-bottom: 16px; animation: bounce 2s ease-in-out infinite;">📝</div>
+                <h3 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 600;">Вопросы не найдены</h3>
+                <p style="margin: 0; font-size: 14px; line-height: 1.5;">Заполните профиль для получения персонализированных вопросов</p>
             </div>
         `;
         questionsList.appendChild(emptyState);
@@ -823,12 +888,18 @@ function renderQuestions() {
     questions.forEach((question, index) => {
         const div = document.createElement('div');
         div.className = 'question-item';
+        div.setAttribute('data-category', question.category);
         
         const preview = question.preview || question.text.substring(0, 120) + '...';
         
         div.innerHTML = `
-            <div class="question-title">${question.title}</div>
-            <div class="question-category">${getCategoryName(question.category)}</div>
+            <div class="question-header">
+                <div class="question-meta">
+                    <div class="question-icon">${getCategoryIcon(question.category)}</div>
+                    <div class="question-title">${question.title}</div>
+                </div>
+                <div class="question-category">${getCategoryName(question.category)}</div>
+            </div>
             <div class="question-preview">${preview}</div>
         `;
         
@@ -849,6 +920,9 @@ async function useQuestionDirectly(index) {
     
     // Показываем заданный вопрос
     displayAskedQuestion(question.text);
+    
+    // Сохраняем вопрос пользователя для генерации связанных вопросов
+    SuggestedQuestionsState.userQuestion = question.text;
     
     // Показываем полноэкранный лоадер
     showLoader();
@@ -921,12 +995,52 @@ function getCategoryName(category) {
     return names[category] || category;
 }
 
+// Получение иконки для категории
+function getCategoryIcon(category) {
+    const icons = {
+        'Взаимодействие': '🤝',
+        'Обязанности': '📋',
+        'Развитие': '📈',
+        'Дополнительно': '💡',
+        'development': '💻',
+        'analysis': '📊',
+        'management': '👥',
+        'testing': '🧪'
+    };
+    return icons[category] || '❓';
+}
+
+// Получение иконки для роли
+function getRoleIcon(role) {
+    const icons = {
+        'Разработчик': '👨‍💻',
+        'Аналитик': '📊',
+        'Тестировщик': '🧪',
+        'Менеджер': '👔',
+        'Дизайнер': '🎨',
+        'DevOps': '⚙️',
+        'Архитектор': '🏗️',
+        'Продукт-менеджер': '📱',
+        'Scrum-мастер': '🎯',
+        'Технический писатель': '📝'
+    };
+    return icons[role] || '👤';
+}
+
 // === ИСТОРИЯ ===
 
 // Загрузка истории
 async function loadHistory() {
     const userId = AppState.user?.id || 'guest';
+    const historyList = document.getElementById('history-list');
+    
     console.log('Загружаем историю для userId:', userId);
+    
+    // Показываем скелетоны загрузки
+    if (historyList) {
+        showHistoryLoadingSkeleton(historyList);
+    }
+    
     try {
         const response = await fetch(`${CONFIG.API_BASE_URL}/history/${userId}`);
         if (response.ok) {
@@ -937,6 +1051,9 @@ async function loadHistory() {
         }
     } catch (error) {
         console.error('Ошибка загрузки истории:', error);
+    } finally {
+        // Всегда рендерим результат
+        renderHistory();
     }
 }
 
@@ -960,10 +1077,18 @@ function renderHistory() {
             minute: '2-digit'
         });
         
+        const roleIcon = getRoleIcon(item.role);
+        const questionPreview = item.question.substring(0, 50) + (item.question.length > 50 ? '...' : '');
+        const answerPreview = item.answer.substring(0, 100) + (item.answer.length > 100 ? '...' : '');
+        
         div.innerHTML = `
-            <div class="history-title">${item.question.substring(0, 50)}${item.question.length > 50 ? '...' : ''}</div>
-            <div class="history-date">${dateStr} • ${getCategoryName(item.role)}</div>
-            <div class="history-preview">${item.answer.substring(0, 100)}${item.answer.length > 100 ? '...' : ''}</div>
+            <div class="history-header">
+                <div class="history-meta">
+                    <div class="history-icon">${roleIcon}</div>
+                    <div class="history-title">${questionPreview}</div>
+                </div>
+            </div>
+            <div class="history-preview">${answerPreview}</div>
         `;
         
         div.onclick = () => {
@@ -975,7 +1100,13 @@ function renderHistory() {
     });
     
     if (AppState.history.length === 0) {
-        historyList.innerHTML = '<p style="text-align: center; color: var(--tg-theme-hint-color);">История пуста</p>';
+        historyList.innerHTML = `
+            <div style="text-align: center; padding: 40px 20px; color: var(--tg-theme-hint-color);">
+                <div style="font-size: 48px; margin-bottom: 16px; animation: bounce 2s ease-in-out infinite;">📜</div>
+                <h3 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 600;">История пуста</h3>
+                <p style="margin: 0; font-size: 14px; line-height: 1.5;">Задайте первый вопрос, чтобы начать диалог</p>
+            </div>
+        `;
     }
 }
 
@@ -1167,7 +1298,7 @@ function safeAlert(msg) {
 // Улучшенная отправка обратной связи
 async function sendFeedback() {
     const feedbackInput = document.getElementById('feedback-input');
-    const sendBtn = document.getElementById('send-feedback');
+    const sendBtn = document.getElementById('feedback-submit-btn');
     const btnText = sendBtn.querySelector('.btn-text');
     const spinner = sendBtn.querySelector('.spinner');
     const feedbackForm = document.querySelector('.feedback-form');
@@ -1301,7 +1432,7 @@ async function sendFeedback() {
     } finally {
         // Возвращаем кнопку в исходное состояние
         sendBtn.disabled = false;
-        btnText.textContent = 'Отправить отзыв';
+        btnText.textContent = '📤 Отправить отзыв';
         spinner.classList.add('hidden');
         sendBtn.style.transform = '';
     }
@@ -1321,18 +1452,18 @@ function resetFeedbackForm() {
     const feedbackInput = document.getElementById('feedback-input');
     const feedbackForm = document.querySelector('.feedback-form');
     const feedbackSuccess = document.getElementById('feedback-success');
-    const charCount = document.getElementById('char-count');
+    const charCounter = document.getElementById('char-counter');
     
     // Очищаем поле ввода
     if (feedbackInput) {
         feedbackInput.value = '';
-        feedbackInput.placeholder = "Расскажите подробнее о вашем опыте использования GigaMentor...";
+        feedbackInput.placeholder = "Поделитесь своими мыслями о приложении, предложениями по улучшению или сообщите о проблемах...";
     }
     
     // Сбрасываем счетчик символов
-    if (charCount) {
-        charCount.textContent = '0';
-        charCount.style.color = '';
+    if (charCounter) {
+        charCounter.textContent = '0/1000';
+        charCounter.style.color = 'var(--tg-theme-hint-color)';
     }
     
 
@@ -1357,4 +1488,64 @@ function resetFeedbackForm() {
 function initFeedbackScreen() {
     initCharCounter();
     resetFeedbackForm();
+}
+
+function updateCharCounter() {
+    const textarea = document.getElementById('feedback-input');
+    const charCounter = document.getElementById('char-counter');
+    
+    if (textarea && charCounter) {
+        const length = textarea.value.length;
+        charCounter.textContent = `${length}/1000`;
+        
+        // Изменение цвета при приближении к лимиту
+        if (length > 950) {
+            charCounter.style.color = 'var(--danger-color)';
+        } else if (length > 800) {
+            charCounter.style.color = 'var(--warning-color)';
+        } else {
+            charCounter.style.color = 'var(--tg-theme-hint-color)';
+        }
+    }
+}
+
+// Показ скелетонов загрузки для вопросов
+function showQuestionsLoadingSkeleton(container) {
+    container.innerHTML = '';
+    for (let i = 0; i < 5; i++) {
+        const skeleton = document.createElement('div');
+        skeleton.className = 'question-item';
+        skeleton.innerHTML = `
+            <div class="question-header">
+                <div class="question-meta">
+                    <div class="loading-skeleton" style="width: 2rem; height: 2rem; border-radius: 50%;"></div>
+                    <div class="loading-skeleton title"></div>
+                </div>
+                <div class="loading-skeleton date"></div>
+            </div>
+            <div class="loading-skeleton text"></div>
+            <div class="loading-skeleton text" style="width: 60%;"></div>
+        `;
+        container.appendChild(skeleton);
+    }
+}
+
+// Показ скелетонов загрузки для истории
+function showHistoryLoadingSkeleton(container) {
+    container.innerHTML = '';
+    for (let i = 0; i < 3; i++) {
+        const skeleton = document.createElement('div');
+        skeleton.className = 'history-item';
+        skeleton.innerHTML = `
+            <div class="history-header">
+                <div class="history-meta">
+                    <div class="loading-skeleton" style="width: 2rem; height: 2rem; border-radius: 50%;"></div>
+                    <div class="loading-skeleton title"></div>
+                </div>
+            </div>
+            <div class="loading-skeleton text"></div>
+            <div class="loading-skeleton text" style="width: 80%;"></div>
+        `;
+        container.appendChild(skeleton);
+    }
 } 

@@ -1,4 +1,5 @@
 :root {
+    /* Telegram Web App переменные */
     --tg-theme-bg-color: var(--bg-color, #ffffff);
     --tg-theme-text-color: var(--text-color, #000000);
     --tg-theme-hint-color: var(--hint-color, #999999);
@@ -7,83 +8,117 @@
     --tg-theme-button-text-color: var(--button-text-color, #ffffff);
     --tg-theme-secondary-bg-color: var(--secondary-bg-color, #f0f0f0);
     
-    /* Основной градиент от зеленого к синему */
+    /* Универсальная цветовая система */
     --primary-gradient: linear-gradient(135deg, #4CAF50 0%, #2196F3 100%);
     --primary-gradient-hover: linear-gradient(135deg, #45a049 0%, #1976D2 100%);
     --primary-gradient-light: linear-gradient(135deg, rgba(76, 175, 80, 0.1) 0%, rgba(33, 150, 243, 0.1) 100%);
-    --primary-gradient-medium: linear-gradient(135deg, rgba(76, 175, 80, 0.2) 0%, rgba(33, 150, 243, 0.2) 100%);
     
     --primary-color: #4CAF50;
-    --primary-dark: #45a049;
     --secondary-color: #2196F3;
     --accent-color: #FF9800;
     --danger-color: #f44336;
     --success-color: #4CAF50;
     --warning-color: #ff9800;
     --info-color: #2196F3;
-    --light-gray: #f8f9fa;
-    --medium-gray: #e9ecef;
-    --dark-gray: #6c757d;
-    --border-radius: 16px;
-    --border-radius-small: 12px;
-    --border-radius-large: 20px;
-    --shadow-light: 0 2px 8px rgba(0, 0, 0, 0.05);
-    --shadow-medium: 0 4px 15px rgba(0, 0, 0, 0.1);
-    --shadow-heavy: 0 8px 25px rgba(0, 0, 0, 0.15);
-    --shadow-gradient: 0 4px 15px rgba(76, 175, 80, 0.2), 0 2px 8px rgba(33, 150, 243, 0.1);
-    --gradient-primary: var(--primary-gradient);
-    --gradient-secondary: var(--primary-gradient);
-    --transition: all 0.3s ease;
+    
+    /* Универсальная система размеров (rem для масштабируемости) */
+    --space-xs: 0.25rem;   /* 4px */
+    --space-sm: 0.5rem;    /* 8px */
+    --space-md: 1rem;      /* 16px */
+    --space-lg: 1.5rem;    /* 24px */
+    --space-xl: 2rem;      /* 32px */
+    --space-xxl: 3rem;     /* 48px */
+    
+    /* Универсальные размеры шрифтов */
+    --font-xs: 0.75rem;    /* 12px */
+    --font-sm: 0.875rem;   /* 14px */
+    --font-md: 1rem;       /* 16px */
+    --font-lg: 1.125rem;   /* 18px */
+    --font-xl: 1.25rem;    /* 20px */
+    --font-xxl: 1.5rem;    /* 24px */
+    --font-xxxl: 2rem;     /* 32px */
+    
+    /* Универсальные скругления */
+    --radius-sm: 0.5rem;   /* 8px */
+    --radius-md: 0.75rem;  /* 12px */
+    --radius-lg: 1rem;     /* 16px */
+    --radius-xl: 1.25rem;  /* 20px */
+    
+    /* Универсальные тени */
+    --shadow-sm: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    --shadow-md: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    --shadow-gradient: 0 0.25rem 0.75rem rgba(76, 175, 80, 0.2);
+    
+    /* Универсальные переходы */
+    --transition-fast: all 0.15s ease;
+    --transition-normal: all 0.3s ease;
+    --transition-slow: all 0.5s ease;
+    
+    /* Высоты элементов (для консистентности) */
+    --height-input: 2.75rem;   /* 44px - оптимально для тача */
+    --height-button: 2.75rem;  /* 44px */
+    --height-header: 3.5rem;   /* 56px */
 }
 
-* {
+/* Сброс стилей и базовые настройки */
+*, *::before, *::after {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
 }
 
-body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
-    background-color: var(--tg-theme-bg-color);
-    color: var(--tg-theme-text-color);
-    line-height: 1.6;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+html {
+    font-size: 16px; /* Базовый размер для rem */
+    -webkit-text-size-adjust: 100%;
+    -ms-text-size-adjust: 100%;
 }
 
-#app {
-    max-width: 100%;
-    margin: 0;
-    min-height: 100vh;
-    position: relative;
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-size: var(--font-md);
+    line-height: 1.5;
+    color: var(--tg-theme-text-color);
+    background-color: var(--tg-theme-bg-color);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     overflow-x: hidden;
 }
 
-/* Заголовок */
+#app {
+    width: 100%;
+    min-height: 100vh;
+    position: relative;
+}
+
+/* === ЗАГОЛОВОК === */
 .header {
-    text-align: center;
-    padding: 20px;
     background: var(--primary-gradient);
     color: white;
-    margin-bottom: 20px;
+    text-align: center;
+    padding: var(--space-lg) var(--space-md);
     box-shadow: var(--shadow-gradient);
+    position: sticky;
+    top: 0;
+    z-index: 100;
 }
 
 .header h1 {
-    font-size: 24px;
+    font-size: var(--font-xxl);
     font-weight: 600;
-    margin-bottom: 8px;
+    margin-bottom: var(--space-xs);
 }
 
 .header p {
+    font-size: var(--font-sm);
     opacity: 0.9;
-    font-size: 14px;
 }
 
-/* Экраны */
+/* === ЭКРАНЫ === */
 .screen {
     display: none;
-    padding: 10px;
+    padding: var(--space-md);
+    min-height: calc(100vh - var(--height-header));
     animation: slideIn 0.3s ease;
 }
 
@@ -93,7 +128,7 @@ body {
 
 @keyframes slideIn {
     from {
-        transform: translateX(20px);
+        transform: translateX(1rem);
         opacity: 0;
     }
     to {
@@ -102,50 +137,55 @@ body {
     }
 }
 
-/* Заголовок экрана */
+/* === ЗАГОЛОВКИ ЭКРАНОВ === */
 .screen-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 20px;
-    padding-bottom: 15px;
+    margin-bottom: var(--space-lg);
+    padding-bottom: var(--space-md);
     border-bottom: 1px solid var(--tg-theme-secondary-bg-color);
 }
 
 .screen-header h2 {
-    font-size: 20px;
+    font-size: var(--font-xl);
     font-weight: 600;
     color: var(--tg-theme-text-color);
 }
 
-.back-btn {
+.back-btn, .clear-btn {
     background: none;
     border: none;
+    font-size: var(--font-md);
+    cursor: pointer;
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-md);
+    transition: var(--transition-fast);
+    min-height: var(--height-button);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.back-btn {
     background: var(--primary-gradient);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    font-size: 16px;
-    cursor: pointer;
-    padding: 8px;
-    border-radius: 8px;
-    transition: var(--transition);
+    font-weight: 500;
 }
 
 .back-btn:hover {
     background: var(--primary-gradient-light);
-    border-radius: 8px;
+    -webkit-background-clip: initial;
+    -webkit-text-fill-color: initial;
+    color: var(--primary-color);
 }
 
 .clear-btn {
-    background: none;
     border: 1px solid var(--danger-color);
     color: var(--danger-color);
-    padding: 6px 12px;
-    border-radius: 6px;
-    font-size: 12px;
-    cursor: pointer;
-    transition: var(--transition);
+    font-size: var(--font-xs);
 }
 
 .clear-btn:hover {
@@ -153,101 +193,122 @@ body {
     color: white;
 }
 
-/* Главное меню */
+/* === ГЛАВНОЕ МЕНЮ === */
 .menu-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 16px;
+    gap: var(--space-md);
+    max-width: 100%;
 }
 
 .menu-btn {
     background: white;
     border: 1px solid var(--tg-theme-secondary-bg-color);
-    border-radius: var(--border-radius);
-    padding: 20px;
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
     text-align: left;
     cursor: pointer;
-    transition: var(--transition);
-    box-shadow: var(--shadow);
+    transition: var(--transition-normal);
+    box-shadow: var(--shadow-sm);
+    width: 100%;
+    min-height: 5rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 
 .menu-btn:hover {
-    transform: translateY(-2px);
+    transform: translateY(-0.125rem);
     box-shadow: var(--shadow-gradient);
-    border: 2px solid transparent;
-    border-image: var(--primary-gradient) 1;
+    border-color: transparent;
 }
 
 .menu-icon {
-    font-size: 32px;
-    margin-bottom: 12px;
+    font-size: var(--font-xxl);
+    margin-bottom: var(--space-sm);
+    line-height: 1;
 }
 
 .menu-btn h3 {
-    font-size: 18px;
+    font-size: var(--font-lg);
     font-weight: 600;
     color: var(--tg-theme-text-color);
-    margin-bottom: 8px;
+    margin-bottom: var(--space-xs);
 }
 
 .menu-btn p {
-    font-size: 14px;
+    font-size: var(--font-sm);
     color: var(--tg-theme-hint-color);
     line-height: 1.4;
 }
 
-/* Формы */
-.question-form, .profile-form {
-    margin-bottom: 20px;
+/* === ФОРМЫ === */
+.question-form, .profile-form, .feedback-form {
+    width: 100%;
+    max-width: 100%;
 }
 
 .input-group {
-    margin-bottom: 20px;
+    margin-bottom: var(--space-lg);
+    width: 100%;
 }
 
 .input-group label {
     display: block;
-    margin-bottom: 8px;
+    font-size: var(--font-sm);
     font-weight: 500;
     color: var(--tg-theme-text-color);
+    margin-bottom: var(--space-sm);
 }
 
-textarea, select {
+textarea, select, input {
     width: 100%;
-    padding: 12px;
+    min-height: var(--height-input);
+    padding: var(--space-md);
     border: 1px solid var(--tg-theme-secondary-bg-color);
-    border-radius: 8px;
-    font-size: 16px;
+    border-radius: var(--radius-md);
+    font-size: var(--font-md);
     font-family: inherit;
-    background-color: var(--tg-theme-bg-color);
+    background-color: white;
     color: var(--tg-theme-text-color);
+    transition: var(--transition-fast);
     resize: vertical;
-    transition: var(--transition);
 }
 
-textarea:focus, select:focus {
+textarea {
+    min-height: 6rem;
+    line-height: 1.5;
+}
+
+textarea:focus, select:focus, input:focus {
     outline: none;
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 2px rgba(0, 136, 204, 0.2);
+    border: 2px solid var(--primary-color);
+    box-shadow: 0 0 0 0.125rem rgba(76, 175, 80, 0.2);
 }
 
-/* Кнопки */
-.primary-btn {
-    background: var(--primary-gradient);
-    color: white;
-    border: none;
-    padding: 14px 24px;
-    border-radius: var(--border-radius-small);
-    font-size: 16px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: var(--transition);
+/* === КНОПКИ === */
+.primary-btn, .secondary-btn {
     width: 100%;
+    min-height: var(--height-button);
+    padding: var(--space-md) var(--space-lg);
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: var(--font-md);
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition-normal);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    box-shadow: var(--shadow-gradient);
+    gap: var(--space-sm);
+    position: relative;
+    overflow: hidden;
+}
+
+.primary-btn {
+    background: var(--primary-gradient);
+    color: white;
+    box-shadow: var(--shadow-md);
     position: relative;
     overflow: hidden;
 }
@@ -265,8 +326,8 @@ textarea:focus, select:focus {
 
 .primary-btn:hover:not(:disabled) {
     background: var(--primary-gradient-hover);
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-heavy);
+    transform: translateY(-0.125rem);
+    box-shadow: var(--shadow-lg);
 }
 
 .primary-btn:hover::before {
@@ -279,731 +340,373 @@ textarea:focus, select:focus {
     transform: none;
 }
 
-/* Профиль */
-.profile-container {
-    padding: 20px;
-    max-width: 500px;
-    margin: 0 auto;
+.secondary-btn {
+    background: transparent;
+    color: var(--primary-color);
+    border: 1px solid var(--primary-color);
+}
+
+.secondary-btn:hover {
+    background: var(--primary-gradient-light);
+}
+
+/* === ПРОФИЛЬ === */
+.profile-container, .feedback-container {
+    max-width: 100%;
+    width: 100%;
 }
 
 .profile-info {
     display: flex;
     align-items: center;
-    gap: 16px;
-    padding: 20px;
-    background: var(--tg-theme-secondary-bg-color);
-    border-radius: 16px;
-    margin-bottom: 24px;
+    gap: var(--space-md);
+    margin-bottom: var(--space-xl);
+    padding: var(--space-lg);
+    background: white;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
 }
 
 .profile-avatar {
-    width: 60px;
-    height: 60px;
+    width: 3rem;
+    height: 3rem;
     border-radius: 50%;
     background: var(--primary-gradient);
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    box-shadow: var(--shadow-gradient);
 }
 
 .avatar-placeholder {
-    font-size: 28px;
+    font-size: var(--font-lg);
     color: white;
 }
 
 .profile-details h3 {
-    margin: 0 0 4px 0;
-    font-size: 18px;
+    font-size: var(--font-lg);
     font-weight: 600;
-    color: var(--tg-theme-text-color);
+    margin-bottom: var(--space-xs);
 }
 
 .profile-details p {
-    margin: 0;
-    font-size: 14px;
+    font-size: var(--font-sm);
     color: var(--tg-theme-hint-color);
 }
 
-/* === СЕКЦИИ ФОРМ === */
 .form-section {
-    background: var(--tg-theme-bg-color, white);
-    border: 2px solid var(--tg-theme-secondary-bg-color, #e5e5ea);
-    border-radius: var(--border-radius);
-    padding: 24px;
-    margin-bottom: 24px;
-    box-shadow: var(--shadow-light);
+    margin-bottom: var(--space-xl);
+    padding: var(--space-lg);
+    background: white;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+}
+
+.form-section h4 {
+    font-size: var(--font-md);
+    font-weight: 600;
+    margin-bottom: var(--space-md);
+    color: var(--tg-theme-text-color);
+}
+
+.select-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.select-wrapper select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: none;
+    padding-right: 2.5rem;
+}
+
+.select-icon {
+    position: absolute;
+    right: var(--space-md);
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    color: var(--tg-theme-hint-color);
+    font-size: var(--font-sm);
+}
+
+.field-description {
+    font-size: var(--font-xs);
+    color: var(--tg-theme-hint-color);
+    margin-top: var(--space-sm);
+    line-height: 1.4;
+}
+
+/* === ОТВЕТЫ И КОНТЕНТ === */
+.answer-container, .asked-question-container {
+    background: white;
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    margin-top: var(--space-lg);
+    box-shadow: var(--shadow-sm);
+}
+
+.answer-section h3, .asked-question-section h3 {
+    font-size: var(--font-md);
+    font-weight: 600;
+    margin-bottom: var(--space-md);
+    color: var(--primary-color);
+}
+
+/* Стилизация блока "Ваш вопрос" в стиле "Вам может быть интересно" */
+.asked-question-container {
+    background: var(--primary-gradient-light);
+    border-radius: var(--radius-lg);
+}
+
+.answer-text, .asked-question-text {
+    font-size: var(--font-md);
+    line-height: 1.6;
+    color: var(--tg-theme-text-color);
+}
+
+.answer-text h1, .answer-text h2, .answer-text h3 {
+    margin: var(--space-lg) 0 var(--space-md) 0;
+    font-weight: 600;
+}
+
+.answer-text h1 { font-size: var(--font-xxl); }
+.answer-text h2 { font-size: var(--font-xl); }
+.answer-text h3 { font-size: var(--font-lg); }
+
+.answer-text p {
+    margin-bottom: var(--space-md);
+}
+
+.answer-text ul, .answer-text ol {
+    margin: var(--space-md) 0;
+    padding-left: var(--space-lg);
+}
+
+.answer-text li {
+    margin-bottom: var(--space-sm);
+}
+
+.answer-text code {
+    background: var(--tg-theme-secondary-bg-color);
+    padding: 0.125rem 0.25rem;
+    border-radius: var(--radius-sm);
+    font-family: 'Monaco', 'Consolas', monospace;
+    font-size: 0.875em;
+}
+
+.answer-text strong {
+    font-weight: 600;
+}
+
+/* === ПРЕДЛОЖЕННЫЕ ВОПРОСЫ === */
+.suggested-questions, .previous-questions {
+    margin-top: var(--space-xl);
+    padding: var(--space-lg);
+    background: var(--primary-gradient-light);
+    border-radius: var(--radius-lg);
+}
+
+.suggested-questions h4, .previous-questions h4 {
+    font-size: var(--font-md);
+    font-weight: 600;
+    margin-bottom: var(--space-md);
+    color: var(--primary-color);
+}
+
+.suggested-list, .previous-list {
+    display: grid;
+    gap: var(--space-sm);
+}
+
+.suggested-question-btn, .previous-question-btn {
+    background: white;
+    border: 1px solid var(--primary-color);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+    text-align: left;
+    cursor: pointer;
+    transition: var(--transition-fast);
+    font-size: var(--font-sm);
+    color: var(--tg-theme-text-color);
+}
+
+.suggested-question-btn:hover, .previous-question-btn:hover {
+    background: var(--primary-color);
+    color: white;
+    transform: translateY(-0.0625rem);
+}
+
+/* === ВОПРОСЫ И ИСТОРИЯ === */
+.questions-list, .history-list {
+    display: grid;
+    gap: var(--space-md);
+}
+
+.question-item, .history-item {
+    background: white;
+    border: 2px solid var(--tg-theme-secondary-bg-color);
+    border-radius: var(--radius-lg);
+    padding: var(--space-lg);
+    cursor: pointer;
+    transition: var(--transition-normal);
+    box-shadow: var(--shadow-sm);
     position: relative;
     overflow: hidden;
 }
 
-.form-section::before {
+.question-item::before, .history-item::before {
     content: '';
     position: absolute;
     top: 0;
     left: 0;
-    width: 6px;
+    width: 4px;
     height: 100%;
     background: var(--primary-gradient);
     transform: scaleY(0);
     transition: transform 0.3s ease;
 }
 
-.form-section:hover::before {
-    transform: scaleX(1);
+.question-item:hover::before, .history-item:hover::before {
+    transform: scaleY(1);
 }
-
-.form-section h4 {
-    font-size: 18px;
-    font-weight: 700;
-    margin-bottom: 16px;
-    color: var(--tg-theme-text-color, #333);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.form-section h4::before {
-    content: '✨';
-    font-size: 20px;
-}
-
-/* === СЕЛЕКТЫ === */
-.select-wrapper {
-    position: relative;
-    margin-bottom: 16px;
-}
-
-.select-wrapper select {
-    appearance: none;
-    background: var(--tg-theme-bg-color, white);
-    border: 2px solid var(--tg-theme-secondary-bg-color, #e5e5ea);
-    border-radius: var(--border-radius-small);
-    padding: 16px 50px 16px 20px;
-    font-size: 16px;
-    color: var(--tg-theme-text-color, #333);
-    cursor: pointer;
-    transition: var(--transition);
-    box-shadow: var(--shadow-light);
-    width: 100%;
-    min-height: auto;
-}
-
-.select-wrapper select:focus {
-    outline: none;
-    border: 2px solid transparent;
-    background-image: var(--primary-gradient), linear-gradient(white, white);
-    background-origin: border-box;
-    background-clip: padding-box, border-box;
-    box-shadow: var(--shadow-gradient);
-    transform: translateY(-2px);
-}
-
-.select-wrapper select:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-    background: var(--tg-theme-secondary-bg-color, #f8f9fa);
-}
-
-.select-icon {
-    position: absolute;
-    right: 16px;
-    top: 50%;
-    transform: translateY(-50%);
-    pointer-events: none;
-    font-size: 20px;
-    color: var(--tg-theme-hint-color, #666);
-    transition: var(--transition);
-}
-
-.select-wrapper:hover .select-icon {
-    background: var(--primary-gradient);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-
-.field-description {
-    font-size: 14px;
-    color: var(--tg-theme-hint-color, #666);
-    margin-top: 8px;
-    padding-left: 4px;
-}
-
-/* === ДЕЙСТВИЯ === */
-.profile-actions, .form-actions {
-    display: flex;
-    gap: 16px;
-    justify-content: center;
-    margin-top: 32px;
-    flex-wrap: wrap;
-}
-
-.full-width {
-    width: 100%;
-}
-
-.btn-icon {
-    font-size: 18px;
-}
-
-/* === КНОПКИ УРОВНЕЙ === */
-.level-buttons {
-    display: flex;
-    gap: 12px;
-    margin-bottom: 24px;
-    flex-wrap: wrap;
-}
-
-.level-btn {
-    background: var(--tg-theme-secondary-bg-color, #f8f9fa);
-    border: 2px solid transparent;
-    border-radius: var(--border-radius-small);
-    padding: 12px 20px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: var(--transition);
-    color: var(--tg-theme-hint-color, #666);
-    position: relative;
-    overflow: hidden;
-}
-
-.level-btn::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: var(--primary-gradient);
-    transition: left 0.3s ease;
-    z-index: -1;
-}
-
-.level-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-light);
-}
-
-.level-btn:hover::before {
-    left: 0;
-}
-
-.level-btn:hover {
-    color: white;
-    border-color: var(--primary-color);
-}
-
-.level-btn.active {
-    background: var(--primary-gradient);
-    color: white;
-    border-color: transparent;
-    box-shadow: var(--shadow-gradient);
-}
-
-/* === КОНТЕЙНЕРЫ ОТВЕТОВ === */
-.answer-container {
-    background: transparent;
-    border-radius: 0;
-    padding: 0;
-    margin: 0 0 24px 0;
-    box-shadow: none;
-    border: none;
-    position: relative;
-    overflow: visible;
-    width: 100%;
-}
-
-
-
-/* === ЗАДАННЫЕ ВОПРОСЫ === */
-.asked-question-container {
-    background: linear-gradient(135deg, #f8f9ff 0%, #e8f2ff 100%);
-    border: 2px solid var(--secondary-color);
-    border-radius: var(--border-radius);
-    padding: 24px;
-    margin-bottom: 24px;
-    position: relative;
-    overflow: hidden;
-    box-shadow: var(--shadow-light);
-}
-
-.asked-question-section h3 {
-    color: var(--secondary-color);
-    font-size: 18px;
-    font-weight: 700;
-    margin-bottom: 16px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.asked-question-section h3::before {
-    content: '❓';
-    font-size: 20px;
-}
-
-.asked-question-text {
-    background: white;
-    border: 2px solid var(--secondary-color);
-    border-radius: var(--border-radius-small);
-    padding: 16px 20px;
-    font-size: 16px;
-    line-height: 1.6;
-    color: var(--tg-theme-text-color, #333);
-    box-shadow: var(--shadow-light);
-    position: relative;
-}
-
-
-
-/* === ТЕКСТ ОТВЕТОВ === */
-.answer-text {
-    background: transparent;
-    border: none;
-    border-radius: 0;
-    padding: 0 15px;
-    margin: 0;
-    font-size: 16px;
-    line-height: 1.7;
-    color: var(--tg-theme-text-color, #333);
-    box-shadow: none;
-    position: relative;
-    overflow: visible;
-    width: 100%;
-}
-
-
-
-.answer-text h1,
-.answer-text h2,
-.answer-text h3 {
-    background: var(--primary-gradient);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    font-weight: 700;
-    margin: 24px 0 16px 0;
-}
-
-.answer-text h1 {
-    font-size: 24px;
-    border-bottom: 2px solid transparent;
-    border-image: var(--primary-gradient) 1;
-    padding-bottom: 8px;
-}
-
-.answer-text h2 {
-    font-size: 20px;
-}
-
-.answer-text h3 {
-    font-size: 18px;
-}
-
-.answer-text p {
-    margin-bottom: 16px;
-    text-align: justify;
-}
-
-.answer-text ul,
-.answer-text ol {
-    background: var(--primary-gradient-light);
-    border: none;
-    border-radius: var(--border-radius-small);
-    padding: 16px 20px;
-    margin: 16px 0;
-}
-
-.answer-text li {
-    margin-bottom: 8px;
-    padding-left: 8px;
-}
-
-.answer-text ol li {
-    list-style: decimal;
-}
-
-.answer-text ul li {
-    list-style: none;
-    position: relative;
-}
-
-.answer-text ul li::marker {
-    content: '•';
-    color: var(--primary-color);
-    font-weight: bold;
-}
-
-.answer-text ol li::marker {
-    color: var(--primary-color);
-    font-weight: bold;
-}
-
-.answer-text code {
-    background: rgba(76, 175, 80, 0.1);
-    color: var(--primary-color);
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-family: 'Monaco', 'Menlo', monospace;
-    font-size: 14px;
-}
-
-.answer-text strong,
-.answer-text b {
-    color: var(--primary-color);
-    font-weight: 700;
-}
-
-.answer-text em {
-    color: var(--secondary-color);
-    font-style: italic;
-}
-
-/* === РЕКОМЕНДУЕМЫЕ ВОПРОСЫ === */
-.suggested-questions {
-    background: var(--primary-gradient-light);
-    border: 2px solid transparent;
-    border-image: var(--primary-gradient) 1;
-    border-radius: var(--border-radius);
-    padding: 24px;
-    margin: 24px 0;
-    box-shadow: var(--shadow-gradient);
-    position: relative;
-    overflow: hidden;
-}
-
-
-
-.previous-questions {
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-    border: 2px solid var(--dark-gray);
-    border-radius: var(--border-radius);
-    padding: 24px;
-    margin: 24px 0;
-    box-shadow: var(--shadow-light);
-    position: relative;
-    overflow: hidden;
-}
-
-
-
-.suggested-questions h4,
-.previous-questions h4 {
-    font-size: 18px;
-    font-weight: 700;
-    margin-bottom: 20px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.suggested-questions h4 {
-    background: var(--primary-gradient);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-
-.suggested-questions h4::before {
-    content: '💡';
-    font-size: 20px;
-}
-
-.previous-questions h4 {
-    color: var(--dark-gray);
-}
-
-.previous-questions h4::before {
-    content: '📚';
-    font-size: 20px;
-}
-
-.suggested-list,
-.previous-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-/* === КНОПКИ ВОПРОСОВ === */
-.suggested-question-btn {
-    background: var(--tg-theme-bg-color, white);
-    border: 2px solid transparent;
-    border-image: var(--primary-gradient) 1;
-    border-radius: var(--border-radius-small);
-    padding: 16px 20px;
-    cursor: pointer;
-    transition: var(--transition);
-    font-size: 15px;
-    line-height: 1.5;
-    color: var(--tg-theme-text-color, #333);
-    position: relative;
-    overflow: hidden;
-    box-shadow: var(--shadow-gradient);
-    text-align: left;
-    width: 100%;
-    word-wrap: break-word;
-    white-space: normal;
-}
-
-
-
-
-
-.suggested-question-btn:hover {
-    border-image: var(--primary-gradient-hover) 1;
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-heavy);
-    background: var(--primary-gradient-light);
-}
-
-.suggested-question-btn:active {
-    transform: translateY(0);
-    box-shadow: var(--shadow-light);
-}
-
-.previous-question-btn {
-    background: var(--tg-theme-bg-color, white);
-    border: 2px solid var(--tg-theme-secondary-bg-color, #e5e5ea);
-    border-radius: var(--border-radius-small);
-    padding: 16px 20px;
-    cursor: pointer;
-    transition: var(--transition);
-    font-size: 15px;
-    line-height: 1.5;
-    color: var(--tg-theme-hint-color, #666);
-    position: relative;
-    overflow: hidden;
-    box-shadow: var(--shadow-light);
-    text-align: left;
-    width: 100%;
-    word-wrap: break-word;
-    white-space: normal;
-}
-
-
-
-
-
-.previous-question-btn:hover {
-    border-color: var(--dark-gray);
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-medium);
-    background: var(--tg-theme-bg-color, white);
-    color: var(--tg-theme-text-color, #000);
-}
-
-.previous-question-btn:active {
-    transform: translateY(0);
-    box-shadow: var(--shadow-light);
-}
-
-/* === НУМЕРАЦИЯ ВОПРОСОВ === */
-.suggested-question {
-    display: flex;
-    align-items: flex-start;
-    gap: 16px;
-    padding: 16px 20px;
-    background: var(--tg-theme-bg-color, white);
-    border: 2px solid transparent;
-    border-image: var(--primary-gradient) 1;
-    border-radius: var(--border-radius-small);
-    cursor: pointer;
-    transition: var(--transition);
-    position: relative;
-    overflow: hidden;
-    box-shadow: var(--shadow-gradient);
-}
-
-.suggested-question:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-medium);
-    background: linear-gradient(135deg, white 0%, #f0fff4 100%);
-}
-
-.question-number {
-    background: var(--gradient-primary);
-    color: white;
-    border-radius: 50%;
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    font-size: 14px;
-    flex-shrink: 0;
-    box-shadow: var(--shadow-light);
-}
-
-.question-text {
-    flex: 1;
-    font-size: 15px;
-    line-height: 1.5;
-    color: var(--tg-theme-text-color, #333);
-}
-
-/* === СЕКЦИЯ ОТВЕТОВ === */
-.answer-section {
-    margin-top: 32px;
-}
-
-.answer-section h3 {
-    font-size: 20px;
-    font-weight: 700;
-    margin-bottom: 20px;
-    color: var(--primary-color);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.answer-section h3::before {
-    content: '🤖';
-    font-size: 24px;
-}
-
-/* === ФИЛЬТРЫ И ВКЛАДКИ === */
-.filter-tabs {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 24px;
-    background: var(--tg-theme-secondary-bg-color, #f8f9fa);
-    padding: 8px;
-    border-radius: var(--border-radius-small);
-    box-shadow: var(--shadow-light);
-    flex-wrap: wrap;
-}
-
-.tab-btn {
-    background: transparent;
-    border: none;
-    border-radius: var(--border-radius-small);
-    padding: 12px 20px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: var(--transition);
-    color: var(--tg-theme-hint-color, #666);
-    position: relative;
-    overflow: hidden;
-}
-
-.tab-btn::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: var(--primary-gradient);
-    transition: left 0.3s ease;
-    z-index: -1;
-}
-
-.tab-btn:hover {
-    color: var(--tg-theme-text-color, #333);
-}
-
-.tab-btn:hover::before {
-    left: 0;
-}
-
-.tab-btn:hover {
-    color: white;
-}
-
-.tab-btn.active {
-    background: var(--primary-gradient);
-    color: white;
-    box-shadow: var(--shadow-gradient);
-}
-
-/* === СПИСКИ === */
-.questions-list, .history-list {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    margin-top: 20px;
-}
-
-.question-item, .history-item {
-    background: var(--tg-theme-bg-color, white);
-    border: 2px solid var(--tg-theme-secondary-bg-color, #e5e5ea);
-    border-radius: var(--border-radius);
-    padding: 20px;
-    cursor: pointer;
-    transition: var(--transition);
-    box-shadow: var(--shadow-light);
-    position: relative;
-    overflow: hidden;
-}
-
-
-
-
 
 .question-item:hover, .history-item:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-medium);
+    transform: translateY(-0.25rem);
+    box-shadow: var(--shadow-gradient);
     border-color: var(--primary-color);
+}
+
+.question-header, .history-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: var(--space-sm);
 }
 
 .question-title, .history-title {
-    font-size: 16px;
-    font-weight: 700;
-    margin-bottom: 8px;
-    color: var(--tg-theme-text-color, #333);
+    font-size: var(--font-md);
+    font-weight: 600;
+    color: var(--tg-theme-text-color);
     line-height: 1.4;
+    flex: 1;
+    margin-right: var(--space-sm);
 }
 
 .question-category, .history-date {
     display: inline-block;
     background: var(--primary-gradient);
     color: white;
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 12px;
+    padding: 0.25rem 0.75rem;
+    border-radius: 1rem;
+    font-size: var(--font-xs);
     font-weight: 600;
-    margin-bottom: 12px;
-    box-shadow: var(--shadow-gradient);
+    box-shadow: var(--shadow-sm);
+    flex-shrink: 0;
+}
+
+.history-date {
+    background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
 }
 
 .question-preview, .history-preview {
-    color: var(--tg-theme-hint-color, #666);
-    font-size: 14px;
+    font-size: var(--font-sm);
+    color: var(--tg-theme-hint-color);
     line-height: 1.5;
-    margin-top: 8px;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    margin-top: var(--space-sm);
 }
 
-/* === СПИННЕРЫ === */
+/* Иконки для типов вопросов */
+.question-icon, .history-icon {
+    font-size: var(--font-lg);
+    margin-right: var(--space-sm);
+    flex-shrink: 0;
+}
+
+.question-meta, .history-meta {
+    display: flex;
+    align-items: center;
+    margin-bottom: var(--space-sm);
+}
+
+/* Специальные стили для разных категорий */
+.question-item[data-category="role"] .question-category {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+}
+
+.question-item[data-category="specialization"] .question-category {
+    background: linear-gradient(135deg, #007bff 0%, #6f42c1 100%);
+}
+
+.question-item[data-category="general"] .question-category {
+    background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);
+    color: #000;
+}
+
+/* Анимация появления элементов */
+.question-item, .history-item {
+    animation: slideInUp 0.3s ease-out;
+}
+
+@keyframes slideInUp {
+    from {
+        opacity: 0;
+        transform: translateY(1rem);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Состояние загрузки */
+.loading-skeleton {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: loading 1.5s infinite;
+    border-radius: var(--radius-md);
+    height: 1rem;
+    margin-bottom: var(--space-sm);
+}
+
+.loading-skeleton.title {
+    height: 1.25rem;
+    width: 70%;
+}
+
+.loading-skeleton.text {
+    height: 0.875rem;
+    width: 100%;
+}
+
+.loading-skeleton.date {
+    height: 0.75rem;
+    width: 30%;
+}
+
+@keyframes loading {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+/* === ЗАГРУЗКА === */
 .spinner {
-    border: 3px solid var(--tg-theme-secondary-bg-color, #f3f3f3);
-    border-top: 3px solid transparent;
-    border-image: var(--primary-gradient) 1;
+    width: 1.5rem;
+    height: 1.5rem;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top: 2px solid white;
     border-radius: 50%;
-    width: 24px;
-    height: 24px;
     animation: spin 1s linear infinite;
-    display: inline-block;
-}
-
-.spinner-large {
-    border: 4px solid var(--tg-theme-secondary-bg-color, #f3f3f3);
-    border-top: 4px solid transparent;
-    border-image: var(--primary-gradient) 1;
-    border-radius: 50%;
-    width: 48px;
-    height: 48px;
-    animation: spin 1s linear infinite;
-    display: inline-block;
 }
 
 @keyframes spin {
@@ -1011,742 +714,108 @@ textarea:focus, select:focus {
     100% { transform: rotate(360deg); }
 }
 
-/* === МОДАЛЬНЫЕ ОКНА === */
-.modal {
-    display: none;
-    position: fixed;
-    z-index: 1000;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(4px);
-    animation: fadeIn 0.3s ease-out;
-}
-
-.modal.active {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-}
-
-.modal-content {
-    background: var(--tg-theme-bg-color, white);
-    border-radius: var(--border-radius-large);
-    max-width: 90%;
-    max-height: 90%;
-    overflow-y: auto;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-    position: relative;
-    animation: slideIn 0.3s ease-out;
-}
-
-.modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 24px 24px 0 24px;
-    border-bottom: 2px solid var(--tg-theme-secondary-bg-color, #e5e5ea);
-    margin-bottom: 24px;
-}
-
-.modal-header h3 {
-    font-size: 20px;
-    font-weight: 700;
-    color: var(--tg-theme-text-color, #333);
-    margin: 0;
-}
-
-.close-btn {
-    background: var(--tg-theme-secondary-bg-color, #f8f9fa);
-    border: none;
-    border-radius: 50%;
-    width: 40px;
-    height: 40px;
-    font-size: 20px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: var(--transition);
-    color: var(--tg-theme-hint-color, #666);
-    position: relative;
-    overflow: hidden;
-}
-
-.close-btn::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: var(--danger-color);
-    border-radius: 50%;
-    transform: scale(0);
-    transition: transform 0.3s ease;
-    z-index: -1;
-}
-
-.close-btn:hover::before {
-    transform: scale(1);
-}
-
-.close-btn:hover {
-    color: white;
-    transform: scale(1.1);
-}
-
-.modal-body {
-    padding: 0 24px 24px 24px;
-    max-height: 70vh;
-    overflow-y: auto;
-}
-
-/* === ДЕТАЛИ ИСТОРИИ === */
-.history-detail {
-    max-width: 800px;
-    width: 100%;
-}
-
-.question-block,
-.answer-block {
-    background: var(--tg-theme-secondary-bg-color, #f8f9fa);
-    border-radius: var(--border-radius);
-    padding: 20px;
-    margin-bottom: 20px;
-    border-left: 4px solid var(--primary-color);
-    box-shadow: var(--shadow-light);
-}
-
-.question-block h4,
-.answer-block h4 {
-    font-size: 16px;
-    font-weight: 700;
-    margin-bottom: 12px;
-    color: var(--tg-theme-text-color, #333);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.question-block h4::before {
-    content: '❓';
-    font-size: 18px;
-}
-
-.answer-block h4::before {
-    content: '🤖';
-    font-size: 18px;
-}
-
-.question-block p,
-.answer-block p {
-    margin: 0;
-    line-height: 1.6;
-    color: var(--tg-theme-text-color, #333);
-    white-space: pre-wrap;
-    word-wrap: break-word;
-}
-
-.question-block {
-    background: linear-gradient(135deg, #f8f9ff 0%, #e8f2ff 100%);
-    border-left-color: var(--secondary-color);
-}
-
-.answer-block {
-    background: linear-gradient(135deg, #f0fff4 0%, #e8f5e8 100%);
-    border-left-color: var(--primary-color);
-}
-
-/* === ЭЛЕМЕНТЫ ВОПРОСОВ === */
-.question-item {
-    background: var(--tg-theme-bg-color, white);
-    border: 2px solid var(--tg-theme-secondary-bg-color, #e5e5ea);
-    border-radius: var(--border-radius);
-    padding: 20px;
-    margin-bottom: 16px;
-    cursor: pointer;
-    transition: var(--transition);
-    position: relative;
-    overflow: hidden;
-    box-shadow: var(--shadow-light);
-}
-
-
-
-
-
-.question-item:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-medium);
-    border-color: var(--primary-color);
-}
-
-.question-title {
-    font-size: 16px;
-    font-weight: 700;
-    margin-bottom: 8px;
-    color: var(--tg-theme-text-color, #333);
-    line-height: 1.4;
-}
-
-.question-category {
-    display: inline-block;
-    background: var(--gradient-primary);
-    color: white;
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 600;
-    margin-bottom: 12px;
-    box-shadow: var(--shadow-light);
-}
-
-.question-preview {
-    color: var(--tg-theme-hint-color, #666);
-    font-size: 14px;
-    line-height: 1.5;
-    margin-top: 8px;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-}
-
-/* === ЛОАДЕР === */
 .loader {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background: linear-gradient(135deg, rgba(76, 175, 80, 0.95) 0%, rgba(33, 150, 243, 0.95) 100%);
+    background: rgba(255, 255, 255, 0.95);
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 9999;
-    backdrop-filter: blur(10px);
-}
-
-.loader-content {
-    text-align: center;
-    color: white;
-    background: rgba(255, 255, 255, 0.1);
-    padding: 40px;
-    border-radius: var(--border-radius-large);
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-    backdrop-filter: blur(20px);
+    flex-direction: column;
+    z-index: 1000;
 }
 
 .loader-spinner {
-    width: 60px;
-    height: 60px;
-    border: 4px solid rgba(255, 255, 255, 0.3);
-    border-top: 4px solid white;
+    width: 3rem;
+    height: 3rem;
+    border: 3px solid var(--tg-theme-secondary-bg-color);
+    border-top: 3px solid var(--primary-color);
     border-radius: 50%;
     animation: spin 1s linear infinite;
-    margin: 0 auto 20px;
-    position: relative;
-}
-
-.loader-spinner::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 20px;
-    height: 20px;
-    background: white;
-    border-radius: 50%;
-    transform: translate(-50%, -50%);
-    animation: pulse 2s ease-in-out infinite;
 }
 
 .loader-text {
-    font-size: 18px;
-    font-weight: 700;
-    margin-bottom: 8px;
-    animation: textPulse 2s ease-in-out infinite;
+    margin-top: var(--space-md);
+    font-size: var(--font-md);
+    color: var(--tg-theme-text-color);
 }
 
-.loader-subtext {
-    font-size: 14px;
-    opacity: 0.8;
-    animation: textPulse 2s ease-in-out infinite 0.5s;
+/* === МОДАЛЬНЫЕ ОКНА === */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: var(--transition-normal);
+    padding: var(--space-md);
 }
 
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
+.modal.active {
+    opacity: 1;
+    visibility: visible;
 }
 
-@keyframes pulse {
-    0%, 100% {
-        transform: translate(-50%, -50%) scale(0.8);
-        opacity: 1;
-    }
-    50% {
-        transform: translate(-50%, -50%) scale(1.2);
-        opacity: 0.7;
-    }
+.modal-content {
+    background: white;
+    border-radius: var(--radius-lg);
+    width: 100%;
+    max-width: 90vw;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: var(--shadow-lg);
 }
 
-@keyframes textPulse {
-    0%, 100% {
-        opacity: 1;
-    }
-    50% {
-        opacity: 0.7;
-    }
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-lg);
+    border-bottom: 1px solid var(--tg-theme-secondary-bg-color);
 }
 
-.loader p {
-    margin: 8px 0;
-    font-size: 16px;
+.modal-header h3 {
+    font-size: var(--font-lg);
+    font-weight: 600;
 }
 
-/* === УТИЛИТАРНЫЕ КЛАССЫ === */
-.hidden {
-    display: none !important;
+.close-btn {
+    background: none;
+    border: none;
+    font-size: var(--font-xl);
+    cursor: pointer;
+    color: var(--tg-theme-hint-color);
+    padding: var(--space-sm);
+    border-radius: var(--radius-md);
+    transition: var(--transition-fast);
 }
 
-.text-center {
-    text-align: center;
+.close-btn:hover {
+    background: var(--tg-theme-secondary-bg-color);
+    color: var(--tg-theme-text-color);
 }
 
-.mb-20 {
-    margin-bottom: 20px;
+.modal-body {
+    padding: var(--space-lg);
 }
 
-/* === АДАПТИВНОСТЬ === */
-@media (max-width: 480px) {
-    .screen {
-        padding: 5px;
-        margin-top: -16px;
-    }
-
-    .header {
-        padding: 24px 16px;
-        border-radius: 0 0 var(--border-radius) var(--border-radius);
-    }
-
-    .header h1 {
-        font-size: 24px;
-    }
-
-    .header p {
-        font-size: 14px;
-    }
-
-    .menu-grid {
-        grid-template-columns: 1fr;
-        gap: 16px;
-    }
-
-    .menu-btn {
-        padding: 24px 20px;
-    }
-
-    .menu-icon {
-        font-size: 40px;
-    }
-
-    .menu-btn h3 {
-        font-size: 18px;
-    }
-
-    .screen-header h2 {
-        font-size: 20px;
-        margin-left: 12px;
-    }
-
-    .back-btn, .clear-btn {
-        padding: 10px 14px;
-        font-size: 14px;
-    }
-
-    .form-section {
-        padding: 20px;
-        margin-bottom: 20px;
-    }
-
-    .form-section h4 {
-        font-size: 16px;
-    }
-
-    .level-buttons {
-        flex-direction: column;
-        gap: 8px;
-    }
-
-    .level-btn {
-        width: 100%;
-        padding: 12px 16px;
-    }
-
-    .filter-tabs {
-        flex-wrap: wrap;
-        gap: 6px;
-        padding: 6px;
-    }
-
-    .tab-btn {
-        flex: 1;
-        min-width: 80px;
-        padding: 10px 16px;
-        font-size: 13px;
-    }
-
-    /* Модальные окна на мобильных */
-    .modal {
-        padding: 10px;
-    }
-
-    .modal-content {
-        max-height: 95vh;
-        width: 100%;
-        border-radius: var(--border-radius);
-    }
-
-    .modal-header {
-        padding: 20px 20px 0 20px;
-        margin-bottom: 20px;
-    }
-
-    .modal-header h3 {
-        font-size: 18px;
-    }
-
-    .close-btn {
-        width: 36px;
-        height: 36px;
-        font-size: 18px;
-    }
-
-    .modal-body {
-        padding: 0 20px 20px 20px;
-    }
-
-    .question-block,
-    .answer-block {
-        padding: 16px;
-        margin-bottom: 16px;
-    }
-
-    .question-block h4,
-    .answer-block h4 {
-        font-size: 14px;
-    }
-
-    .question-item, .history-item {
-        padding: 16px;
-        margin-bottom: 12px;
-    }
-
-    .question-title, .history-title {
-        font-size: 15px;
-    }
-
-    .question-category, .history-date {
-        font-size: 11px;
-        padding: 3px 10px;
-    }
-
-    .question-preview, .history-preview {
-        font-size: 13px;
-    }
-
-    /* Связанные вопросы на мобильных */
-    .suggested-questions, .previous-questions {
-        padding: 20px;
-        margin: 20px 0;
-    }
-
-    .suggested-questions h4,
-    .previous-questions h4 {
-        font-size: 16px;
-        margin-bottom: 16px;
-    }
-
-    .suggested-question-btn,
-    .previous-question-btn {
-        padding: 14px 16px;
-        font-size: 14px;
-    }
-
-    .suggested-question {
-        padding: 14px 16px;
-        gap: 12px;
-    }
-
-    .question-number {
-        width: 28px;
-        height: 28px;
-        font-size: 12px;
-    }
-
-    .question-text {
-        font-size: 14px;
-    }
-
-    /* Ответы на мобильных */
-    .answer-container {
-        padding: 0;
-        margin: 0 0 20px 0;
-        border-radius: 0;
-        width: 100%;
-    }
-
-    .asked-question-container {
-        padding: 20px;
-        margin-bottom: 20px;
-    }
-
-    .asked-question-section h3 {
-        font-size: 16px;
-    }
-
-    .asked-question-text {
-        padding: 14px 16px;
-        font-size: 15px;
-    }
-
-    .answer-text {
-        padding: 0 10px;
-        margin: 0;
-        font-size: 15px;
-        width: 100%;
-    }
-
-    .answer-text h1 {
-        font-size: 20px;
-    }
-
-    .answer-text h2 {
-        font-size: 18px;
-    }
-
-    .answer-text h3 {
-        font-size: 16px;
-    }
-
-    .answer-section h3 {
-        font-size: 18px;
-    }
-
-    .profile-container, .feedback-container, 
-    .questions-container, .history-container {
-        padding: 16px;
-    }
-
-    .profile-info, .info-hero {
-        padding: 24px 20px;
-        margin-bottom: 24px;
-    }
-
-    .profile-details h3, .info-hero h3 {
-        font-size: 20px;
-    }
-
-    .profile-avatar, .info-icon {
-        width: 64px;
-        height: 64px;
-        font-size: 28px;
-        margin-bottom: 12px;
-    }
-
-    .loader-content {
-        padding: 32px 24px;
-        border-radius: var(--border-radius);
-    }
-
-    .loader-spinner {
-        width: 48px;
-        height: 48px;
-        border-width: 3px;
-    }
-
-    .loader-text {
-        font-size: 16px;
-    }
-
-    .loader-subtext {
-        font-size: 13px;
-    }
-}
-
-/* Темная тема */
-@media (prefers-color-scheme: dark) {
-    :root {
-        --bg-color: #1a1a1a;
-        --text-color: #ffffff;
-        --hint-color: #8e8e93;
-        --secondary-bg-color: #2c2c2e;
-    }
-    
-    .menu-btn, .answer-container, .question-item, .history-item {
-        background: var(--tg-theme-secondary-bg-color);
-        border-color: #3a3a3c;
-    }
-    
-    textarea, select {
-        background-color: var(--tg-theme-secondary-bg-color);
-        border-color: #3a3a3c;
-    }
-    
-    /* Модальные окна в темной теме */
-    .modal-content {
-        background: var(--tg-theme-bg-color);
-        border: 1px solid #3a3a3c;
-    }
-    
-    .modal-header {
-        border-bottom-color: #3a3a3c;
-    }
-    
-    .question-block,
-    .answer-block {
-        background: var(--tg-theme-secondary-bg-color);
-        border-left-color: var(--tg-theme-link-color);
-    }
-    
-    .question-item {
-        background: var(--tg-theme-bg-color);
-        border-color: #3a3a3c;
-    }
-    
-    .question-item:hover {
-        border-color: var(--tg-theme-link-color);
-    }
-    
-    /* Связанные вопросы в темной теме */
-    .suggested-questions {
-        background: linear-gradient(135deg, var(--tg-theme-secondary-bg-color) 0%, rgba(255, 255, 255, 0.05) 100%);
-        border-color: #3a3a3c;
-    }
-    
-    .previous-questions {
-        background: linear-gradient(135deg, var(--tg-theme-secondary-bg-color) 0%, rgba(108, 117, 125, 0.1) 100%);
-        border-color: #3a3a3c;
-    }
-    
-    .suggested-question-btn {
-        background: var(--tg-theme-bg-color);
-        border-color: #3a3a3c;
-    }
-    
-    .suggested-question-btn:hover {
-        border-color: var(--tg-theme-link-color);
-        box-shadow: 0 8px 25px rgba(255, 255, 255, 0.1);
-    }
-    
-    .previous-question-btn {
-        background: var(--tg-theme-bg-color);
-        border-color: #3a3a3c;
-        color: var(--tg-theme-hint-color);
-    }
-    
-    .previous-question-btn:hover {
-        border-color: #6c757d;
-        box-shadow: 0 8px 25px rgba(108, 117, 125, 0.2);
-        color: var(--tg-theme-text-color);
-    }
-    
-    /* Ответы в темной теме */
-    .answer-text {
-        background: var(--tg-theme-secondary-bg-color);
-        border-color: #3a3a3c;
-        color: var(--tg-theme-text-color);
-    }
-    
-    /* Заданный вопрос в темной теме */
-    .asked-question-container {
-        background: var(--tg-theme-bg-color);
-        border-color: #3a3a3c;
-    }
-    
-    .asked-question-text {
-        background: var(--tg-theme-secondary-bg-color);
-        border-color: var(--tg-theme-link-color);
-        color: var(--tg-theme-text-color);
-    }
-    
-    /* Лоадер в темной теме */
-    .loader {
-        background-color: rgba(0, 0, 0, 0.95);
-    }
-    
-    .loader-spinner {
-        border-color: #3a3a3c;
-        border-top-color: var(--tg-theme-link-color);
-    }
-    
-    .loader-spinner::after {
-        background: var(--tg-theme-link-color);
-    }
-    
-    .loader-text {
-        color: var(--tg-theme-text-color);
-    }
-    
-    .loader-subtext {
-        color: var(--tg-theme-hint-color);
-    }
-    
-    /* Markdown элементы в темной теме */
-    .answer-text h1,
-    .answer-text h2,
-    .answer-text h3 {
-        color: var(--tg-theme-link-color);
-    }
-    
-    .answer-text h1 {
-        border-bottom-color: var(--tg-theme-link-color);
-    }
-    
-    .answer-text code {
-        background-color: rgba(255, 255, 255, 0.1);
-        color: var(--tg-theme-link-color);
-    }
-    
-    .answer-text strong {
-        color: var(--tg-theme-link-color);
-    }
-    
-    /* Списки в темной теме */
-    .answer-text ul,
-    .answer-text ol {
-        background: rgba(255, 255, 255, 0.05);
-        border: none;
-    }
-    
-    .answer-text ul li::marker,
-    .answer-text ol li::marker {
-        color: var(--tg-theme-link-color);
-    }
-}
-
-/* Экран обратной связи */
-.feedback-container {
-    padding: 20px;
-    max-width: 600px;
-    margin: 0 auto;
-}
-
-/* Улучшенная героическая секция */
+/* === ОБРАТНАЯ СВЯЗЬ === */
 .feedback-hero {
     text-align: center;
-    margin-bottom: 32px;
-    padding: 32px 24px;
+    padding: var(--space-lg) var(--space-md);
     background: var(--primary-gradient);
-    border-radius: 20px;
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--space-xl);
     color: white;
     position: relative;
     overflow: hidden;
@@ -1765,162 +834,54 @@ textarea:focus, select:focus {
 }
 
 .feedback-icon-large {
-    font-size: 64px;
-    margin-bottom: 16px;
+    font-size: 2.5rem;
+    margin-bottom: var(--space-sm);
     animation: bounce 2s ease-in-out infinite;
+    position: relative;
+    z-index: 1;
 }
 
 .feedback-hero h3 {
-    margin: 0 0 12px 0;
-    font-size: 24px;
-    font-weight: 700;
+    font-size: var(--font-lg);
+    font-weight: 600;
+    margin-bottom: var(--space-sm);
     position: relative;
     z-index: 1;
 }
 
 .feedback-hero p {
-    margin: 0;
-    font-size: 16px;
-    line-height: 1.5;
+    font-size: var(--font-sm);
     opacity: 0.95;
+    line-height: 1.4;
     position: relative;
     z-index: 1;
 }
 
-/* Улучшенная форма */
-.feedback-form {
-    margin-bottom: 32px;
-}
-
-.feedback-form .input-group {
-    margin-bottom: 24px;
-}
-
-.feedback-form label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 12px;
-    font-weight: 600;
-    color: var(--tg-theme-text-color, #000);
-    font-size: 16px;
-}
-
-.label-text {
-    flex: 1;
-}
-
-.label-optional {
-    background: var(--primary-gradient);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    font-size: 14px;
-}
-
-.textarea-wrapper {
-    position: relative;
-}
-
-.feedback-form textarea {
-    width: 100%;
-    min-height: 120px;
-    padding: 20px;
-    border: 3px solid var(--tg-theme-secondary-bg-color, #e5e5ea);
-    border-radius: 16px;
-    font-size: 16px;
-    font-family: inherit;
-    color: var(--tg-theme-text-color, #000);
-    background: var(--tg-theme-bg-color, white);
-    resize: vertical;
-    transition: all 0.3s ease;
-    box-sizing: border-box;
-    line-height: 1.5;
-}
-
-.feedback-form textarea:focus {
-    outline: none;
-    border: 3px solid transparent;
-    border-image: var(--primary-gradient) 1;
-    box-shadow: var(--shadow-gradient);
-    transform: translateY(-2px);
-}
-
-.feedback-form textarea::placeholder {
-    color: var(--tg-theme-hint-color, #999);
-    font-style: italic;
-}
-
 .char-counter {
-    position: absolute;
-    bottom: 12px;
-    right: 16px;
-    font-size: 12px;
-    color: var(--tg-theme-hint-color, #999);
-    background: var(--tg-theme-bg-color, white);
-    padding: 4px 8px;
-    border-radius: 8px;
-    border: 1px solid var(--tg-theme-secondary-bg-color, #e5e5ea);
+    text-align: right;
+    font-size: var(--font-xs);
+    color: var(--tg-theme-hint-color);
+    margin-top: var(--space-xs);
 }
 
-/* Улучшенная кнопка отправки */
-.feedback-submit-btn {
-    background: var(--primary-gradient);
-    border: none;
-    padding: 18px 24px;
-    font-size: 16px;
-    font-weight: 700;
-    border-radius: 16px;
-    position: relative;
-    overflow: hidden;
-    box-shadow: var(--shadow-gradient);
-}
-
-.feedback-submit-btn::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-    transition: left 0.5s;
-}
-
-.feedback-submit-btn:hover::before {
-    left: 100%;
-}
-
-.feedback-submit-btn:hover {
-    background: var(--primary-gradient-hover);
-    transform: translateY(-3px);
-    box-shadow: var(--shadow-heavy);
-}
-
-/* Улучшенное сообщение об успехе */
 .feedback-success {
     text-align: center;
-    padding: 40px 24px;
+    padding: var(--space-xxl) var(--space-lg);
     background: var(--primary-gradient-light);
-    border-radius: 20px;
-    border: 3px solid transparent;
-    border-image: var(--primary-gradient) 1;
-    position: relative;
-    overflow: hidden;
-    box-shadow: var(--shadow-gradient);
+    border-radius: var(--radius-lg);
 }
 
-.success-animation {
-    position: relative;
-    margin-bottom: 24px;
-}
-
-.feedback-success .success-icon {
-    font-size: 80px;
-    margin-bottom: 0;
+.success-icon {
+    font-size: 4rem;
+    margin-bottom: var(--space-lg);
     animation: successBounce 0.8s ease-out;
     position: relative;
     z-index: 2;
+}
+
+.feedback-success {
+    position: relative;
+    overflow: hidden;
 }
 
 .success-confetti {
@@ -1948,45 +909,6 @@ textarea:focus, select:focus {
 .confetti:nth-child(4) { left: 70%; animation-delay: 0.6s; background: #1976D2; }
 .confetti:nth-child(5) { left: 90%; animation-delay: 0.8s; background: #66BB6A; }
 
-.feedback-success h3 {
-    margin: 0 0 16px 0;
-    color: var(--primary-color, #4CAF50);
-    font-size: 26px;
-    font-weight: 700;
-}
-
-.feedback-success p {
-    margin: 0 0 32px 0;
-    color: var(--tg-theme-text-color, #000);
-    font-size: 16px;
-    line-height: 1.6;
-}
-
-.success-actions {
-    display: flex;
-    gap: 16px;
-    justify-content: center;
-    flex-wrap: wrap;
-}
-
-.success-actions .primary-btn,
-.success-actions .secondary-btn {
-    min-width: 160px;
-    padding: 14px 20px;
-    border-radius: 12px;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-}
-
-/* Анимации */
-@keyframes shimmer {
-    0%, 100% { transform: translateX(-100%) rotate(45deg); }
-    50% { transform: translateX(100%) rotate(45deg); }
-}
-
 @keyframes successBounce {
     0% { transform: scale(0) rotate(0deg); }
     50% { transform: scale(1.2) rotate(180deg); }
@@ -2004,61 +926,135 @@ textarea:focus, select:focus {
     }
 }
 
+@keyframes shimmer {
+    0%, 100% { transform: translateX(-100%) rotate(45deg); }
+    50% { transform: translateX(100%) rotate(45deg); }
+}
+
 @keyframes bounce {
     0%, 20%, 50%, 80%, 100% {
         transform: translateY(0);
     }
     40% {
-        transform: translateY(-10px);
+        transform: translateY(-0.5rem);
     }
     60% {
-        transform: translateY(-5px);
+        transform: translateY(-0.25rem);
     }
 }
 
 @keyframes shake {
     0%, 100% { transform: translateX(0); }
-    10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
-    20%, 40%, 60%, 80% { transform: translateX(5px); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-0.25rem); }
+    20%, 40%, 60%, 80% { transform: translateX(0.25rem); }
 }
 
-/* Адаптивность для обратной связи */
-@media (max-width: 480px) {
-    .feedback-container {
-        padding: 16px;
+/* === УТИЛИТЫ === */
+.hidden { display: none !important; }
+.text-center { text-align: center; }
+.full-width { width: 100%; }
+
+/* === АДАПТИВНОСТЬ === */
+
+/* Планшеты */
+@media (min-width: 768px) {
+    .menu-grid {
+        grid-template-columns: repeat(2, 1fr);
     }
     
-    .feedback-hero {
-        padding: 24px 16px;
-        margin-bottom: 24px;
+    .modal-content {
+        max-width: 32rem;
     }
     
-    .feedback-icon-large {
-        font-size: 48px;
-        margin-bottom: 12px;
+    .screen {
+        padding: var(--space-lg);
+    }
+}
+
+/* Десктоп */
+@media (min-width: 1024px) {
+    .menu-grid {
+        grid-template-columns: repeat(2, 1fr);
+        max-width: 48rem;
+        margin: 0 auto;
     }
     
-    .feedback-hero h3 {
-        font-size: 20px;
+    #app {
+        max-width: 64rem;
+        margin: 0 auto;
     }
     
-    .feedback-success {
-        padding: 32px 16px;
+    .screen {
+        padding: var(--space-xl);
+    }
+}
+
+/* Очень маленькие экраны */
+@media (max-width: 320px) {
+    html {
+        font-size: 14px; /* Уменьшаем базовый размер */
     }
     
-    .feedback-success .success-icon {
-        font-size: 64px;
-        margin-bottom: 16px;
+    .header {
+        padding: var(--space-md);
     }
     
-    .success-actions {
-        flex-direction: column;
-        align-items: stretch;
+    .screen {
+        padding: var(--space-sm);
     }
     
-    .success-actions .primary-btn,
-    .success-actions .secondary-btn {
-        min-width: auto;
-        width: 100%;
+    .menu-btn {
+        min-height: 4rem;
+        padding: var(--space-md);
+    }
+}
+
+/* Темная тема */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --tg-theme-bg-color: #1a1a1a;
+        --tg-theme-text-color: #ffffff;
+        --tg-theme-hint-color: #999999;
+        --tg-theme-secondary-bg-color: #2a2a2a;
+    }
+    
+    .menu-btn, .answer-container, .question-item, .history-item, 
+    .form-section, .profile-info, .modal-content {
+        background: #2a2a2a;
+        border-color: #3a3a3a;
+    }
+    
+    textarea, select, input {
+        background: #2a2a2a;
+        border-color: #3a3a3a;
+        color: white;
+    }
+    
+    .suggested-question-btn, .previous-question-btn {
+        background: #2a2a2a;
+        border-color: var(--primary-color);
+        color: white;
+    }
+    
+    .loader {
+        background: rgba(26, 26, 26, 0.95);
+    }
+}
+
+/* Улучшения для touch-устройств */
+@media (hover: none) and (pointer: coarse) {
+    .menu-btn:hover,
+    .question-item:hover,
+    .history-item:hover,
+    .primary-btn:hover,
+    .suggested-question-btn:hover {
+        transform: none; /* Убираем hover-эффекты на touch */
+    }
+    
+    .menu-btn:active,
+    .question-item:active,
+    .history-item:active,
+    .primary-btn:active {
+        transform: scale(0.98); /* Добавляем активный эффект */
     }
 } 

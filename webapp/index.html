@@ -2,10 +2,38 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="format-detection" content="telephone=no">
     <title>RAG Ментор</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="stylesheet" href="style.css">
+    <style>
+        /* Критический CSS для предотвращения FOUC */
+        body { 
+            margin: 0; 
+            padding: 0; 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            line-height: 1.5;
+            overflow-x: hidden;
+        }
+        .screen { display: none; }
+        .screen.active { display: block; }
+        #app { 
+            width: 100vw; 
+            min-height: 100vh; 
+            min-height: 100dvh; /* Новые единицы для мобильных браузеров */
+            overflow-x: hidden;
+        }
+        
+        /* Fix для iOS Safari */
+        @supports (-webkit-touch-callout: none) {
+            #app { 
+                min-height: -webkit-fill-available; 
+            }
+        }
+    </style>
 </head>
 <body>
     <div id="app">
@@ -166,8 +194,6 @@
                         </div>
                         <p class="field-description">Укажите вашу техническую специализацию</p>
                     </div>
-                    
-
                 </div>
                 
                 <div class="profile-actions">
@@ -199,29 +225,25 @@
                     <div class="input-group">
                         <label for="feedback-input">
                             <span class="label-text">Ваш отзыв или предложение</span>
-                            <span class="label-optional">*</span>
                         </label>
                         <div class="textarea-wrapper">
                             <textarea 
                                 id="feedback-input" 
-                                placeholder="Расскажите подробнее о вашем опыте использования GigaMentor..."
-                                rows="5"
+                                placeholder="Поделитесь своими мыслями о приложении, предложениями по улучшению или сообщите о проблемах..."
                                 maxlength="1000"
+                                oninput="updateCharCounter()"
                             ></textarea>
-                            <div class="char-counter">
-                                <span id="char-count">0</span>/1000
-                            </div>
+                            <div id="char-counter" class="char-counter">0/1000</div>
                         </div>
                     </div>
                     
-                    <button id="send-feedback" class="primary-btn feedback-submit-btn full-width" onclick="sendFeedback()">
-                        <span class="btn-icon">🚀</span>
-                        <span class="btn-text">Отправить отзыв</span>
+                    <button id="feedback-submit-btn" class="primary-btn full-width" onclick="sendFeedback()">
+                        <span class="btn-text">📤 Отправить отзыв</span>
                         <div class="spinner hidden"></div>
                     </button>
                 </div>
-                
-                <!-- Улучшенное сообщение об успешной отправке -->
+
+                <!-- Сообщение об успехе -->
                 <div id="feedback-success" class="feedback-success hidden">
                     <div class="success-animation">
                         <div class="success-icon">🎉</div>
@@ -233,47 +255,38 @@
                             <div class="confetti"></div>
                         </div>
                     </div>
-                    <h3>Спасибо за ваш отзыв!</h3>
-                    <p>Ваше сообщение принято! Мы обязательно его рассмотрим и учтем при дальнейшем развитии GigaMentor.</p>
+                    <h3>Спасибо за отзыв!</h3>
+                    <p>Ваше мнение очень важно для нас. Мы обязательно рассмотрим ваши предложения.</p>
                     <div class="success-actions">
-                        <button class="primary-btn" onclick="showScreen('main-menu')">
-                            <span class="btn-icon">🏠</span>
-                            Вернуться в меню
+                        <button class="primary-btn" onclick="resetFeedbackForm()">
+                            <span>✨ Оставить еще отзыв</span>
                         </button>
-                        <button class="secondary-btn" onclick="resetFeedbackForm()">
-                            <span class="btn-icon">✍️</span>
-                            Оставить еще отзыв
+                        <button class="secondary-btn" onclick="showScreen('main-menu')">
+                            <span>🏠 В главное меню</span>
                         </button>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Модальное окно для истории -->
+        <div id="history-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Детали диалога</h3>
+                    <button class="close-btn" onclick="closeHistoryModal()">×</button>
+                </div>
+                <div class="modal-body" id="history-detail">
+                    <!-- Содержимое будет заполнено динамически -->
                 </div>
             </div>
         </div>
 
         <!-- Лоадер -->
         <div id="loader" class="loader hidden">
-            <div class="loader-content">
-                <div class="loader-spinner"></div>
-                <h2 class="loader-text">Ожидайте...</h2>
-                <p class="loader-subtext">GigaMentor обрабатывает ваш запрос...</p>
-            </div>
+            <div class="loader-spinner"></div>
+            <div class="loader-text">Обрабатываем ваш запрос...</div>
         </div>
-
-        <!-- Модальное окно истории диалога -->
-        <div id="history-modal" class="modal hidden">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3>История диалога</h3>
-                    <button class="close-btn" onclick="closeHistoryModal()">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <div id="history-detail" class="history-detail">
-                        <!-- Содержимое истории будет добавлено динамически -->
-                    </div>
-                </div>
-            </div>
-        </div>
-
-
     </div>
 
     <script src="app.js"></script>

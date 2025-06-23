@@ -344,23 +344,51 @@ async def handle_cached_request(question_id, question, user_id, role, specializa
     try:
         if question_id in cache_dict:
             # Используем общий кеш
-            cached_answer = cache_dict[question_id]
+            cached_answer_parts = cache_dict[question_id]
             logger.info(f"Найден ответ в общем кеше для question_id={question_id}")
         elif question_id in cache_by_specialization and specialization in cache_by_specialization[question_id]:
             # Используем кеш по специализации
-            cached_answer = cache_by_specialization[question_id][specialization]
+            cached_answer_parts = cache_by_specialization[question_id][specialization]
             logger.info(f"Найден ответ в кеше по специализации для question_id={question_id}, specialization={specialization}")
         else:
             return None
         
-        # Сохраняем в историю
-        save_to_history(user_id, question, cached_answer, role, specialization)
+        # Объединяем части ответа (как в телеграм боте)
+        if isinstance(cached_answer_parts, list):
+            full_cached_answer = "".join(cached_answer_parts)
+        else:
+            full_cached_answer = str(cached_answer_parts)
         
-        return {
-            "answer": cached_answer,
-            "suggested_questions": [],
-            "cached": True
-        }
+        # Сохраняем в историю
+        save_to_history(user_id, question, full_cached_answer, role, specialization)
+        
+        # Генерируем предложенные вопросы для кешированных ответов
+        try:
+            suggested_questions = []
+            if full_cached_answer:
+                # Создаем payload для генерации связанных вопросов
+                suggestion_payload = {
+                    'user_question': question,
+                    'bot_answer': full_cached_answer[:2000],  # Обрезаем как в боте
+                    'role': role,
+                    'specialization': specialization
+                }
+                
+                # Отправляем запрос на генерацию связанных вопросов
+                suggested_questions = await generate_suggested_questions_async(suggestion_payload)
+            
+            return {
+                "answer": full_cached_answer,
+                "suggested_questions": suggested_questions[:3],  # Берем только первые 3
+                "cached": True
+            }
+        except Exception as e:
+            logger.warning(f"Ошибка генерации связанных вопросов для кешированного ответа: {e}")
+            return {
+                "answer": full_cached_answer,
+                "suggested_questions": [],
+                "cached": True
+            }
         
     except Exception as e:
         logger.error(f"Ошибка при работе с кешем: {e}")
@@ -399,8 +427,8 @@ def get_question_id_from_text(question_text):
     
     return question_mapping.get(question_text, "888")  # 888 для свободного ввода
 
-def get_dialog_context(user_id, max_messages=6):
-    """Получает контекст диалога из последних сообщений пользователя"""
+def get_dialog_context(user_id, max_messages=12):
+    """Получает контекст диалога из последних сообщений пользователя (как в телеграм боте)"""
     try:
         conn = get_db_connection()
         if not conn:
@@ -421,21 +449,22 @@ def get_dialog_context(user_id, max_messages=6):
         if not messages:
             return "[]"
         
-        # Формируем контекст в формате: "Пользователь: вопрос\nАссистент: ответ"
-        context_parts = []
+        # Формируем контекст в JSON формате (как в телеграм боте)
+        dialogue_context = []
         # Обрабатываем сообщения в обратном порядке (от старых к новым)
         for msg in reversed(messages):
-            if msg["role"] == "user":
-                context_parts.append(f"Пользователь: {msg['message']}")
-            elif msg["role"] == "assistant":
-                context_parts.append(f"Ассистент: {msg['message']}")
+            dialogue_context.append({
+                "role": msg["role"],
+                "content": msg["message"]
+            })
         
-        # Ограничиваем длину контекста (максимум 1500 символов)
-        context_text = "\n".join(context_parts)
-        if len(context_text) > 1500:
-            context_text = context_text[:1500] + "..."
+        # Ограничиваем контекст до последних 12 сообщений (6 пар: 6 user + 6 assistant)
+        if len(dialogue_context) > 12:
+            dialogue_context = dialogue_context[-12:]
         
-        return context_text if context_text else "[]"
+        # Возвращаем в JSON формате (как в телеграм боте)
+        import json
+        return json.dumps(dialogue_context, ensure_ascii=False, indent=4)
         
     except Exception as e:
         logger.error(f"Ошибка получения контекста диалога: {e}")
@@ -452,7 +481,7 @@ async def send_websocket_question(question, user_id, role="", specialization="",
             # Получаем контекст диалога для свободного ввода (id=888)
             context = "[]"
             if int(question_id) == 888:
-                context = get_dialog_context(user_id, max_messages=6)
+                context = get_dialog_context(user_id, max_messages=12)
                 logger.info(f"Контекст диалога для пользователя {user_id}: {context[:100]}...")
             
             logger.info(f"Отправляем вопрос: '{question}' с question_id: {question_id}, role: '{role}', specialization: '{specialization}'")
@@ -465,44 +494,66 @@ async def send_websocket_question(question, user_id, role="", specialization="",
             await websocket.send(context)           # 5. context (теперь с реальным контекстом для id=888)
             await websocket.send("1")               # 6. count (1 для первого вопроса)
             
-            # Получаем потоковый ответ
+            # Получаем потоковый ответ (аналогично телеграм боту)
             full_answer = ""
-            empty_count = 0
-            max_empty = 10  # Максимум пустых chunks подряд
+            empty_message_count = 0
+            max_empty_messages = 10  # Максимум пустых сообщений подряд
             
             try:
                 while True:
-                    chunk = await asyncio.wait_for(websocket.recv(), timeout=30.0)
-                    if chunk:
-                        empty_count = 0  # Сбрасываем счетчик пустых chunks
-                        full_answer += chunk
+                    try:
+                        # Добавляем таймаут для recv (как в телеграм боте)
+                        answer_part = await asyncio.wait_for(websocket.recv(), timeout=30.0)
+                    except asyncio.TimeoutError:
+                        logger.warning("Таймаут ожидания ответа от RAG сервиса")
+                        break
+                    
+                    if answer_part:
+                        empty_message_count = 0  # Сбрасываем счетчик пустых сообщений
+                        # Обрабатываем символы для форматирования (как в телеграм боте)
+                        wanted_simbols = [".", ":"]
+                        for char in answer_part:
+                            if char in wanted_simbols:
+                                answer_part += "\n"
+                        
+                        full_answer += answer_part
                     else:
-                        empty_count += 1
-                        if empty_count >= max_empty:
-                            break  # Слишком много пустых chunks подряд
-            except asyncio.TimeoutError:
-                logger.warning("Таймаут ожидания ответа от RAG сервиса")
+                        # Пустое сообщение может означать конец потока
+                        empty_message_count += 1
+                        logger.debug(f"Получено пустое сообщение #{empty_message_count} от WebSocket")
+                        
+                        # Если получили слишком много пустых сообщений подряд - выходим
+                        if empty_message_count >= max_empty_messages:
+                            logger.info(f"Получено {empty_message_count} пустых сообщений подряд, завершаем обработку")
+                            break
+                        
+                        # Небольшая пауза и продолжаем (как в телеграм боте)
+                        await asyncio.sleep(0.1)
+                        continue
+                        
             except websockets.exceptions.ConnectionClosed:
+                logger.info("WebSocket соединение закрыто")
                 pass  # WebSocket закрылся - это нормально
             
             logger.info(f"Получен ответ от RAG сервиса: '{full_answer[:100]}...' (длина: {len(full_answer)})")
             
-            # Кешируем ответ (аналогично Telegram боту)
-            if question_id and int(question_id) not in [777, 888, 999]:
-                answer_for_cache = full_answer.strip()
+            # Кешируем ответы только для предопределенных вопросов (как в телеграм боте)
+            if question_id and int(question_id) not in [777, 888]:
+                # Сохраняем ответ как массив из одного элемента (как в телеграм боте)
+                answer_for_cache = [full_answer.strip()]
                 question_id_int = int(question_id)
                 
-                # Определяем тип кеширования на основе question_id
-                if question_id_int in [1, 2, 3, 4, 5, 18, 19, 20, 21]:
+                # Определяем тип кеширования точно как в телеграм боте
+                if question_id_int not in [1, 2, 3, 4, 5, 18, 19, 20]:
+                    # Общий кеш
+                    cache_dict[question_id_int] = answer_for_cache
+                    logger.info(f"Ответ закеширован в общем кеше: question_id={question_id_int}")
+                else:
                     # Кешируем по специализации
                     if question_id_int not in cache_by_specialization:
                         cache_by_specialization[question_id_int] = {}
                     cache_by_specialization[question_id_int][specialization] = answer_for_cache
                     logger.info(f"Ответ закеширован по специализации: question_id={question_id_int}, specialization={specialization}")
-                else:
-                    # Общий кеш
-                    cache_dict[question_id_int] = answer_for_cache
-                    logger.info(f"Ответ закеширован в общем кеше: question_id={question_id_int}")
             
             return {
                 "answer": full_answer.strip(),
@@ -587,6 +638,39 @@ def ask_library_question():
         
         # Сохраняем в историю
         save_to_history(user_id, question, result.get('answer', ''), role, specialization)
+        
+        # Генерируем предложенные вопросы для библиотечных вопросов (аналогично Telegram боту)
+        try:
+            suggested_questions = []
+            if result.get('answer'):
+                # Создаем payload для генерации связанных вопросов
+                suggestion_payload = {
+                    'user_question': question,
+                    'bot_answer': result['answer'][:2000],  # Обрезаем как в боте
+                    'role': role,
+                    'specialization': specialization
+                }
+                
+                # Отправляем запрос на генерацию связанных вопросов
+                suggestion_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(suggestion_loop)
+                
+                try:
+                    suggested_questions = suggestion_loop.run_until_complete(
+                        generate_suggested_questions_async(suggestion_payload)
+                    )
+                except Exception as e:
+                    logger.warning(f"Не удалось сгенерировать связанные вопросы: {e}")
+                    suggested_questions = []
+                finally:
+                    suggestion_loop.close()
+            
+            # Добавляем связанные вопросы к результату
+            result['suggested_questions'] = suggested_questions[:3]  # Берем только первые 3
+            
+        except Exception as e:
+            logger.warning(f"Ошибка генерации связанных вопросов: {e}")
+            result['suggested_questions'] = []
         
         return jsonify(result)
         
@@ -824,6 +908,28 @@ def save_to_history(user_id, question, answer, role="", specialization=""):
         
     except Exception as e:
         logger.error(f"Ошибка сохранения в историю: {e}")
+
+async def generate_suggested_questions_async(payload):
+    """Асинхронная генерация связанных вопросов через WebSocket"""
+    try:
+        uri = "ws://127.0.0.1:8000/ws_suggest"
+        async with websockets.connect(uri, timeout=10) as websocket:
+            # Отправляем payload
+            await websocket.send(json.dumps(payload))
+            
+            # Получаем ответ
+            response = await asyncio.wait_for(websocket.recv(), timeout=15.0)
+            questions = json.loads(response)
+            
+            if isinstance(questions, list):
+                return questions
+            else:
+                logger.warning(f"Неожиданный формат ответа: {questions}")
+                return []
+                
+    except Exception as e:
+        logger.warning(f"Ошибка генерации связанных вопросов через WebSocket: {e}")
+        return []
 
 @app.route('/api/suggest_questions', methods=['POST'])
 def suggest_questions():

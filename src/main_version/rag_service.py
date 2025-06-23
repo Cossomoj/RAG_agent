@@ -52,8 +52,8 @@ def create_docs_from_txt(folder_path):
 
     # Разделяем текст на чанки
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=500,  # Размер чанка
-        chunk_overlap=100  # Перекрытие между чанками
+        chunk_size=800,  # Увеличено с 500 до 800 для лучшего контекста
+        chunk_overlap=200  # Увеличено с 100 до 200 для лучшего перекрытия
     )
     split_docs = text_splitter.split_documents(docs)
     return split_docs
@@ -79,19 +79,19 @@ embedding = HuggingFaceEmbeddings(
 
 # Создание векторного хранилища 1
 vector_store_1 = FAISS.from_documents(split_docs_1, embedding=embedding)
-embedding_retriever_1 = vector_store_1.as_retriever(search_kwargs={"k": 5})
+embedding_retriever_1 = vector_store_1.as_retriever(search_kwargs={"k": 10})
 
 # Создание векторного хранилища 2
 vector_store_2 = FAISS.from_documents(split_docs_2, embedding=embedding)
-embedding_retriever_2 = vector_store_2.as_retriever(search_kwargs={"k": 5})
+embedding_retriever_2 = vector_store_2.as_retriever(search_kwargs={"k": 10})
 
 # Создание векторного хранилища 3
 vector_store_3 = FAISS.from_documents(split_docs_3, embedding=embedding)
-embedding_retriever_3 = vector_store_3.as_retriever(search_kwargs={"k": 5})
+embedding_retriever_3 = vector_store_3.as_retriever(search_kwargs={"k": 10})
 
 # Создание векторного хранилища со всеми данными
 vector_store_full = FAISS.from_documents(split_docs_full, embedding=embedding)
-embedding_retriever_full = vector_store_full.as_retriever(search_kwargs={"k": 5})
+embedding_retriever_full = vector_store_full.as_retriever(search_kwargs={"k": 15})
 
 
 # Инициализация модели GigaChat
@@ -179,23 +179,25 @@ async def generate_semantic_search_queries(question, role, specialization):
 Роль пользователя: {role if role else "не указана"}
 Специализация: {specialization if specialization else "не указана"}
 
-Сгенерируй 4-5 альтернативных поисковых запросов для поиска в корпоративной базе знаний по карьерному развитию в IT.
+Сгенерируй 5-6 альтернативных поисковых запросов для поиска в корпоративной базе знаний по карьерному развитию, ИПР, лидерству и управлению командой в IT.
 
 Альтернативные запросы должны:
 1. Включать точные фразы из корпоративных документов
-2. Фокусироваться на конкретных практиках и процентах
-3. Использовать ключевые термины: "рассказывать о своей работе", "маркетинг", "80-85%", "15-20%", "конференции", "митапы", "пруфы", "хвастаетесь"
+2. Фокусироваться на конкретных практиках и процессах
+3. Использовать ключевые термины: "ИПР", "индивидуальный план развития", "лид компетенции", "ожидания", "встречи 1-2-1", "цели развития", "компетенции", "обратная связь", "мониторинг прогресса"
 4. Быть короткими и точными для векторного поиска
-5. Покрывать разные аспекты продвижения достижений
+5. Покрывать разные аспекты развития и лидерства
+6. Учитывать роль и специализацию пользователя
 
-Примеры ТОЧНЫХ запросов из документов:
-- "рассказывать о своей работе навык"
-- "80-85% делание работы 15-20% маркетинг"
-- "конференции митапы пруфы хвастаетесь достижениями"
-- "маркетинг того что вы сделали"
-- "куда можно сходить рассказать о работе"
+Примеры ТОЧНЫХ запросов для поиска:
+- "лид компетенции ожидания ИПР"
+- "индивидуальный план развития встречи"
+- "цели развития компетенции аналитик"
+- "обратная связь мониторинг прогресса"
+- "встречи 1-2-1 лид команда"
+- "профессиональное развитие специалист"
 
-Ответь только списком из 4-5 запросов, каждый с новой строки, без нумерации и дополнительного текста:
+Ответь только списком из 5-6 запросов, каждый с новой строки, без нумерации и дополнительного текста:
 """
     
     try:
@@ -215,7 +217,7 @@ async def generate_semantic_search_queries(question, role, specialization):
         print(f"Ошибка при генерации альтернативных запросов: {e}")
         return [question]  # Возвращаем только исходный вопрос в случае ошибки
 
-async def enhanced_vector_search(question, role, specialization, embedding_retriever, top_k=5):
+async def enhanced_vector_search(question, role, specialization, embedding_retriever, top_k=8):
     """
     Улучшенный векторный поиск с использованием множественных семантических запросов
     """
@@ -546,24 +548,16 @@ async def websocket_endpoint(websocket: WebSocket):
     )
     
     if should_use_rag:
-        # Для специальных промптов используем улучшенный поиск
-        if question_id in [777, 888] and use_rag_for_special:
-            retrieval_chain = await create_enhanced_retrieval_chain(
-                role=role,
-                specialization=specialization,
-                question_id=question_id,
-                embedding_retriever=embedding_retriever,
-                prompt_template=prompt_template
-            )
-        else:
-            retrieval_chain = create_retrieval_chain_from_folder(
-                role=role,
-                specialization=specialization,
-                question_id=question_id,
-                embedding_retriever=embedding_retriever,
-                prompt_template=prompt_template
-            )
-    
+        # Используем улучшенный поиск для ВСЕХ типов вопросов
+        print(f"Используем улучшенный векторный поиск для question_id={question_id}")
+        retrieval_chain = await create_enhanced_retrieval_chain(
+            role=role,
+            specialization=specialization,
+            question_id=question_id,
+            embedding_retriever=embedding_retriever,
+            prompt_template=prompt_template
+        )
+
     unwanted_chars = ["*", "**"]
     
     # Эта ветка больше не используется, так как промпты 777,888 всегда используют RAG
