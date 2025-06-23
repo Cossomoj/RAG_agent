@@ -536,7 +536,7 @@ async def websocket_endpoint(websocket: WebSocket):
     if should_use_rag:
         # Для обычных вопросов (1-24) используем конкретные документы
         if question_id in range(1, 25):  # Вопросы 1-24
-            document_path = get_specific_document_for_question(question_id, specialization)
+            document_path = get_specific_document_for_question(question_id, specialization, role)
             
             if document_path:
                 print(f"🎯 Используем конкретный документ для вопроса {question_id}: {document_path}")
@@ -878,13 +878,13 @@ class RAGDocumentManager:
 
 # Добавляем функции для работы с конкретными документами
 
-def get_specific_document_for_question(question_id, specialization=None):
+def get_specific_document_for_question(question_id, specialization=None, role=None):
     """
-    Возвращает конкретный документ для каждого вопроса с учетом специализации
+    Возвращает конкретный документ для каждого вопроса с учетом специализации и роли
     """
     # Маппинг специализаций на суффиксы файлов
     spec_mapping = {
-        "python": "python",
+        "python": "py",
         "java": "java", 
         "web": "web",
         "тестировщик": "test",
@@ -894,63 +894,197 @@ def get_specific_document_for_question(question_id, specialization=None):
         "продуктовый аналитик": "bsa"
     }
     
-    spec_suffix = spec_mapping.get(specialization.lower() if specialization else "", "python")
-    
-    # Основной маппинг вопросов на документы
-    document_mapping = {
-        # Вопросы для специалистов/стажеров (docs_pack_1)
-        1: "txt_docs/docs_pack_1/А1.txt",  # Что ожидать от PO/PM
-        2: "txt_docs/docs_pack_2/_M2_.txt",  # Что ожидать от лида компетенции (ИПР)
-        3: f"txt_docs/docs_pack_1/Матрица_компетенций_{spec_suffix.upper() if spec_suffix == 'python' else spec_suffix}.txt",  # Матрица компетенций
-        
-        # Вопросы для лидов компетенции (docs_pack_2)
-        4: f"txt_docs/docs_pack_2/A2_{spec_suffix}.txt" if spec_suffix != "python" else "txt_docs/docs_pack_2/A2_py.txt",  # Обязанности специалиста
-        5: f"txt_docs/docs_pack_2/С2_{spec_suffix}.txt" if spec_suffix != "python" else "txt_docs/docs_pack_2/С2_py.txt",  # Что ожидать от PO/PM (лид)
-        6: "txt_docs/docs_pack_2/Д2.txt",  # Поиск кандидатов
-        7: "txt_docs/docs_pack_2/Е2.txt",  # Проведение собеседований
-        8: "txt_docs/docs_pack_2/Н2.txt",  # Работа со стажерами и джунами
-        9: "txt_docs/docs_pack_2/_I2_.txt",  # Проведение 1-2-1
-        10: "txt_docs/docs_pack_2/_K2_.txt",  # Встречи компетенции
-        11: "txt_docs/docs_pack_2/_L2_.txt",  # Построение структуры компетенции
-        12: "txt_docs/docs_pack_2/_M2_.txt",  # Создание ИПР
-        13: "txt_docs/docs_pack_2/П2.txt",  # Онбординг нового сотрудника
-        
-        # Вопросы для PO/PM (docs_pack_3)
-        14: "txt_docs/docs_pack_3/С3.txt",  # Оптимизация процессов разработки
-        15: f"txt_docs/docs_pack_3/A3_{spec_suffix}.txt" if spec_suffix != "python" else "txt_docs/docs_pack_3/A3_py.txt",  # Что ожидать от специалиста
-        16: f"txt_docs/docs_pack_3/Б3_{spec_suffix}.txt" if spec_suffix != "python" else "txt_docs/docs_pack_3/Б3_py.txt",  # Что ожидать от лида компетенции
-        17: "txt_docs/docs_pack_3/A3_bsa.txt",  # Задачи и роли PO
-        18: f"txt_docs/docs_pack_3/A3_{spec_suffix}.txt" if spec_suffix != "python" else "txt_docs/docs_pack_3/A3_py.txt",  # Ожидания от специалиста
-        19: "txt_docs/docs_pack_1/А1.txt",  # Что ожидать от PO/PM (дублирует вопрос 1)
-        20: f"txt_docs/docs_pack_3/Б3_{spec_suffix}.txt" if spec_suffix != "python" else "txt_docs/docs_pack_3/Б3_bsa.txt",  # Что ожидается от лида компетенции
-        
-        # Специальные вопросы
-        21: "txt_docs/docs_pack_full/У_1.txt",  # Рекомендации стажеру
-        22: "txt_docs/docs_pack_1/Т_1.txt",  # Лучшие практики для стажера
-        23: "txt_docs/docs_pack_1/Д1.txt",  # SDLC
-        24: "txt_docs/docs_pack_1/Е1.txt",  # Тайм-менеджмент
+    # Маппинг ролей для выбора правильных документов
+    role_mapping = {
+        "стажер": "junior",
+        "специалист": "specialist", 
+        "лид": "lead",
+        "лид компетенции": "lead",
+        "po": "po_pm",
+        "pm": "po_pm",
+        "product owner": "po_pm",
+        "project manager": "po_pm"
     }
     
-    document_path = document_mapping.get(question_id)
+    spec_suffix = spec_mapping.get(specialization.lower() if specialization else "", "py")
+    user_role = role_mapping.get(role.lower() if role else "", "specialist")
     
-    # Проверяем, существует ли файл
-    if document_path:
-        full_path = os.path.join(os.path.dirname(__file__), document_path)
-        if not os.path.exists(full_path):
-            print(f"Документ не найден: {full_path}, используем fallback")
-            # Fallback на базовые документы
-            fallback_mapping = {
-                3: "txt_docs/docs_pack_1/Матрица_компетенций_Python.txt",
-                4: "txt_docs/docs_pack_2/A2_py.txt",
-                5: "txt_docs/docs_pack_2/С2_py.txt",
-                15: "txt_docs/docs_pack_3/A3_py.txt",
-                16: "txt_docs/docs_pack_3/Б3_py.txt",
-                18: "txt_docs/docs_pack_3/A3_py.txt",
-                20: "txt_docs/docs_pack_3/Б3_bsa.txt"
-            }
-            return fallback_mapping.get(question_id, document_path)
+    # ПОЛНЫЙ МАППИНГ ВОПРОСОВ НА ДОКУМЕНТЫ
+    document_mapping = {
+        # ========== БЛОК 1: ВОПРОСЫ ДЛЯ СПЕЦИАЛИСТОВ/СТАЖЕРОВ (1-3, 21-24) ==========
+        
+        # Вопрос 1: "Что я могу ожидать от своего PO/PM?" 
+        1: "txt_docs/docs_pack_1/А1.txt",
+        
+        # Вопрос 2: "Что я могу ожидать от своего лида компетенции?"
+        2: "txt_docs/docs_pack_2/_M2_.txt",  # ИПР и ожидания от лида
+        
+        # Вопрос 3: "Матрица компетенций" - зависит от специализации
+        3: {
+            "py": "txt_docs/docs_pack_1/Матрица_компетенций_Python.txt",
+            "python": "txt_docs/docs_pack_1/Матрица_компетенций_Python.txt",
+            "java": "txt_docs/docs_pack_1/Матрица_компетенций_JAVA.txt",
+            "web": "txt_docs/docs_pack_1/Матрица_компетенций_WEB.txt",
+            "test": "txt_docs/docs_pack_1/Матрица_компетенций_тестирование.txt",
+            "bsa": "txt_docs/docs_pack_1/Матрица_компетенций_Python.txt"  # fallback
+        },
+        
+        # ========== БЛОК 2: ВОПРОСЫ ДЛЯ ЛИДОВ КОМПЕТЕНЦИИ (4-13) ==========
+        
+        # Вопрос 4: "Что ожидается от специалиста?" - зависит от специализации
+        4: {
+            "py": "txt_docs/docs_pack_2/A2_py.txt",
+            "java": "txt_docs/docs_pack_2/A2_java.txt", 
+            "web": "txt_docs/docs_pack_2/A2_web.txt",
+            "test": "txt_docs/docs_pack_2/A2_test.txt",
+            "bsa": "txt_docs/docs_pack_2/A2.txt"  # общий документ
+        },
+        
+        # Вопрос 5: "Что я, как лид компетенции, могу ожидать от PO/PM?"
+        5: {
+            "py": "txt_docs/docs_pack_2/С2_py.txt",
+            "java": "txt_docs/docs_pack_2/С2_java.txt",
+            "web": "txt_docs/docs_pack_2/С2_web.txt", 
+            "test": "txt_docs/docs_pack_2/С2_test.txt",
+            "bsa": "txt_docs/docs_pack_2/С2.txt"  # общий документ
+        },
+        
+        # Вопрос 6: "Что ожидается от лида компетенции при поиске кандидатов?"
+        6: "txt_docs/docs_pack_2/Д2.txt",
+        
+        # Вопрос 7: "Что ожидается от лида компетенции при проведении собеседований?"
+        7: "txt_docs/docs_pack_2/Е2.txt",
+        
+        # Вопрос 8: "Что ожидается от лида компетенции при работе со стажерами и джунами?"
+        8: "txt_docs/docs_pack_2/Н2.txt",
+        
+        # Вопрос 9: "Что ожидается от лида компетенции при проведении 1-2-1?"
+        9: "txt_docs/docs_pack_2/_I2_.txt",
+        
+        # Вопрос 10: "Что ожидается от лида компетенции при проведении встречи компетенции?"
+        10: "txt_docs/docs_pack_2/_K2_.txt",
+        
+        # Вопрос 11: "Что ожидается от лида компетенции при построении структуры компетенции?"
+        11: "txt_docs/docs_pack_2/_L2_.txt",
+        
+        # Вопрос 12: "Что ожидается от лида компетенции при создании ИПР?"
+        12: "txt_docs/docs_pack_2/_M2_.txt",
+        
+        # Вопрос 13: "Как лид компетенции должен проводить онбординг нового сотрудника?"
+        13: "txt_docs/docs_pack_2/П2.txt",
+        
+        # ========== БЛОК 3: ВОПРОСЫ ДЛЯ PO/PM (14-20) ==========
+        
+        # Вопрос 14: "Как лид компетенции должен оптимизировать процессы разработки?"
+        14: "txt_docs/docs_pack_3/С3.txt",
+        
+        # Вопрос 15: "Что PO/PM может ожидать от специалиста?" - зависит от специализации
+        15: {
+            "py": "txt_docs/docs_pack_3/A3_py.txt",
+            "java": "txt_docs/docs_pack_3/A3_java.txt",
+            "web": "txt_docs/docs_pack_3/A3_web.txt",
+            "test": "txt_docs/docs_pack_3/A3_test.txt",
+            "bsa": "txt_docs/docs_pack_3/A3_bsa.txt"
+        },
+        
+        # Вопрос 16: "Что PO/PM может ожидать от лида компетенции?" - зависит от специализации
+        16: {
+            "py": "txt_docs/docs_pack_3/Б3_py.txt",
+            "java": "txt_docs/docs_pack_3/Б3_java.txt",
+            "web": "txt_docs/docs_pack_3/Б3_web.txt",
+            "test": "txt_docs/docs_pack_3/Б3_test.txt",
+            "bsa": "txt_docs/docs_pack_3/Б3_bsa.txt"
+        },
+        
+        # Вопрос 17: "Задачи и роли Product Owner"
+        17: "txt_docs/docs_pack_3/A3_bsa.txt",  # BSA документ для PO
+        
+        # Вопрос 18: "Ожидания от специалиста" - дублирует вопрос 15
+        18: {
+            "py": "txt_docs/docs_pack_3/A3_py.txt",
+            "java": "txt_docs/docs_pack_3/A3_java.txt",
+            "web": "txt_docs/docs_pack_3/A3_web.txt",
+            "test": "txt_docs/docs_pack_3/A3_test.txt",
+            "bsa": "txt_docs/docs_pack_3/A3_bsa.txt"
+        },
+        
+        # Вопрос 19: "Что я могу ожидать от своего PO/PM?" - дублирует вопрос 1
+        19: "txt_docs/docs_pack_1/А1.txt",
+        
+        # Вопрос 20: "Что ожидается от лида компетенции?" - зависит от специализации
+        20: {
+            "py": "txt_docs/docs_pack_3/Б3_py.txt",
+            "java": "txt_docs/docs_pack_3/Б3_java.txt", 
+            "web": "txt_docs/docs_pack_3/Б3_web.txt",
+            "test": "txt_docs/docs_pack_3/Б3_test.txt",
+            "bsa": "txt_docs/docs_pack_3/Б3_bsa.txt"
+        },
+        
+        # ========== БЛОК 4: СПЕЦИАЛЬНЫЕ ВОПРОСЫ ДЛЯ СТАЖЕРОВ (21-24) ==========
+        
+        # Вопрос 21: "Рекомендации стажеру"
+        21: "txt_docs/docs_pack_full/У_1.txt",
+        
+        # Вопрос 22: "Лучшие практики для стажера"
+        22: "txt_docs/docs_pack_1/Т_1.txt",
+        
+        # Вопрос 23: "SDLC (Software Development Life Cycle)"
+        23: "txt_docs/docs_pack_1/Д1.txt",
+        
+        # Вопрос 24: "Тайм-менеджмент"
+        24: "txt_docs/docs_pack_1/Е1.txt",
+        
+        # ========== СПЕЦИАЛЬНЫЕ ПРОМПТЫ ==========
+        
+        # Промпт 777: Универсальный ассистент - используется fallback
+        777: None,  # Будет использоваться enhanced поиск
+        
+        # Промпт 888: Свободный диалог - используется fallback  
+        888: None,  # Будет использоваться enhanced поиск
+        
+        # Промпт 999: Генерация связанных вопросов - используется fallback
+        999: None   # Будет использоваться enhanced поиск
+    }
     
-    return document_path
+    # Получаем маппинг для вопроса
+    document_mapping_for_question = document_mapping.get(question_id)
+    
+    if document_mapping_for_question is None:
+        return None
+    
+    # Если это строка - возвращаем напрямую
+    if isinstance(document_mapping_for_question, str):
+        return document_mapping_for_question
+    
+    # Если это словарь - выбираем по специализации
+    if isinstance(document_mapping_for_question, dict):
+        # Пробуем найти точное соответствие
+        if spec_suffix in document_mapping_for_question:
+            selected_path = document_mapping_for_question[spec_suffix]
+        # Fallback на Python если нет точного соответствия
+        elif "py" in document_mapping_for_question:
+            selected_path = document_mapping_for_question["py"]
+            print(f"⚠️ Fallback для специализации '{specialization}' -> Python документ")
+        # Если и Python нет - берем первый доступный
+        else:
+            selected_path = list(document_mapping_for_question.values())[0]
+            print(f"⚠️ Fallback для специализации '{specialization}' -> первый доступный документ")
+        
+        # Проверяем существование файла
+        full_path = os.path.join(os.path.dirname(__file__), selected_path)
+        if os.path.exists(full_path):
+            return selected_path
+        else:
+            print(f"❌ Документ не найден: {selected_path}")
+            # Пробуем другие варианты из словаря
+            for fallback_path in document_mapping_for_question.values():
+                fallback_full_path = os.path.join(os.path.dirname(__file__), fallback_path)
+                if os.path.exists(fallback_full_path):
+                    print(f"✅ Используем fallback документ: {fallback_path}")
+                    return fallback_path
+    
+    print(f"❌ Не удалось найти документ для вопроса {question_id}")
+    return None
 
 def load_specific_document(document_path):
     """

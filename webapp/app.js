@@ -4,7 +4,7 @@ let tg = window.Telegram.WebApp;
 // Конфигурация
 const CONFIG = {
     API_BASE_URL: window.location.origin + '/api', // Будет работать с /var/www/html/api
-    WEBSOCKET_URL: 'ws://localhost:8000/ws' // Ваш WebSocket сервер
+    WEBSOCKET_URL: 'ws://213.171.25.85:8000/ws' // Ваш WebSocket сервер
 };
 
 // Состояние приложения
