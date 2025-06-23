@@ -526,6 +526,20 @@ async def websocket_endpoint(websocket: WebSocket):
         print(f"Specialization: {specialization}")
         print(f"Context: {context[:100] if context else 'None'}...")
 
+    # Выбираем соответствующий retriever в зависимости от question_id
+    embedding_retriever = embedding_retriever_full
+    if question_id in [1, 2, 3, 22, 23, 24]:
+        embedding_retriever = embedding_retriever_1
+    elif question_id in [4, 5, 6, 7, 8, 9, 10, 11, 12, 13]:
+        embedding_retriever = embedding_retriever_2
+    elif question_id in [14, 15, 16, 17, 18, 19, 20]:
+        embedding_retriever = embedding_retriever_3
+    elif question_id in [21]:
+        embedding_retriever = embedding_retriever_full
+    elif question_id in [777, 888] and use_rag_for_special:
+        # Для специальных промптов выбираем retriever на основе роли/специализации
+        embedding_retriever = get_best_retriever_for_role_spec(role, specialization)
+
     # Создаем retrieval_chain для вопросов, которые его используют
     retrieval_chain = None
     should_use_rag = (
@@ -534,45 +548,15 @@ async def websocket_endpoint(websocket: WebSocket):
     )
     
     if should_use_rag:
-        # Для обычных вопросов (1-24) используем конкретные документы
-        if question_id in range(1, 25):  # Вопросы 1-24
-            document_path = get_specific_document_for_question(question_id, specialization, role)
-            
-            if document_path:
-                print(f"🎯 Используем конкретный документ для вопроса {question_id}: {document_path}")
-                retrieval_chain = create_retrieval_chain_for_specific_document(
-                    role=role,
-                    specialization=specialization,
-                    question_id=question_id,
-                    document_path=document_path,
-                    prompt_template=prompt_template
-                )
-        
-        # Если не удалось создать chain для конкретного документа или это специальные промпты
-        if not retrieval_chain:
-            print(f"⚠️ Fallback: используем улучшенный векторный поиск для question_id={question_id}")
-            
-            # Выбираем соответствующий retriever в зависимости от question_id
-            embedding_retriever = embedding_retriever_full
-            if question_id in [1, 2, 3, 22, 23, 24]:
-                embedding_retriever = embedding_retriever_1
-            elif question_id in [4, 5, 6, 7, 8, 9, 10, 11, 12, 13]:
-                embedding_retriever = embedding_retriever_2
-            elif question_id in [14, 15, 16, 17, 18, 19, 20]:
-                embedding_retriever = embedding_retriever_3
-            elif question_id in [21]:
-                embedding_retriever = embedding_retriever_full
-            elif question_id in [777, 888] and use_rag_for_special:
-                # Для специальных промптов выбираем retriever на основе роли/специализации
-                embedding_retriever = get_best_retriever_for_role_spec(role, specialization)
-            
-            retrieval_chain = await create_enhanced_retrieval_chain(
-                role=role,
-                specialization=specialization,
-                question_id=question_id,
-                embedding_retriever=embedding_retriever,
-                prompt_template=prompt_template
-            )
+        # Используем улучшенный поиск для ВСЕХ типов вопросов
+        print(f"Используем улучшенный векторный поиск для question_id={question_id}")
+        retrieval_chain = await create_enhanced_retrieval_chain(
+            role=role,
+            specialization=specialization,
+            question_id=question_id,
+            embedding_retriever=embedding_retriever,
+            prompt_template=prompt_template
+        )
 
     unwanted_chars = ["*", "**"]
     
@@ -875,286 +859,3 @@ class RAGDocumentManager:
         """Обновление содержимого документа"""
         self.delete_document(filename, pack_name)
         self.add_document(file_content, filename, pack_name)
-
-# Добавляем функции для работы с конкретными документами
-
-def get_specific_document_for_question(question_id, specialization=None, role=None):
-    """
-    Возвращает конкретный документ для каждого вопроса с учетом специализации и роли
-    """
-    # Маппинг специализаций на суффиксы файлов
-    spec_mapping = {
-        "python": "py",
-        "java": "java", 
-        "web": "web",
-        "тестировщик": "test",
-        "тестирование": "test",
-        "бизнес-аналитик": "bsa",
-        "системный аналитик": "bsa",
-        "продуктовый аналитик": "bsa"
-    }
-    
-    # Маппинг ролей для выбора правильных документов
-    role_mapping = {
-        "стажер": "junior",
-        "специалист": "specialist", 
-        "лид": "lead",
-        "лид компетенции": "lead",
-        "po": "po_pm",
-        "pm": "po_pm",
-        "product owner": "po_pm",
-        "project manager": "po_pm"
-    }
-    
-    spec_suffix = spec_mapping.get(specialization.lower() if specialization else "", "py")
-    user_role = role_mapping.get(role.lower() if role else "", "specialist")
-    
-    # ПОЛНЫЙ МАППИНГ ВОПРОСОВ НА ДОКУМЕНТЫ
-    document_mapping = {
-        # ========== БЛОК 1: ВОПРОСЫ ДЛЯ СПЕЦИАЛИСТОВ/СТАЖЕРОВ (1-3, 21-24) ==========
-        
-        # Вопрос 1: "Что я могу ожидать от своего PO/PM?" 
-        1: "txt_docs/docs_pack_1/А1.txt",
-        
-        # Вопрос 2: "Что я могу ожидать от своего лида компетенции?"
-        2: "txt_docs/docs_pack_2/_M2_.txt",  # ИПР и ожидания от лида
-        
-        # Вопрос 3: "Матрица компетенций" - зависит от специализации
-        3: {
-            "py": "txt_docs/docs_pack_1/Матрица_компетенций_Python.txt",
-            "python": "txt_docs/docs_pack_1/Матрица_компетенций_Python.txt",
-            "java": "txt_docs/docs_pack_1/Матрица_компетенций_JAVA.txt",
-            "web": "txt_docs/docs_pack_1/Матрица_компетенций_WEB.txt",
-            "test": "txt_docs/docs_pack_1/Матрица_компетенций_тестирование.txt",
-            "bsa": "txt_docs/docs_pack_1/Матрица_компетенций_Python.txt"  # fallback
-        },
-        
-        # ========== БЛОК 2: ВОПРОСЫ ДЛЯ ЛИДОВ КОМПЕТЕНЦИИ (4-13) ==========
-        
-        # Вопрос 4: "Что ожидается от специалиста?" - зависит от специализации
-        4: {
-            "py": "txt_docs/docs_pack_2/A2_py.txt",
-            "java": "txt_docs/docs_pack_2/A2_java.txt", 
-            "web": "txt_docs/docs_pack_2/A2_web.txt",
-            "test": "txt_docs/docs_pack_2/A2_test.txt",
-            "bsa": "txt_docs/docs_pack_2/A2.txt"  # общий документ
-        },
-        
-        # Вопрос 5: "Что я, как лид компетенции, могу ожидать от PO/PM?"
-        5: {
-            "py": "txt_docs/docs_pack_2/С2_py.txt",
-            "java": "txt_docs/docs_pack_2/С2_java.txt",
-            "web": "txt_docs/docs_pack_2/С2_web.txt", 
-            "test": "txt_docs/docs_pack_2/С2_test.txt",
-            "bsa": "txt_docs/docs_pack_2/С2.txt"  # общий документ
-        },
-        
-        # Вопрос 6: "Что ожидается от лида компетенции при поиске кандидатов?"
-        6: "txt_docs/docs_pack_2/Д2.txt",
-        
-        # Вопрос 7: "Что ожидается от лида компетенции при проведении собеседований?"
-        7: "txt_docs/docs_pack_2/Е2.txt",
-        
-        # Вопрос 8: "Что ожидается от лида компетенции при работе со стажерами и джунами?"
-        8: "txt_docs/docs_pack_2/Н2.txt",
-        
-        # Вопрос 9: "Что ожидается от лида компетенции при проведении 1-2-1?"
-        9: "txt_docs/docs_pack_2/_I2_.txt",
-        
-        # Вопрос 10: "Что ожидается от лида компетенции при проведении встречи компетенции?"
-        10: "txt_docs/docs_pack_2/_K2_.txt",
-        
-        # Вопрос 11: "Что ожидается от лида компетенции при построении структуры компетенции?"
-        11: "txt_docs/docs_pack_2/_L2_.txt",
-        
-        # Вопрос 12: "Что ожидается от лида компетенции при создании ИПР?"
-        12: "txt_docs/docs_pack_2/_M2_.txt",
-        
-        # Вопрос 13: "Как лид компетенции должен проводить онбординг нового сотрудника?"
-        13: "txt_docs/docs_pack_2/П2.txt",
-        
-        # ========== БЛОК 3: ВОПРОСЫ ДЛЯ PO/PM (14-20) ==========
-        
-        # Вопрос 14: "Как лид компетенции должен оптимизировать процессы разработки?"
-        14: "txt_docs/docs_pack_3/С3.txt",
-        
-        # Вопрос 15: "Что PO/PM может ожидать от специалиста?" - зависит от специализации
-        15: {
-            "py": "txt_docs/docs_pack_3/A3_py.txt",
-            "java": "txt_docs/docs_pack_3/A3_java.txt",
-            "web": "txt_docs/docs_pack_3/A3_web.txt",
-            "test": "txt_docs/docs_pack_3/A3_test.txt",
-            "bsa": "txt_docs/docs_pack_3/A3_bsa.txt"
-        },
-        
-        # Вопрос 16: "Что PO/PM может ожидать от лида компетенции?" - зависит от специализации
-        16: {
-            "py": "txt_docs/docs_pack_3/Б3_py.txt",
-            "java": "txt_docs/docs_pack_3/Б3_java.txt",
-            "web": "txt_docs/docs_pack_3/Б3_web.txt",
-            "test": "txt_docs/docs_pack_3/Б3_test.txt",
-            "bsa": "txt_docs/docs_pack_3/Б3_bsa.txt"
-        },
-        
-        # Вопрос 17: "Задачи и роли Product Owner"
-        17: "txt_docs/docs_pack_3/A3_bsa.txt",  # BSA документ для PO
-        
-        # Вопрос 18: "Ожидания от специалиста" - дублирует вопрос 15
-        18: {
-            "py": "txt_docs/docs_pack_3/A3_py.txt",
-            "java": "txt_docs/docs_pack_3/A3_java.txt",
-            "web": "txt_docs/docs_pack_3/A3_web.txt",
-            "test": "txt_docs/docs_pack_3/A3_test.txt",
-            "bsa": "txt_docs/docs_pack_3/A3_bsa.txt"
-        },
-        
-        # Вопрос 19: "Что я могу ожидать от своего PO/PM?" - дублирует вопрос 1
-        19: "txt_docs/docs_pack_1/А1.txt",
-        
-        # Вопрос 20: "Что ожидается от лида компетенции?" - зависит от специализации
-        20: {
-            "py": "txt_docs/docs_pack_3/Б3_py.txt",
-            "java": "txt_docs/docs_pack_3/Б3_java.txt", 
-            "web": "txt_docs/docs_pack_3/Б3_web.txt",
-            "test": "txt_docs/docs_pack_3/Б3_test.txt",
-            "bsa": "txt_docs/docs_pack_3/Б3_bsa.txt"
-        },
-        
-        # ========== БЛОК 4: СПЕЦИАЛЬНЫЕ ВОПРОСЫ ДЛЯ СТАЖЕРОВ (21-24) ==========
-        
-        # Вопрос 21: "Рекомендации стажеру"
-        21: "txt_docs/docs_pack_full/У_1.txt",
-        
-        # Вопрос 22: "Лучшие практики для стажера"
-        22: "txt_docs/docs_pack_1/Т_1.txt",
-        
-        # Вопрос 23: "SDLC (Software Development Life Cycle)"
-        23: "txt_docs/docs_pack_1/Д1.txt",
-        
-        # Вопрос 24: "Тайм-менеджмент"
-        24: "txt_docs/docs_pack_1/Е1.txt",
-        
-        # ========== СПЕЦИАЛЬНЫЕ ПРОМПТЫ ==========
-        
-        # Промпт 777: Универсальный ассистент - используется fallback
-        777: None,  # Будет использоваться enhanced поиск
-        
-        # Промпт 888: Свободный диалог - используется fallback  
-        888: None,  # Будет использоваться enhanced поиск
-        
-        # Промпт 999: Генерация связанных вопросов - используется fallback
-        999: None   # Будет использоваться enhanced поиск
-    }
-    
-    # Получаем маппинг для вопроса
-    document_mapping_for_question = document_mapping.get(question_id)
-    
-    if document_mapping_for_question is None:
-        return None
-    
-    # Если это строка - возвращаем напрямую
-    if isinstance(document_mapping_for_question, str):
-        return document_mapping_for_question
-    
-    # Если это словарь - выбираем по специализации
-    if isinstance(document_mapping_for_question, dict):
-        # Пробуем найти точное соответствие
-        if spec_suffix in document_mapping_for_question:
-            selected_path = document_mapping_for_question[spec_suffix]
-        # Fallback на Python если нет точного соответствия
-        elif "py" in document_mapping_for_question:
-            selected_path = document_mapping_for_question["py"]
-            print(f"⚠️ Fallback для специализации '{specialization}' -> Python документ")
-        # Если и Python нет - берем первый доступный
-        else:
-            selected_path = list(document_mapping_for_question.values())[0]
-            print(f"⚠️ Fallback для специализации '{specialization}' -> первый доступный документ")
-        
-        # Проверяем существование файла
-        full_path = os.path.join(os.path.dirname(__file__), selected_path)
-        if os.path.exists(full_path):
-            return selected_path
-        else:
-            print(f"❌ Документ не найден: {selected_path}")
-            # Пробуем другие варианты из словаря
-            for fallback_path in document_mapping_for_question.values():
-                fallback_full_path = os.path.join(os.path.dirname(__file__), fallback_path)
-                if os.path.exists(fallback_full_path):
-                    print(f"✅ Используем fallback документ: {fallback_path}")
-                    return fallback_path
-    
-    print(f"❌ Не удалось найти документ для вопроса {question_id}")
-    return None
-
-def load_specific_document(document_path):
-    """
-    Загружает конкретный документ и создает для него retriever
-    """
-    if not document_path:
-        print("Путь к документу не указан")
-        return None
-        
-    full_path = os.path.join(os.path.dirname(__file__), document_path)
-    
-    if not os.path.exists(full_path):
-        print(f"Документ не найден: {full_path}")
-        return None
-    
-    try:
-        # Загружаем документ
-        loader = TextLoader(full_path)
-        docs = loader.load()
-        
-        # Разделяем на чанки
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=500,
-            chunk_overlap=100
-        )
-        split_docs = text_splitter.split_documents(docs)
-        
-        # Создаем векторное хранилище для этого документа
-        vector_store = FAISS.from_documents(split_docs, embedding=embedding)
-        retriever = vector_store.as_retriever(search_kwargs={"k": 3})  # Меньше чанков для одного документа
-        
-        print(f"✅ Загружен документ: {document_path} ({len(split_docs)} чанков)")
-        return retriever
-        
-    except Exception as e:
-        print(f"❌ Ошибка загрузки документа {document_path}: {e}")
-        return None
-
-def create_retrieval_chain_for_specific_document(role, specialization, question_id, document_path, prompt_template):
-    """
-    Создает retrieval chain для конкретного документа
-    """
-    # Загружаем конкретный документ
-    document_retriever = load_specific_document(document_path)
-    
-    if not document_retriever:
-        print(f"Не удалось загрузить документ для вопроса {question_id}, используем fallback")
-        return None
-    
-    # Заполнение шаблона промпта
-    template = string.Template(prompt_template)
-    filled_prompt = template.substitute(role=role, specialization=specialization)
-
-    # Создание промпта
-    prompt = ChatPromptTemplate.from_template(filled_prompt)
-
-    llm = GigaChat(
-        credentials=api_key,
-        model='GigaChat',
-        verify_ssl_certs=False,
-        profanity_check=False
-    )
-
-    # Создание цепочки для работы с документами
-    document_chain = create_stuff_documents_chain(
-        llm=llm,
-        prompt=prompt
-    )
-
-    # Создание retrieval_chain
-    retrieval_chain = create_retrieval_chain(document_retriever, document_chain)
-
-    return retrieval_chain
