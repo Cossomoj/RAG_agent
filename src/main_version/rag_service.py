@@ -526,20 +526,6 @@ async def websocket_endpoint(websocket: WebSocket):
         print(f"Specialization: {specialization}")
         print(f"Context: {context[:100] if context else 'None'}...")
 
-    # Выбираем соответствующий retriever в зависимости от question_id
-    embedding_retriever = embedding_retriever_full
-    if question_id in [1, 2, 3, 22, 23, 24]:
-        embedding_retriever = embedding_retriever_1
-    elif question_id in [4, 5, 6, 7, 8, 9, 10, 11, 12, 13]:
-        embedding_retriever = embedding_retriever_2
-    elif question_id in [14, 15, 16, 17, 18, 19, 20]:
-        embedding_retriever = embedding_retriever_3
-    elif question_id in [21]:
-        embedding_retriever = embedding_retriever_full
-    elif question_id in [777, 888] and use_rag_for_special:
-        # Для специальных промптов выбираем retriever на основе роли/специализации
-        embedding_retriever = get_best_retriever_for_role_spec(role, specialization)
-
     # Создаем retrieval_chain для вопросов, которые его используют
     retrieval_chain = None
     should_use_rag = (
@@ -548,15 +534,45 @@ async def websocket_endpoint(websocket: WebSocket):
     )
     
     if should_use_rag:
-        # Используем улучшенный поиск для ВСЕХ типов вопросов
-        print(f"Используем улучшенный векторный поиск для question_id={question_id}")
-        retrieval_chain = await create_enhanced_retrieval_chain(
-            role=role,
-            specialization=specialization,
-            question_id=question_id,
-            embedding_retriever=embedding_retriever,
-            prompt_template=prompt_template
-        )
+        # Для обычных вопросов (1-24) используем конкретные документы
+        if question_id in range(1, 25):  # Вопросы 1-24
+            document_path = get_specific_document_for_question(question_id, specialization)
+            
+            if document_path:
+                print(f"🎯 Используем конкретный документ для вопроса {question_id}: {document_path}")
+                retrieval_chain = create_retrieval_chain_for_specific_document(
+                    role=role,
+                    specialization=specialization,
+                    question_id=question_id,
+                    document_path=document_path,
+                    prompt_template=prompt_template
+                )
+        
+        # Если не удалось создать chain для конкретного документа или это специальные промпты
+        if not retrieval_chain:
+            print(f"⚠️ Fallback: используем улучшенный векторный поиск для question_id={question_id}")
+            
+            # Выбираем соответствующий retriever в зависимости от question_id
+            embedding_retriever = embedding_retriever_full
+            if question_id in [1, 2, 3, 22, 23, 24]:
+                embedding_retriever = embedding_retriever_1
+            elif question_id in [4, 5, 6, 7, 8, 9, 10, 11, 12, 13]:
+                embedding_retriever = embedding_retriever_2
+            elif question_id in [14, 15, 16, 17, 18, 19, 20]:
+                embedding_retriever = embedding_retriever_3
+            elif question_id in [21]:
+                embedding_retriever = embedding_retriever_full
+            elif question_id in [777, 888] and use_rag_for_special:
+                # Для специальных промптов выбираем retriever на основе роли/специализации
+                embedding_retriever = get_best_retriever_for_role_spec(role, specialization)
+            
+            retrieval_chain = await create_enhanced_retrieval_chain(
+                role=role,
+                specialization=specialization,
+                question_id=question_id,
+                embedding_retriever=embedding_retriever,
+                prompt_template=prompt_template
+            )
 
     unwanted_chars = ["*", "**"]
     
@@ -859,3 +875,152 @@ class RAGDocumentManager:
         """Обновление содержимого документа"""
         self.delete_document(filename, pack_name)
         self.add_document(file_content, filename, pack_name)
+
+# Добавляем функции для работы с конкретными документами
+
+def get_specific_document_for_question(question_id, specialization=None):
+    """
+    Возвращает конкретный документ для каждого вопроса с учетом специализации
+    """
+    # Маппинг специализаций на суффиксы файлов
+    spec_mapping = {
+        "python": "python",
+        "java": "java", 
+        "web": "web",
+        "тестировщик": "test",
+        "тестирование": "test",
+        "бизнес-аналитик": "bsa",
+        "системный аналитик": "bsa",
+        "продуктовый аналитик": "bsa"
+    }
+    
+    spec_suffix = spec_mapping.get(specialization.lower() if specialization else "", "python")
+    
+    # Основной маппинг вопросов на документы
+    document_mapping = {
+        # Вопросы для специалистов/стажеров (docs_pack_1)
+        1: "txt_docs/docs_pack_1/А1.txt",  # Что ожидать от PO/PM
+        2: "txt_docs/docs_pack_2/_M2_.txt",  # Что ожидать от лида компетенции (ИПР)
+        3: f"txt_docs/docs_pack_1/Матрица_компетенций_{spec_suffix.upper() if spec_suffix == 'python' else spec_suffix}.txt",  # Матрица компетенций
+        
+        # Вопросы для лидов компетенции (docs_pack_2)
+        4: f"txt_docs/docs_pack_2/A2_{spec_suffix}.txt" if spec_suffix != "python" else "txt_docs/docs_pack_2/A2_py.txt",  # Обязанности специалиста
+        5: f"txt_docs/docs_pack_2/С2_{spec_suffix}.txt" if spec_suffix != "python" else "txt_docs/docs_pack_2/С2_py.txt",  # Что ожидать от PO/PM (лид)
+        6: "txt_docs/docs_pack_2/Д2.txt",  # Поиск кандидатов
+        7: "txt_docs/docs_pack_2/Е2.txt",  # Проведение собеседований
+        8: "txt_docs/docs_pack_2/Н2.txt",  # Работа со стажерами и джунами
+        9: "txt_docs/docs_pack_2/_I2_.txt",  # Проведение 1-2-1
+        10: "txt_docs/docs_pack_2/_K2_.txt",  # Встречи компетенции
+        11: "txt_docs/docs_pack_2/_L2_.txt",  # Построение структуры компетенции
+        12: "txt_docs/docs_pack_2/_M2_.txt",  # Создание ИПР
+        13: "txt_docs/docs_pack_2/П2.txt",  # Онбординг нового сотрудника
+        
+        # Вопросы для PO/PM (docs_pack_3)
+        14: "txt_docs/docs_pack_3/С3.txt",  # Оптимизация процессов разработки
+        15: f"txt_docs/docs_pack_3/A3_{spec_suffix}.txt" if spec_suffix != "python" else "txt_docs/docs_pack_3/A3_py.txt",  # Что ожидать от специалиста
+        16: f"txt_docs/docs_pack_3/Б3_{spec_suffix}.txt" if spec_suffix != "python" else "txt_docs/docs_pack_3/Б3_py.txt",  # Что ожидать от лида компетенции
+        17: "txt_docs/docs_pack_3/A3_bsa.txt",  # Задачи и роли PO
+        18: f"txt_docs/docs_pack_3/A3_{spec_suffix}.txt" if spec_suffix != "python" else "txt_docs/docs_pack_3/A3_py.txt",  # Ожидания от специалиста
+        19: "txt_docs/docs_pack_1/А1.txt",  # Что ожидать от PO/PM (дублирует вопрос 1)
+        20: f"txt_docs/docs_pack_3/Б3_{spec_suffix}.txt" if spec_suffix != "python" else "txt_docs/docs_pack_3/Б3_bsa.txt",  # Что ожидается от лида компетенции
+        
+        # Специальные вопросы
+        21: "txt_docs/docs_pack_full/У_1.txt",  # Рекомендации стажеру
+        22: "txt_docs/docs_pack_1/Т_1.txt",  # Лучшие практики для стажера
+        23: "txt_docs/docs_pack_1/Д1.txt",  # SDLC
+        24: "txt_docs/docs_pack_1/Е1.txt",  # Тайм-менеджмент
+    }
+    
+    document_path = document_mapping.get(question_id)
+    
+    # Проверяем, существует ли файл
+    if document_path:
+        full_path = os.path.join(os.path.dirname(__file__), document_path)
+        if not os.path.exists(full_path):
+            print(f"Документ не найден: {full_path}, используем fallback")
+            # Fallback на базовые документы
+            fallback_mapping = {
+                3: "txt_docs/docs_pack_1/Матрица_компетенций_Python.txt",
+                4: "txt_docs/docs_pack_2/A2_py.txt",
+                5: "txt_docs/docs_pack_2/С2_py.txt",
+                15: "txt_docs/docs_pack_3/A3_py.txt",
+                16: "txt_docs/docs_pack_3/Б3_py.txt",
+                18: "txt_docs/docs_pack_3/A3_py.txt",
+                20: "txt_docs/docs_pack_3/Б3_bsa.txt"
+            }
+            return fallback_mapping.get(question_id, document_path)
+    
+    return document_path
+
+def load_specific_document(document_path):
+    """
+    Загружает конкретный документ и создает для него retriever
+    """
+    if not document_path:
+        print("Путь к документу не указан")
+        return None
+        
+    full_path = os.path.join(os.path.dirname(__file__), document_path)
+    
+    if not os.path.exists(full_path):
+        print(f"Документ не найден: {full_path}")
+        return None
+    
+    try:
+        # Загружаем документ
+        loader = TextLoader(full_path)
+        docs = loader.load()
+        
+        # Разделяем на чанки
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=500,
+            chunk_overlap=100
+        )
+        split_docs = text_splitter.split_documents(docs)
+        
+        # Создаем векторное хранилище для этого документа
+        vector_store = FAISS.from_documents(split_docs, embedding=embedding)
+        retriever = vector_store.as_retriever(search_kwargs={"k": 3})  # Меньше чанков для одного документа
+        
+        print(f"✅ Загружен документ: {document_path} ({len(split_docs)} чанков)")
+        return retriever
+        
+    except Exception as e:
+        print(f"❌ Ошибка загрузки документа {document_path}: {e}")
+        return None
+
+def create_retrieval_chain_for_specific_document(role, specialization, question_id, document_path, prompt_template):
+    """
+    Создает retrieval chain для конкретного документа
+    """
+    # Загружаем конкретный документ
+    document_retriever = load_specific_document(document_path)
+    
+    if not document_retriever:
+        print(f"Не удалось загрузить документ для вопроса {question_id}, используем fallback")
+        return None
+    
+    # Заполнение шаблона промпта
+    template = string.Template(prompt_template)
+    filled_prompt = template.substitute(role=role, specialization=specialization)
+
+    # Создание промпта
+    prompt = ChatPromptTemplate.from_template(filled_prompt)
+
+    llm = GigaChat(
+        credentials=api_key,
+        model='GigaChat',
+        verify_ssl_certs=False,
+        profanity_check=False
+    )
+
+    # Создание цепочки для работы с документами
+    document_chain = create_stuff_documents_chain(
+        llm=llm,
+        prompt=prompt
+    )
+
+    # Создание retrieval_chain
+    retrieval_chain = create_retrieval_chain(document_retriever, document_chain)
+
+    return retrieval_chain
