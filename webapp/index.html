@@ -106,7 +106,7 @@
             font-size: 22px;
             font-weight: 700;
             margin: 24px 0 16px 0;
-            border-bottom: 2px solid var(--tg-theme-link-color);
+            border-bottom: 2px solid var(--tg-theme-accent-text-color, var(--tg-theme-link-color));
             padding-bottom: 8px;
         }
         
@@ -114,14 +114,14 @@
             font-size: 20px;
             font-weight: 600;
             margin: 20px 0 12px 0;
-            color: var(--tg-theme-link-color);
+            color: var(--tg-theme-accent-text-color, var(--tg-theme-link-color));
         }
         
         .answer-text h3 {
             font-size: 18px;
             font-weight: 600;
             margin: 18px 0 10px 0;
-            color: var(--tg-theme-subtitle-text-color);
+            color: var(--tg-theme-section-header-text-color, var(--tg-theme-subtitle-text-color));
         }
         
         .answer-text strong {
@@ -156,7 +156,7 @@
         
         .answer-text ul li::before {
             content: "•";
-            color: var(--tg-theme-link-color);
+            color: var(--tg-theme-accent-text-color, var(--tg-theme-link-color));
             font-weight: bold;
             position: absolute;
             left: 8px;
@@ -179,7 +179,7 @@
         
         .answer-text ol li::before {
             content: counter(item) ".";
-            color: var(--tg-theme-link-color);
+            color: var(--tg-theme-accent-text-color, var(--tg-theme-link-color));
             font-weight: 600;
             position: absolute;
             left: 8px;
@@ -193,7 +193,7 @@
         }
         
         .answer-text blockquote {
-            border-left: 4px solid var(--tg-theme-link-color);
+            border-left: 4px solid var(--tg-theme-accent-text-color, var(--tg-theme-link-color));
             margin: 16px 0;
             padding: 12px 16px;
             background: var(--tg-theme-section-bg-color);

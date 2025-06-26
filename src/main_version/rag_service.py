@@ -107,7 +107,7 @@ def create_retrieval_chain_from_folder(role, specialization, question_id, embedd
 
     llm = GigaChat(
         credentials=api_key,
-        model='GigaChat',
+        model='GigaChat-2',
         verify_ssl_certs=False,
         profanity_check=False
     )
@@ -168,7 +168,7 @@ async def generate_semantic_search_queries(question, role, specialization):
     # Создаем LLM для генерации альтернативных запросов
     llm = GigaChat(
         credentials=api_key,
-        model='GigaChat',
+        model='GigaChat-2',
         verify_ssl_certs=False,
         profanity_check=False
     )
@@ -289,7 +289,7 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
     # Создание LLM
     llm = GigaChat(
         credentials=api_key,
-        model='GigaChat',
+        model='GigaChat-2',
         verify_ssl_certs=False,
         profanity_check=False
     )
@@ -324,7 +324,40 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
 Вопрос пользователя: {question}
 
 Ответь на вопрос, используя информацию из контекста. Если информация в контексте релевантна вопросу, обязательно используй её в ответе.
-Очень важно: отформатируй свой ответ в формате Markdown. Используй нумерованные и маркированные списки, выделение жирным и курсивом, где это уместно, чтобы сделать текст более читаемым. Каждый пункт списка или абзац должен быть с новой строки."""
+
+КРИТИЧЕСКИ ВАЖНО - ФОРМАТИРОВАНИЕ:
+Отформатируй свой ответ строго в формате Markdown с соблюдением следующих правил:
+
+1. **Заголовки**: Используй # для основных разделов, ## для подразделов, ### для пунктов
+2. **Списки**: 
+   - Для нумерованных списков используй: 1. 2. 3.
+   - Для маркированных списков используй: - или *
+   - Каждый пункт списка начинается с новой строки
+3. **Выделение текста**:
+   - **Жирный текст** для важных терминов и ключевых понятий
+   - *Курсив* для акцентов и определений
+   - `Код` для технических терминов
+4. **Структура**:
+   - Каждый абзац отделяется пустой строкой
+   - Списки отделяются от текста пустыми строками
+   - После заголовков всегда пустая строка
+
+Пример правильного форматирования:
+## Основные обязанности
+
+**Product Owner (PO)** выполняет следующие функции:
+
+1. **Определение приоритетов** - решает очередность задач
+2. **Коммуникация** - поддерживает связь с заинтересованными сторонами  
+3. **Постановка задач** - формулирует требования
+
+### Взаимодействие с командой
+
+- Координирует работу разработчиков
+- Проводит ретроспективы  
+- Планирует спринты
+
+Обязательно следуй этому формату!"""
             
             print(f"Отправляем запрос в GigaChat с стримингом...")
             
@@ -351,7 +384,7 @@ async def create_enhanced_retrieval_chain_for_suggestions(role, specialization, 
     # Создание LLM
     llm = GigaChat(
         credentials=api_key,
-        model='GigaChat',
+        model='GigaChat-2',
         verify_ssl_certs=False,
         profanity_check=False
     )
@@ -471,7 +504,7 @@ async def websocket_suggest_endpoint(websocket: WebSocket):
 
         llm = GigaChat(
             credentials=api_key,
-            model='GigaChat',
+            model='GigaChat-2',
             verify_ssl_certs=False,
             profanity_check=False
         )
@@ -584,9 +617,27 @@ async def websocket_endpoint(websocket: WebSocket):
             # Для ID=777 просто добавляем вопрос
             full_prompt = filled_prompt + f"\n\nВопрос пользователя: {question}"
         
-        # Добавляем инструкцию по форматированию
+        # Добавляем улучшенную инструкцию по форматированию
         full_prompt += """
-Очень важно: отформатируй свой ответ в формате Markdown. Используй нумерованные и маркированные списки, выделение жирным и курсивом, где это уместно, чтобы сделать текст более читаемым. Каждый пункт списка или абзац должен быть с новой строки."""
+
+КРИТИЧЕСКИ ВАЖНО - ФОРМАТИРОВАНИЕ:
+Отформатируй свой ответ строго в формате Markdown с соблюдением следующих правил:
+
+1. **Заголовки**: Используй # для основных разделов, ## для подразделов, ### для пунктов
+2. **Списки**: 
+   - Для нумерованных списков используй: 1. 2. 3.
+   - Для маркированных списков используй: - или *
+   - Каждый пункт списка начинается с новой строки
+3. **Выделение текста**:
+   - **Жирный текст** для важных терминов и ключевых понятий
+   - *Курсив* для акцентов и определений
+   - `Код` для технических терминов
+4. **Структура**:
+   - Каждый абзац отделяется пустой строкой
+   - Списки отделяются от текста пустыми строками
+   - После заголовков всегда пустая строка
+
+Обязательно следуй этому формату!"""
         
         print(f"\n--- PROMPT ДЛЯ LLM (ID={question_id}, без RAG) ---\n")
         print(full_prompt)
@@ -599,7 +650,7 @@ async def websocket_endpoint(websocket: WebSocket):
             async for chunk in GigaChat(
                 credentials=api_key,
                 verify_ssl_certs=False,
-                model='GigaChat'
+                model='GigaChat-2'
             ).astream(full_prompt):
                 if chunk and chunk.content:
                     chunk_count += 1
@@ -652,15 +703,33 @@ async def websocket_endpoint(websocket: WebSocket):
         filled_prompt = template.substitute(role=role, specialization=specialization)
         full_prompt = filled_prompt + f"\n\nВопрос пользователя: {question}"
         
-        # Добавляем инструкцию по форматированию
+        # Добавляем улучшенную инструкцию по форматированию
         full_prompt += """
-Очень важно: отформатируй свой ответ в формате Markdown. Используй нумерованные и маркированные списки, выделение жирным и курсивом, где это уместно, чтобы сделать текст более читаемым. Каждый пункт списка или абзац должен быть с новой строки."""
+
+КРИТИЧЕСКИ ВАЖНО - ФОРМАТИРОВАНИЕ:
+Отформатируй свой ответ строго в формате Markdown с соблюдением следующих правил:
+
+1. **Заголовки**: Используй # для основных разделов, ## для подразделов, ### для пунктов
+2. **Списки**: 
+   - Для нумерованных списков используй: 1. 2. 3.
+   - Для маркированных списков используй: - или *
+   - Каждый пункт списка начинается с новой строки
+3. **Выделение текста**:
+   - **Жирный текст** для важных терминов и ключевых понятий
+   - *Курсив* для акцентов и определений
+   - `Код` для технических терминов
+4. **Структура**:
+   - Каждый абзац отделяется пустой строкой
+   - Списки отделяются от текста пустыми строками
+   - После заголовков всегда пустая строка
+
+Обязательно следуй этому формату!"""
         
         try:
             async for chunk in GigaChat(
                 credentials=api_key,
                 verify_ssl_certs=False,
-                model='GigaChat'
+                model='GigaChat-2'
             ).astream(full_prompt):
                 if chunk and chunk.content:
                     answer = chunk.content.strip()
@@ -671,10 +740,29 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.send_text(f"Произошла ошибка: {str(e)}")
 
     elif(count > 1 and count < 10):
-        prompt = f"Использую контекст нашей прошлой беседы {context}, ответь на уточняющий вопрос {question}. Очень важно: отформатируй свой ответ в формате Markdown. Используй нумерованные и маркированные списки, выделение жирным и курсивом, где это уместно, чтобы сделать текст более читаемым. Каждый пункт списка или абзац должен быть с новой строки."
+        prompt = f"""Использую контекст нашей прошлой беседы {context}, ответь на уточняющий вопрос {question}.
+
+КРИТИЧЕСКИ ВАЖНО - ФОРМАТИРОВАНИЕ:
+Отформатируй свой ответ строго в формате Markdown с соблюдением следующих правил:
+
+1. **Заголовки**: Используй # для основных разделов, ## для подразделов, ### для пунктов
+2. **Списки**: 
+   - Для нумерованных списков используй: 1. 2. 3.
+   - Для маркированных списков используй: - или *
+   - Каждый пункт списка начинается с новой строки
+3. **Выделение текста**:
+   - **Жирный текст** для важных терминов и ключевых понятий
+   - *Курсив* для акцентов и определений
+   - `Код` для технических терминов
+4. **Структура**:
+   - Каждый абзац отделяется пустой строкой
+   - Списки отделяются от текста пустыми строками
+   - После заголовков всегда пустая строка
+
+Обязательно следуй этому формату!"""
         for chunk in GigaChat(credentials=api_key,
                               verify_ssl_certs=False,
-                                model='GigaChat'
+                                model='GigaChat-2'
                                 ).stream(prompt):
             answer = chunk.content.strip()  # Используем атрибут .content
 
@@ -685,7 +773,7 @@ async def websocket_endpoint(websocket: WebSocket):
     elif(count == 101):
         for chunk in GigaChat(credentials=api_key,
                               verify_ssl_certs=False,
-                                model='GigaChat'
+                                model='GigaChat-2'
                                 ).stream(f"Использую историю нашей с тобой беседы {context}, придумай мне тему для обсуждения"):
             answer = chunk.content.strip()  # Используем атрибут .content
 
@@ -697,7 +785,7 @@ async def websocket_endpoint(websocket: WebSocket):
         print("zashlo")
         for chunk in GigaChat(credentials=api_key,
                               verify_ssl_certs=False,
-                                model='GigaChat'
+                                model='GigaChat-2'
                                 ).stream(f"Напомни мне пожалуйста вот об этой теме {context}"):
             answer = chunk.content.strip()  # Используем атрибут .content
 

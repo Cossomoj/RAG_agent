@@ -74,7 +74,17 @@ function debounce(func, wait) {
 function initTelegramWebApp() {
     try {
         tg.expand();
-        tg.setHeaderColor('bg_color');
+        
+        // Используем новые возможности Telegram UI Kit 6.10+
+        if (tg.setHeaderColor) {
+            // Устанавливаем цвет заголовка в соответствии с темой
+            tg.setHeaderColor('bg_color');
+        }
+        
+        // Применяем цвета заголовка если доступны
+        if (tg.headerColor) {
+            document.documentElement.style.setProperty('--tg-header-color', tg.headerColor);
+        }
         
         if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
             AppState.user = tg.initDataUnsafe.user;
@@ -88,10 +98,33 @@ function initTelegramWebApp() {
             goBack();
         });
         
+        // Обработка изменений темы
+        if (tg.onEvent) {
+            tg.onEvent('themeChanged', () => {
+                console.log('Тема изменена, обновляем стили');
+                updateThemeColors();
+            });
+        }
+        
         console.log('Telegram Web App инициализирован');
     } catch (error) {
         console.error('Ошибка инициализации Telegram Web App:', error);
     }
+}
+
+// Функция обновления цветов темы
+function updateThemeColors() {
+    // Обновляем CSS переменные при изменении темы
+    const root = document.documentElement;
+    
+    // Применяем новые цвета заголовка если доступны
+    if (tg.headerColor) {
+        root.style.setProperty('--tg-header-color', tg.headerColor);
+    }
+    
+    // Принудительно обновляем стили
+    document.body.style.backgroundColor = 'var(--tg-theme-bg-color)';
+    document.body.style.color = 'var(--tg-theme-text-color)';
 }
 
 // Инициализация Telegram UI Kit
@@ -178,7 +211,7 @@ function createMenuCard(item) {
         <h3 style="color: var(--tg-theme-text-color); font-size: 16px; font-weight: 600; margin-bottom: 4px;">
             ${item.title}
         </h3>
-        <p style="color: var(--tg-theme-hint-color); font-size: 14px; line-height: 1.3;">
+        <p style="color: var(--tg-theme-subtitle-text-color, var(--tg-theme-hint-color)); font-size: 14px; line-height: 1.3;">
             ${item.description}
         </p>
     `;
@@ -298,11 +331,28 @@ function createButton(text, mode = 'primary', onClick = null, disabled = false) 
     button.disabled = disabled;
     
     const isPrimary = mode === 'primary';
+    const isDestructive = mode === 'destructive';
+    
+    let backgroundColor, textColor, borderColor;
+    
+    if (isDestructive) {
+        backgroundColor = 'transparent';
+        textColor = 'var(--tg-theme-destructive-text-color, #ff3b30)';
+        borderColor = 'var(--tg-theme-destructive-text-color, #ff3b30)';
+    } else if (isPrimary) {
+        backgroundColor = 'var(--tg-theme-button-color, #0088cc)';
+        textColor = 'var(--tg-theme-button-text-color, #ffffff)';
+        borderColor = 'none';
+    } else {
+        backgroundColor = 'transparent';
+        textColor = 'var(--tg-theme-button-color, #0088cc)';
+        borderColor = 'var(--tg-theme-button-color, #0088cc)';
+    }
     
     button.style.cssText = `
-        background: ${isPrimary ? 'var(--tg-theme-button-color, #0088cc)' : 'transparent'};
-        color: ${isPrimary ? 'var(--tg-theme-button-text-color, #ffffff)' : 'var(--tg-theme-button-color, #0088cc)'};
-        border: ${isPrimary ? 'none' : '1px solid var(--tg-theme-button-color, #0088cc)'};
+        background: ${backgroundColor};
+        color: ${textColor};
+        border: ${borderColor === 'none' ? 'none' : `1px solid ${borderColor}`};
         border-radius: 8px;
         padding: 12px 24px;
         font-size: 16px;
@@ -950,7 +1000,7 @@ function createHistoryScreen() {
     const headerElement = createScreenHeader('История диалогов');
     
     // Добавляем кнопку очистки
-    const clearButton = createButton('Очистить', 'secondary', clearHistory);
+            const clearButton = createButton('Очистить', 'destructive', clearHistory);
     clearButton.style.cssText += 'margin-left: auto; padding: 8px 16px; font-size: 14px;';
     headerElement.appendChild(clearButton);
     
