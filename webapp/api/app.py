@@ -1635,29 +1635,7 @@ def health_check():
         "version": "1.0.0"
     })
 
-@app.route('/api/clear-cache', methods=['POST'])
-def clear_webapp_cache():
-    """Очистка кеша веб-приложения"""
-    try:
-        result = clear_all_cache()
-        if result:
-            logger.info("Кеш веб-приложения успешно очищен через API")
-            return jsonify({
-                "success": True, 
-                "message": "Кеш веб-приложения успешно очищен"
-            })
-        else:
-            logger.error("Ошибка при очистке кеша веб-приложения")
-            return jsonify({
-                "success": False, 
-                "error": "Ошибка при очистке кеша"
-            }), 500
-    except Exception as e:
-        logger.error(f"Ошибка при очистке кеша веб-приложения: {e}")
-        return jsonify({
-            "success": False, 
-            "error": f"Ошибка при очистке кеша: {str(e)}"
-        }), 500
+
 
 @app.route('/api/test', methods=['GET', 'POST'])
 def test_endpoint():

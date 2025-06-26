@@ -376,6 +376,99 @@
             border-left-width: 6px;
             transition: border-left-width 0.2s ease;
         }
+        
+        /* Стили для Markdown заголовков */
+        .markdown-h1 {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #2c3e50;
+            margin: 20px 0 15px 0;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #3498db;
+            animation: slideInLeft 0.5s ease-out;
+        }
+
+        .markdown-h2 {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #34495e;
+            margin: 18px 0 12px 0;
+            padding-left: 10px;
+            border-left: 4px solid #3498db;
+            background: linear-gradient(90deg, rgba(52, 152, 219, 0.1) 0%, transparent 100%);
+            animation: slideInLeft 0.5s ease-out 0.1s both;
+        }
+
+        .markdown-h3 {
+            font-size: 1.3em;
+            font-weight: 600;
+            color: #2c3e50;
+            margin: 15px 0 10px 0;
+            padding-left: 15px;
+            position: relative;
+            animation: slideInLeft 0.5s ease-out 0.2s both;
+        }
+
+        .markdown-h3:before {
+            content: "▶";
+            position: absolute;
+            left: 0;
+            color: #3498db;
+            font-size: 0.8em;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        /* Hover эффекты для заголовков */
+        .markdown-h1:hover,
+        .markdown-h2:hover,
+        .markdown-h3:hover {
+            transform: translateX(5px);
+            transition: transform 0.3s ease;
+        }
+
+        /* Стили для списков */
+        .markdown-list {
+            margin: 10px 0 15px 20px;
+            padding-left: 0;
+        }
+
+        .markdown-list li {
+            margin: 8px 0;
+            line-height: 1.6;
+            position: relative;
+        }
+
+        .markdown-list ul li:before {
+            content: "•";
+            color: #3498db;
+            font-weight: bold;
+            position: absolute;
+            left: -15px;
+        }
+
+        /* Стили для параграфов */
+        .markdown-paragraph {
+            margin: 12px 0;
+            line-height: 1.7;
+            text-align: justify;
+        }
+
+        /* Анимация появления */
+        @keyframes slideInLeft {
+            from {
+                opacity: 0;
+                transform: translateX(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .slide-in {
+            animation: slideInLeft 0.5s ease-out;
+        }
     </style>
 </head>
 <body>

@@ -1701,177 +1701,163 @@ function formatAnswerText(text) {
     
     console.log('📝 Исходный текст для форматирования:', text.substring(0, 200) + '...');
     
-    // Оставляем только базовую очистку, так как ожидаем хороший Markdown с сервера
-    const formatted = text.trim();
+    // Сначала постобрабатываем текст для исправления типичных ошибок
+    const processedText = postProcessAnswer(text);
+    console.log('🔧 После постобработки (первые 200 символов):', processedText.substring(0, 200) + '...');
     
     // Проверим наличие заголовков для отладки
-    const headers = formatted.match(/^#{1,6}\s+.+$/gm);
+    const headers = processedText.match(/^#{1,6}\s+.+$/gm);
     if (headers) {
         console.log('🔍 Найденные заголовки:', headers);
+    } else {
+        console.log('⚠️ Заголовки не найдены в тексте');
     }
     
-    return formatted;
+    return processedText;
 }
 
 // Улучшенное преобразование Markdown в HTML
 function convertMarkdownToHtml(text) {
-    if (!text) return '';
-
-    console.log('🔄 Конвертируем Markdown в HTML...');
+    console.log('🔄 Начинаем обработку Markdown:', text.substring(0, 200) + '...');
     
-    // Предварительная обработка: нормализуем переносы строк
-    text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    
-    // Удаляем лишние пробелы в начале и конце строк, но сохраняем структуру
-    text = text.split('\n').map(line => line.trimEnd()).join('\n');
-    
-    // Обработка блоков кода (```code```)
-    text = text.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
-    
-    // Обработка цитат (> текст)
-    text = text.replace(/^>\s*(.*$)/gim, '<blockquote>$1</blockquote>');
-    
-    // Глобальные замены для форматирования
-    let html = text
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // жирный
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')             // курсив
-        .replace(/`(.*?)`/g, '<code>$1</code>')           // инлайн код
-        .replace(/~~(.*?)~~/g, '<del>$1</del>')           // зачеркнутый
-        .replace(/__(.*?)__/g, '<u>$1</u>');              // подчеркнутый
-
-    const blocks = html.split('\n');
-    let newHtml = '';
-    let listTag = null;
-    let inBlockquote = false;
-    let consecutiveEmptyLines = 0;
-
-    blocks.forEach((line, index) => {
-        const originalLine = line;
-        const trimmedLine = line.trim();
-        
-        // Обработка пустых строк
-        if (trimmedLine === '') {
-            consecutiveEmptyLines++;
-            if (listTag) {
-                newHtml += `</${listTag}>`;
-                listTag = null;
-            }
-            if (inBlockquote) {
-                inBlockquote = false;
-            }
-            // Добавляем только одну пустую строку между блоками
-            if (consecutiveEmptyLines === 1 && index < blocks.length - 1 && blocks[index + 1].trim() !== '') {
-                newHtml += '<br>';
-            }
-            return;
-        }
-        
-        consecutiveEmptyLines = 0;
-
-        // Обработка цитат
-        if (trimmedLine.startsWith('<blockquote>')) {
-            if (listTag) {
-                newHtml += `</${listTag}>`;
-                listTag = null;
-            }
-            newHtml += trimmedLine;
-            inBlockquote = true;
-            return;
-        }
-
-        // Заголовки (поддержка до h6) с улучшенной обработкой пробелов
-        const headerMatch = trimmedLine.match(/^(#{1,6})\s+(.+)$/);
-        if (headerMatch) {
-            if (listTag) {
-                newHtml += `</${listTag}>`;
-                listTag = null;
-            }
-            const level = headerMatch[1].length;
-            const headerText = headerMatch[2].trim();
-            
-            // Добавляем класс для анимации
-            newHtml += `<h${level} class="markdown-header">${headerText}</h${level}>`;
-            console.log(`📋 Найден заголовок h${level}: ${headerText}`);
-            return;
-        }
-        
-        // Горизонтальная линия
-        if (/^[-*_]{3,}$/.test(trimmedLine)) {
-            if (listTag) {
-                newHtml += `</${listTag}>`;
-                listTag = null;
-            }
-            newHtml += '<hr>';
-            return;
-        }
-        
-        // Элементы нумерованного списка (поддержка разных форматов)
-        const orderedMatch = trimmedLine.match(/^(\d+\.)\s+(.+)$/);
-        if (orderedMatch) {
-            if (listTag !== 'ol') {
-                if (listTag) newHtml += `</${listTag}>`;
-                newHtml += '<ol>';
-                listTag = 'ol';
-            }
-            const listItemText = orderedMatch[2].trim();
-            newHtml += `<li>${listItemText}</li>`;
-            return;
-        }
-        
-        // Элементы маркированного списка (поддержка -, *, +, •)
-        const unorderedMatch = trimmedLine.match(/^[-*+•]\s+(.+)$/);
-        if (unorderedMatch) {
-            if (listTag !== 'ul') {
-                if (listTag) newHtml += `</${listTag}>`;
-                newHtml += '<ul>';
-                listTag = 'ul';
-            }
-            const listItemText = unorderedMatch[1].trim();
-            newHtml += `<li>${listItemText}</li>`;
-            return;
-        }
-        
-        // Обычный параграф
-        if (listTag) {
-            newHtml += `</${listTag}>`;
-            listTag = null;
-        }
-        
-        // Проверяем, не является ли это продолжением предыдущего параграфа
-        const isNewParagraph = newHtml.endsWith('</p>') || newHtml.endsWith('</h1>') || 
-                              newHtml.endsWith('</h2>') || newHtml.endsWith('</h3>') || 
-                              newHtml.endsWith('</h4>') || newHtml.endsWith('</h5>') || 
-                              newHtml.endsWith('</h6>') || newHtml.endsWith('<br>') || 
-                              newHtml === '';
-        
-        if (!isNewParagraph && !trimmedLine.match(/^(#{1,6}|[-*+•]\s|>\s|\d+\.\s)/)) {
-            // Продолжаем предыдущий параграф
-            newHtml = newHtml.slice(0, -4) + ' ' + trimmedLine + '</p>';
-        } else {
-            // Новый параграф
-            newHtml += `<p>${trimmedLine}</p>`;
-        }
-    });
-
-    // Закрываем последний открытый список
-    if (listTag) {
-        newHtml += `</${listTag}>`;
+    if (!text || typeof text !== 'string') {
+        console.warn('⚠️ Получен некорректный текст для обработки Markdown');
+        return '';
     }
 
-    // Постобработка: убираем лишние пробелы и исправляем форматирование
-    newHtml = newHtml
-        .replace(/\s+/g, ' ')                           // множественные пробелы
-        .replace(/>\s+</g, '><')                        // пробелы между тегами
-        .replace(/<br>\s*<p>/g, '<p>')                  // лишние br перед параграфами
-        .replace(/<\/p>\s*<br>/g, '</p>')               // лишние br после параграфов
-        .replace(/<h([1-6])>\s*<\/h[1-6]>/g, '')        // пустые заголовки
-        .replace(/<p>\s*<\/p>/g, '')                    // пустые параграфы
-        .replace(/(<\/h[1-6]>)<br>/g, '$1')             // br после заголовков
-        .replace(/(<\/ul>|<\/ol>)<br>/g, '$1')          // br после списков
-        .trim();
-
-    console.log('✅ Markdown конвертирован в HTML');
-    return newHtml;
+    let html = text;
+    
+    // 1. ПРЕДВАРИТЕЛЬНАЯ ОЧИСТКА И НОРМАЛИЗАЦИЯ
+    // Убираем лишние пробелы в начале и конце
+    html = html.trim();
+    
+    // Нормализуем переносы строк
+    html = html.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    
+    // 2. ОБРАБОТКА ЗАГОЛОВКОВ (КРИТИЧЕСКИ ВАЖНО!)
+    // Заголовки первого уровня # (должны быть с пробелом после #)
+    html = html.replace(/^# ([^\n]+)$/gm, '<h1 class="markdown-h1 slide-in">$1</h1>');
+    
+    // Заголовки второго уровня ## (должны быть с пробелом после ##)
+    html = html.replace(/^## ([^\n]+)$/gm, '<h2 class="markdown-h2 slide-in">$1</h2>');
+    
+    // Заголовки третьего уровня ### (должны быть с пробелом после ###)
+    html = html.replace(/^### ([^\n]+)$/gm, '<h3 class="markdown-h3 slide-in">$1</h3>');
+    
+    // 3. ОБРАБОТКА ТЕКСТОВЫХ ВЫДЕЛЕНИЙ
+    // Жирный текст **text**
+    html = html.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+    
+    // Курсив *text*
+    html = html.replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+    
+    // Код `text`
+    html = html.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+    
+    // 4. ОБРАБОТКА СПИСКОВ
+    // Разбиваем текст на блоки по пустым строкам
+    const blocks = html.split(/\n\s*\n/);
+    const processedBlocks = blocks.map(block => {
+        const lines = block.trim().split('\n');
+        
+        // Проверяем, является ли блок списком
+        const isOrderedList = lines.every(line => 
+            line.trim() === '' || 
+            /^\s*\d+\.\s/.test(line) || 
+            /^<h[1-6]/.test(line) ||
+            /^<strong>/.test(line)
+        );
+        
+        const isUnorderedList = lines.every(line => 
+            line.trim() === '' || 
+            /^\s*[-*]\s/.test(line) || 
+            /^<h[1-6]/.test(line) ||
+            /^<strong>/.test(line)
+        );
+        
+        if (isOrderedList && lines.some(line => /^\s*\d+\.\s/.test(line))) {
+            // Обрабатываем нумерованный список
+            const listItems = lines
+                .filter(line => /^\s*\d+\.\s/.test(line))
+                .map(line => {
+                    const content = line.replace(/^\s*\d+\.\s/, '').trim();
+                    return `<li>${content}</li>`;
+                })
+                .join('\n');
+            
+            const nonListLines = lines
+                .filter(line => !/^\s*\d+\.\s/.test(line) && line.trim() !== '')
+                .join('\n');
+            
+            return nonListLines + (nonListLines ? '\n' : '') + `<ol class="markdown-list">\n${listItems}\n</ol>`;
+        }
+        
+        if (isUnorderedList && lines.some(line => /^\s*[-*]\s/.test(line))) {
+            // Обрабатываем маркированный список
+            const listItems = lines
+                .filter(line => /^\s*[-*]\s/.test(line))
+                .map(line => {
+                    const content = line.replace(/^\s*[-*]\s/, '').trim();
+                    return `<li>${content}</li>`;
+                })
+                .join('\n');
+            
+            const nonListLines = lines
+                .filter(line => !/^\s*[-*]\s/.test(line) && line.trim() !== '')
+                .join('\n');
+            
+            return nonListLines + (nonListLines ? '\n' : '') + `<ul class="markdown-list">\n${listItems}\n</ul>`;
+        }
+        
+        // Если это не список, возвращаем как обычный блок
+        return block;
+    });
+    
+    html = processedBlocks.join('\n\n');
+    
+    // 5. ОБРАБОТКА АБЗАЦЕВ
+    // Разбиваем на абзацы, исключая уже обработанные элементы
+    const paragraphBlocks = html.split(/\n\s*\n/);
+    const finalBlocks = paragraphBlocks.map(block => {
+        const trimmedBlock = block.trim();
+        
+        // Пропускаем пустые блоки
+        if (!trimmedBlock) return '';
+        
+        // Пропускаем уже обработанные HTML элементы
+        if (trimmedBlock.startsWith('<h') || 
+            trimmedBlock.startsWith('<ul') || 
+            trimmedBlock.startsWith('<ol') ||
+            trimmedBlock.includes('</h') ||
+            trimmedBlock.includes('</ul>') ||
+            trimmedBlock.includes('</ol>')) {
+            return trimmedBlock;
+        }
+        
+        // Оборачиваем в параграф только если это обычный текст
+        const lines = trimmedBlock.split('\n').filter(line => line.trim());
+        if (lines.length > 0 && !lines[0].startsWith('<')) {
+            return `<p class="markdown-paragraph">${trimmedBlock.replace(/\n/g, '<br>')}</p>`;
+        }
+        
+        return trimmedBlock;
+    });
+    
+    html = finalBlocks.filter(block => block.trim()).join('\n\n');
+    
+    // 6. ФИНАЛЬНАЯ ОЧИСТКА
+    // Убираем лишние пустые строки
+    html = html.replace(/\n{3,}/g, '\n\n');
+    
+    // Убираем пустые параграфы
+    html = html.replace(/<p[^>]*>\s*<\/p>/g, '');
+    
+    // Убираем пустые списки
+    html = html.replace(/<[uo]l[^>]*>\s*<\/[uo]l>/g, '');
+    
+    console.log('✅ Markdown обработан. Результат:', html.substring(0, 300) + '...');
+    
+    return html.trim();
 }
 
 // Отображение ответа
@@ -2575,4 +2561,102 @@ function testMarkdownParsing() {
     console.log('После convertMarkdownToHtml:', html);
     
     return html;
+}
+
+
+
+// Функция для тестирования парсинга Markdown
+function testMarkdownParsing() {
+    const testText = `# Ожидания от Лида Компетенции
+
+## Product Owner (PO):
+
+### Middle-аналитик
+
+- Проведение анализа текущих процессов
+- Создание диаграмм и моделей
+- Помощь в формулировке требований
+
+### Senior-аналитик
+
+- Владение стратегиями тестирования
+- Опыт работы с командой
+
+## Системный аналитик
+
+1. Формулирование технических требований
+2. Проектирование решений
+3. Работа с архитектурой системы`;
+
+    console.log('🧪 Тестируем парсинг Markdown:');
+    console.log('Исходный текст:', testText);
+    
+    const result = convertMarkdownToHtml(testText);
+    console.log('Результат:', result);
+    
+    // Показываем результат в интерфейсе
+    const container = document.getElementById('chat-container');
+    if (container) {
+        const testDiv = document.createElement('div');
+        testDiv.innerHTML = `
+            <div class="message bot-message">
+                <div class="message-content">
+                    ${result}
+                </div>
+            </div>
+        `;
+        container.appendChild(testDiv);
+        container.scrollTop = container.scrollHeight;
+    }
+}
+
+// Добавляем тестовые функции в глобальную область для отладки
+window.testMarkdownParsing = testMarkdownParsing;
+
+// Функция для постобработки ответа от RAG
+function postProcessAnswer(text) {
+    if (!text || typeof text !== 'string') {
+        return text;
+    }
+    
+    console.log('🔧 Постобработка ответа...');
+    
+    let processed = text;
+    
+    // 1. Исправляем неправильные символы заголовков в середине текста
+    // Заменяем "###" без пробела на обычный текст
+    processed = processed.replace(/([^\n])###([^\s])/g, '$1$2');
+    
+    // Заменяем "##" без пробела на обычный текст  
+    processed = processed.replace(/([^\n])##([^\s])/g, '$1$2');
+    
+    // 2. Исправляем заголовки без пробелов
+    // Добавляем пробел после # если его нет
+    processed = processed.replace(/^(#{1,6})([^\s#])/gm, '$1 $2');
+    
+    // 3. Добавляем пустые строки после заголовков если их нет
+    processed = processed.replace(/^(#{1,6}\s+.+)$/gm, '$1\n');
+    
+    // 4. Исправляем списки без пробелов
+    // Добавляем пробел после цифры с точкой
+    processed = processed.replace(/^(\d+\.)([^\s])/gm, '$1 $2');
+    
+    // Добавляем пробел после тире
+    processed = processed.replace(/^([-*])([^\s])/gm, '$1 $2');
+    
+    // 5. Убираем лишние пустые строки (более 2 подряд)
+    processed = processed.replace(/\n{3,}/g, '\n\n');
+    
+    // 6. Исправляем структуру: добавляем пустые строки между разными типами блоков
+    // После заголовков перед списками
+    processed = processed.replace(/^(#{1,6}\s+.+)\n([-*\d])/gm, '$1\n\n$2');
+    
+    // После списков перед заголовками
+    processed = processed.replace(/^([-*\d].+)\n(#{1,6}\s)/gm, '$1\n\n$2');
+    
+    // После обычного текста перед заголовками
+    processed = processed.replace(/^([^#\n-*\d].+)\n(#{1,6}\s)/gm, '$1\n\n$2');
+    
+    console.log('✅ Постобработка завершена');
+    return processed.trim();
 }
