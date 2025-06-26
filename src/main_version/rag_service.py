@@ -569,7 +569,7 @@ async def websocket_endpoint(websocket: WebSocket):
     elif question_id in [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]:
         # Вопросы для лидов - используем пакет для лидов (включая вопрос 14!)
         embedding_retriever = embedding_retriever_2
-    elif question_id in [15, 16, 17]:
+    elif question_id in [15, 16, 17, 25, 26, 27, 28, 29, 30, 31, 32]:
         # Вопросы для PO/PM - используем пакет для PO/PM
         embedding_retriever = embedding_retriever_3
     elif question_id in [18, 19, 20]:
