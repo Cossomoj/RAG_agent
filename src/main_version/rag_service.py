@@ -575,17 +575,41 @@ async def websocket_endpoint(websocket: WebSocket):
 
     # Выбираем соответствующий retriever в зависимости от question_id
     embedding_retriever = embedding_retriever_full
+    
+    # ИСПРАВЛЕННАЯ ЛОГИКА: учитываем роль пользователя при выборе retriever
     if question_id in [1, 2, 3, 22, 23, 24]:
+        # Вопросы для всех ролей - используем базовый пакет
         embedding_retriever = embedding_retriever_1
-    elif question_id in [4, 5, 6, 7, 8, 9, 10, 11, 12, 13]:
+    elif question_id in [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]:
+        # Вопросы для лидов - используем пакет для лидов (включая вопрос 14!)
         embedding_retriever = embedding_retriever_2
-    elif question_id in [14, 15, 16, 17, 18, 19, 20]:
+    elif question_id in [15, 16, 17]:
+        # Вопросы для PO/PM - используем пакет для PO/PM
         embedding_retriever = embedding_retriever_3
+    elif question_id in [18, 19, 20]:
+        # ИСПРАВЛЕНИЕ: вопросы 18, 19, 20 зависят от роли пользователя
+        if role and ('лид' in role.lower() or 'lead' in role.lower()):
+            embedding_retriever = embedding_retriever_3  # Для лидов - docs_pack_3
+        else:
+            embedding_retriever = embedding_retriever_1  # Для специалистов/стажеров - docs_pack_1
     elif question_id in [21]:
         embedding_retriever = embedding_retriever_full
     elif question_id in [777, 888] and use_rag_for_special:
         # Для специальных промптов выбираем retriever на основе роли/специализации
         embedding_retriever = get_best_retriever_for_role_spec(role, specialization)
+
+    # Отладочная информация о выборе retriever
+    retriever_name = "unknown"
+    if embedding_retriever == embedding_retriever_1:
+        retriever_name = "docs_pack_1 (специалисты/стажеры)"
+    elif embedding_retriever == embedding_retriever_2:
+        retriever_name = "docs_pack_2 (лиды)"
+    elif embedding_retriever == embedding_retriever_3:
+        retriever_name = "docs_pack_3 (PO/PM и лиды для вопросов 18-20)"
+    elif embedding_retriever == embedding_retriever_full:
+        retriever_name = "docs_pack_full (полная база)"
+    
+    print(f"🎯 Выбран retriever: {retriever_name} для question_id={question_id}, role='{role}', specialization='{specialization}'")
 
     # Создаем retrieval_chain для вопросов, которые его используют
     retrieval_chain = None
