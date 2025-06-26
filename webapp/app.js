@@ -512,6 +512,7 @@ function getCategoryName(category) {
         'Обязанности': 'Обязанности',
         'Развитие': 'Развитие',
         'Дополнительно': 'Дополнительно',
+        'Профессиональные навыки': 'Проф навыки',
         'development': 'Разработка',
         'analysis': 'Аналитика',
         'management': 'Управление',
@@ -588,7 +589,7 @@ function renderQuestions() {
                     <div class="question-icon" style="margin-right: 8px; font-size: 20px;">${getCategoryIcon(question.category)}</div>
                     <div class="question-title" style="font-weight: 600; color: var(--tg-theme-text-color); font-size: 16px;">${question.title || 'Вопрос'}</div>
                 </div>
-                <div class="question-category" style="background: var(--tg-theme-button-color); color: var(--tg-theme-button-text-color); padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 500;">${getCategoryName(question.category)}</div>
+                <div class="question-category" style="background: var(--tg-theme-button-color); color: var(--tg-theme-button-text-color); padding: 4px 6px; border-radius: 6px; font-size: 10px; font-weight: 500; white-space: nowrap;">${getCategoryName(question.category)}</div>
             </div>
             <div class="question-preview" style="color: var(--tg-theme-text-color); font-size: 14px; line-height: 1.4;">${preview}</div>
         `;
@@ -1631,75 +1632,136 @@ function formatAnswerText(text) {
     return text.trim();
 }
 
-// Преобразование Markdown в HTML
+// Улучшенное преобразование Markdown в HTML
 function convertMarkdownToHtml(text) {
     if (!text) return '';
 
-    // Глобальные замены для жирного, курсива и кода
+    // Предварительная обработка: нормализуем переносы строк
+    text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    
+    // Обработка блоков кода (```code```)
+    text = text.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+    
+    // Обработка цитат (> текст)
+    text = text.replace(/^>\s*(.*$)/gim, '<blockquote>$1</blockquote>');
+    
+    // Глобальные замены для форматирования
     let html = text
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/`(.*?)`/g, '<code>$1</code>');
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // жирный
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')             // курсив
+        .replace(/`(.*?)`/g, '<code>$1</code>')           // инлайн код
+        .replace(/~~(.*?)~~/g, '<del>$1</del>')           // зачеркнутый
+        .replace(/__(.*?)__/g, '<u>$1</u>');              // подчеркнутый
 
     const blocks = html.split('\n');
     let newHtml = '';
     let listTag = null;
+    let inBlockquote = false;
 
-    blocks.forEach(line => {
+    blocks.forEach((line, index) => {
         const trimmedLine = line.trim();
         
-        // Пропускаем пустые строки между блоками
+        // Обработка пустых строк
         if (trimmedLine === '') {
             if (listTag) {
                 newHtml += `</${listTag}>`;
                 listTag = null;
             }
+            if (inBlockquote) {
+                inBlockquote = false;
+            }
+            // Добавляем пустую строку между параграфами
+            if (index < blocks.length - 1 && blocks[index + 1].trim() !== '') {
+                newHtml += '<br>';
+            }
             return;
         }
 
-        // Заголовки
-        if (trimmedLine.startsWith('### ')) {
-            newHtml += `<h3>${trimmedLine.substring(4)}</h3>`;
-            listTag = null;
-        } else if (trimmedLine.startsWith('## ')) {
-            newHtml += `<h2>${trimmedLine.substring(3)}</h2>`;
-            listTag = null;
-        } else if (trimmedLine.startsWith('# ')) {
-            newHtml += `<h1>${trimmedLine.substring(2)}</h1>`;
-            listTag = null;
-        } 
-        // Элементы нумерованного списка
-        else if (/^\d+\.\s/.test(trimmedLine)) {
+        // Обработка цитат
+        if (trimmedLine.startsWith('<blockquote>')) {
+            if (listTag) {
+                newHtml += `</${listTag}>`;
+                listTag = null;
+            }
+            newHtml += trimmedLine;
+            inBlockquote = true;
+            return;
+        }
+
+        // Заголовки (поддержка до h6)
+        const headerMatch = trimmedLine.match(/^(#{1,6})\s+(.+)$/);
+        if (headerMatch) {
+            if (listTag) {
+                newHtml += `</${listTag}>`;
+                listTag = null;
+            }
+            const level = headerMatch[1].length;
+            const headerText = headerMatch[2];
+            newHtml += `<h${level}>${headerText}</h${level}>`;
+            return;
+        }
+        
+        // Горизонтальная линия
+        if (/^[-*_]{3,}$/.test(trimmedLine)) {
+            if (listTag) {
+                newHtml += `</${listTag}>`;
+                listTag = null;
+            }
+            newHtml += '<hr>';
+            return;
+        }
+        
+        // Элементы нумерованного списка (поддержка разных форматов)
+        const orderedMatch = trimmedLine.match(/^(\d+\.)\s+(.+)$/);
+        if (orderedMatch) {
             if (listTag !== 'ol') {
                 if (listTag) newHtml += `</${listTag}>`;
                 newHtml += '<ol>';
                 listTag = 'ol';
             }
-            newHtml += `<li>${trimmedLine.replace(/^\d+\.\s/, '')}</li>`;
-        } 
-        // Элементы маркированного списка
-        else if (/^[-*•]\s/.test(trimmedLine)) {
+            newHtml += `<li>${orderedMatch[2]}</li>`;
+            return;
+        }
+        
+        // Элементы маркированного списка (поддержка -, *, +, •)
+        const unorderedMatch = trimmedLine.match(/^[-*+•]\s+(.+)$/);
+        if (unorderedMatch) {
             if (listTag !== 'ul') {
                 if (listTag) newHtml += `</${listTag}>`;
                 newHtml += '<ul>';
                 listTag = 'ul';
             }
-            newHtml += `<li>${trimmedLine.replace(/^[-*•]\s/, '')}</li>`;
+            newHtml += `<li>${unorderedMatch[1]}</li>`;
+            return;
         }
+        
         // Обычный параграф
-        else {
-            if (listTag) {
-                newHtml += `</${listTag}>`;
-                listTag = null;
-            }
+        if (listTag) {
+            newHtml += `</${listTag}>`;
+            listTag = null;
+        }
+        
+        // Проверяем, не является ли это продолжением предыдущего параграфа
+        if (newHtml.endsWith('</p>') && !trimmedLine.match(/^(#{1,6}|[-*+•]\s|>\s|\d+\.\s)/)) {
+            // Заменяем последний </p> на пробел и продолжаем параграф
+            newHtml = newHtml.slice(0, -4) + ' ' + trimmedLine + '</p>';
+        } else {
             newHtml += `<p>${trimmedLine}</p>`;
         }
     });
 
-    // Закрываем последний открытый список, если он есть
+    // Закрываем последний открытый список
     if (listTag) {
         newHtml += `</${listTag}>`;
     }
+
+    // Постобработка: убираем лишние пробелы и исправляем форматирование
+    newHtml = newHtml
+        .replace(/\s+/g, ' ')                    // множественные пробелы
+        .replace(/>\s+</g, '><')                 // пробелы между тегами
+        .replace(/<br>\s*<p>/g, '<p>')          // лишние br перед параграфами
+        .replace(/<\/p>\s*<br>/g, '</p>')       // лишние br после параграфов
+        .trim();
 
     return newHtml;
 }
@@ -1719,8 +1781,24 @@ async function displayAnswer(userQuestion, botAnswer) {
     const htmlAnswer = convertMarkdownToHtml(formattedAnswer);
     
     const answerCard = createCard(`
-        <h3 style="color: var(--tg-theme-text-color); margin-bottom: 12px;">Ответ:</h3>
-        <div class="answer-text" style="color: var(--tg-theme-text-color);">${htmlAnswer}</div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <h3 style="color: var(--tg-theme-text-color); margin: 0;">Ответ:</h3>
+            <button onclick="copyAnswerToClipboard()" style="
+                background: var(--tg-theme-button-color);
+                color: var(--tg-theme-button-text-color);
+                border: none;
+                padding: 8px 12px;
+                border-radius: 8px;
+                font-size: 14px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 4px;
+            ">
+                📋 Копировать
+            </button>
+        </div>
+        <div class="answer-text" style="color: var(--tg-theme-text-color);" id="answer-text-content">${htmlAnswer}</div>
     `);
     
     answerContent.innerHTML = '';
@@ -1737,6 +1815,52 @@ async function displayAnswer(userQuestion, botAnswer) {
     setTimeout(async () => {
         await displayPreviousQuestions();
     }, 100);
+}
+
+// Функция копирования ответа в буфер обмена
+async function copyAnswerToClipboard() {
+    const answerElement = document.getElementById('answer-text-content');
+    if (!answerElement) return;
+    
+    // Получаем текст без HTML тегов
+    const textContent = answerElement.innerText || answerElement.textContent;
+    
+    try {
+        await navigator.clipboard.writeText(textContent);
+        
+        // Показываем уведомление об успешном копировании
+        const button = event.target.closest('button');
+        const originalText = button.innerHTML;
+        button.innerHTML = '✅ Скопировано!';
+        button.style.background = 'var(--tg-theme-destructive-text-color)';
+        
+        setTimeout(() => {
+            button.innerHTML = originalText;
+            button.style.background = 'var(--tg-theme-button-color)';
+        }, 2000);
+        
+        // Также показываем Telegram уведомление если доступно
+        if (tg.showAlert) {
+            tg.showAlert('Ответ скопирован в буфер обмена!');
+        }
+    } catch (err) {
+        console.error('Ошибка копирования:', err);
+        
+        // Fallback для старых браузеров
+        const textArea = document.createElement('textarea');
+        textArea.value = textContent;
+        document.body.appendChild(textArea);
+        textArea.select();
+        
+        try {
+            document.execCommand('copy');
+            showAlert('Ответ скопирован в буфер обмена!');
+        } catch (fallbackErr) {
+            showAlert('Не удалось скопировать текст');
+        }
+        
+        document.body.removeChild(textArea);
+    }
 }
 
 // Отображение предложенных вопросов
@@ -1818,112 +1942,6 @@ function displaySuggestedQuestions(questions) {
     suggestedContainer.classList.remove('hidden');
 }
 
-// Загрузка вопросов
-// Загрузка профиля пользователя
-async function loadUserProfile() {
-    try {
-        const userId = AppState.user?.id || 'guest';
-        const response = await fetch(`${CONFIG.API_BASE_URL}/profile/${userId}`);
-        
-        if (response.ok) {
-            const profile = await response.json();
-            AppState.profile = profile;
-        }
-    } catch (error) {
-        console.error('Ошибка загрузки профиля:', error);
-    }
-}
-
-// Загрузка ролей и специализаций
-async function loadRolesAndSpecializations() {
-    try {
-        console.log('Загружаем роли и специализации с API:', CONFIG.API_BASE_URL);
-        const [rolesResponse, specsResponse] = await Promise.all([
-            fetch(`${CONFIG.API_BASE_URL}/roles`),
-            fetch(`${CONFIG.API_BASE_URL}/specializations`)
-        ]);
-        
-        console.log('Ответы API:', rolesResponse.status, specsResponse.status);
-        
-        if (rolesResponse.ok && specsResponse.ok) {
-            roles = await rolesResponse.json();
-            specializations = await specsResponse.json();
-            console.log('Роли загружены:', roles);
-            console.log('Специализации загружены:', specializations);
-        } else {
-            throw new Error('Ошибка загрузки данных');
-        }
-    } catch (error) {
-        console.error('Ошибка загрузки ролей и специализаций:', error);
-        console.log('Используем fallback данные');
-        
-        // Fallback данные, если API недоступен
-        roles = [
-            { "value": "PO/PM", "label": "PO/PM" },
-            { "value": "Лид компетенции", "label": "Лид компетенции" },
-            { "value": "Специалист", "label": "Специалист" },
-            { "value": "Стажер", "label": "Стажер" }
-        ];
-        
-        specializations = [
-            { "value": "Аналитик", "label": "Аналитик" },
-            { "value": "Тестировщик", "label": "Тестировщик" },
-            { "value": "WEB", "label": "WEB" },
-            { "value": "Java", "label": "Java" },
-            { "value": "Python", "label": "Python" }
-        ];
-        
-        console.log('Fallback роли:', roles);
-        console.log('Fallback специализации:', specializations);
-    }
-}
-
-async function loadQuestions() {
-    try {
-        // Получаем роль и специализацию пользователя
-        const role = AppState.profile.role || '';
-        const specialization = AppState.profile.specialization || '';
-        
-        // Формируем URL с параметрами роли и специализации
-        const params = new URLSearchParams();
-        if (role) params.append('role', role);
-        if (specialization) params.append('specialization', specialization);
-        
-        const url = `${CONFIG.API_BASE_URL}/questions${params.toString() ? '?' + params.toString() : ''}`;
-        console.log('Загружаем вопросы для роли:', role, 'специализации:', specialization, 'URL:', url);
-        
-        const response = await fetch(url);
-        if (response.ok) {
-            AppState.questions = await response.json();
-            console.log('Загружено вопросов:', AppState.questions.length);
-        } else {
-            throw new Error('Ошибка загрузки вопросов');
-        }
-    } catch (error) {
-        console.error('Ошибка загрузки вопросов:', error);
-        // При ошибке загрузки показываем пустой массив
-        AppState.questions = [];
-    }
-}
-
-// Загрузка истории
-async function loadHistory() {
-    try {
-        const userId = AppState.user?.id || 'guest';
-        const response = await fetch(`${CONFIG.API_BASE_URL}/history/${userId}`);
-        
-        if (response.ok) {
-            AppState.history = await response.json();
-        } else {
-            throw new Error('Ошибка загрузки истории');
-        }
-    } catch (error) {
-        console.error('Ошибка загрузки истории:', error);
-        AppState.history = [];
-    }
-}
-
-// Показать уведомление
 // Состояние для связанных вопросов
 const SuggestedQuestionsState = {
     currentQuestions: [],
@@ -2000,10 +2018,7 @@ async function generateSuggestedQuestionsHTTP() {
         
         if (response.ok) {
             const data = await response.json();
-            console.log('HTTP ответ для связанных вопросов:', data);
-            // API возвращает массив вопросов напрямую
             const questions = Array.isArray(data) ? data : data.questions || [];
-            console.log('Обработанные связанные вопросы:', questions);
             SuggestedQuestionsState.currentQuestions = questions;
             displaySuggestedQuestions(questions);
         }
@@ -2018,56 +2033,37 @@ async function generateSuggestedQuestionsHTTP() {
 
 // Отображение предыдущих вопросов
 async function displayPreviousQuestions() {
-    console.log('📜 displayPreviousQuestions вызвана');
-    
     const previousContainer = document.getElementById('previous-questions');
     const previousList = document.getElementById('previous-list');
     
-    if (!previousContainer || !previousList) {
-        console.log('❌ Элементы previous-questions не найдены');
-        return;
-    }
+    if (!previousContainer || !previousList) return;
     
     try {
         // Загружаем актуальную историю из БД
         const userId = AppState.user?.id || 'guest';
-        console.log('🔄 Загружаем актуальную историю из БД для userId:', userId);
-        
         const response = await fetch(`${CONFIG.API_BASE_URL}/history/${userId}`);
         if (!response.ok) {
-            console.error('❌ Ошибка загрузки истории:', response.status);
             previousContainer.classList.add('hidden');
             return;
         }
         
         const historyFromDB = await response.json();
-        console.log('📊 История из БД:', historyFromDB);
-        console.log('📊 Длина истории из БД:', historyFromDB ? historyFromDB.length : 'undefined');
-        
         if (!historyFromDB || historyFromDB.length === 0) {
-            console.log('⚠️ История из БД пуста');
             previousContainer.classList.add('hidden');
             return;
         }
         
-        // Получаем последние 3 вопроса из истории (исключая самый последний, который является текущим)
-        const recentQuestions = historyFromDB.slice(1, 4); // Пропускаем первый (текущий) вопрос
-        
-        console.log('📍 Предыдущие вопросы из БД:', recentQuestions);
-        console.log('📍 Количество предыдущих вопросов:', recentQuestions.length);
+        // Получаем последние 3 вопроса из истории (исключая самый последний)
+        const recentQuestions = historyFromDB.slice(1, 4);
         
         if (!recentQuestions || recentQuestions.length === 0) {
-            console.log('⚠️ Нет предыдущих вопросов для отображения');
             previousContainer.classList.add('hidden');
             return;
         }
         
-        console.log('🔄 Создаем кнопки предыдущих вопросов...');
         previousList.innerHTML = '';
     
         recentQuestions.forEach((historyItem, index) => {
-            console.log(`➕ Добавляем предыдущий вопрос ${index + 1}:`, historyItem.question.substring(0, 50));
-            
             const historyCard = document.createElement('div');
             historyCard.className = 'previous-question-card';
             historyCard.style.cssText = `
@@ -2112,24 +2108,7 @@ async function displayPreviousQuestions() {
                 </div>
             `;
             
-            // Добавляем эффекты при взаимодействии
-            historyCard.addEventListener('mousedown', () => {
-                historyCard.style.transform = 'scale(0.98)';
-                historyCard.style.backgroundColor = 'var(--tg-theme-section-bg-color)';
-            });
-            
-            historyCard.addEventListener('mouseup', () => {
-                historyCard.style.transform = 'scale(1)';
-                historyCard.style.backgroundColor = 'var(--tg-theme-secondary-bg-color)';
-            });
-            
-            historyCard.addEventListener('mouseleave', () => {
-                historyCard.style.transform = 'scale(1)';
-                historyCard.style.backgroundColor = 'var(--tg-theme-secondary-bg-color)';
-            });
-            
             historyCard.onclick = () => {
-                console.log('🔄 Пользователь выбрал предыдущий вопрос:', historyItem.question);
                 showHistoryDetail(historyItem);
             };
             
@@ -2137,11 +2116,100 @@ async function displayPreviousQuestions() {
         });
         
         previousContainer.classList.remove('hidden');
-        console.log('✅ Предыдущие вопросы отображены');
         
     } catch (error) {
-        console.error('❌ Ошибка загрузки предыдущих вопросов:', error);
+        console.error('Ошибка загрузки предыдущих вопросов:', error);
         previousContainer.classList.add('hidden');
+    }
+}
+
+// Загрузка профиля пользователя
+async function loadUserProfile() {
+    try {
+        const userId = AppState.user?.id || 'guest';
+        const response = await fetch(`${CONFIG.API_BASE_URL}/profile/${userId}`);
+        
+        if (response.ok) {
+            const profile = await response.json();
+            AppState.profile = profile;
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки профиля:', error);
+    }
+}
+
+// Загрузка ролей и специализаций
+async function loadRolesAndSpecializations() {
+    try {
+        const [rolesResponse, specsResponse] = await Promise.all([
+            fetch(`${CONFIG.API_BASE_URL}/roles`),
+            fetch(`${CONFIG.API_BASE_URL}/specializations`)
+        ]);
+        
+        if (rolesResponse.ok && specsResponse.ok) {
+            roles = await rolesResponse.json();
+            specializations = await specsResponse.json();
+        } else {
+            throw new Error('Ошибка загрузки данных');
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки ролей и специализаций:', error);
+        
+        // Fallback данные
+        roles = [
+            { "value": "PO/PM", "label": "PO/PM" },
+            { "value": "Лид компетенции", "label": "Лид компетенции" },
+            { "value": "Специалист", "label": "Специалист" },
+            { "value": "Стажер", "label": "Стажер" }
+        ];
+        
+        specializations = [
+            { "value": "Аналитик", "label": "Аналитик" },
+            { "value": "Тестировщик", "label": "Тестировщик" },
+            { "value": "WEB", "label": "WEB" },
+            { "value": "Java", "label": "Java" },
+            { "value": "Python", "label": "Python" }
+        ];
+    }
+}
+
+async function loadQuestions() {
+    try {
+        const role = AppState.profile.role || '';
+        const specialization = AppState.profile.specialization || '';
+        
+        const params = new URLSearchParams();
+        if (role) params.append('role', role);
+        if (specialization) params.append('specialization', specialization);
+        
+        const url = `${CONFIG.API_BASE_URL}/questions${params.toString() ? '?' + params.toString() : ''}`;
+        const response = await fetch(url);
+        
+        if (response.ok) {
+            AppState.questions = await response.json();
+        } else {
+            throw new Error('Ошибка загрузки вопросов');
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки вопросов:', error);
+        AppState.questions = [];
+    }
+}
+
+// Загрузка истории
+async function loadHistory() {
+    try {
+        const userId = AppState.user?.id || 'guest';
+        const response = await fetch(`${CONFIG.API_BASE_URL}/history/${userId}`);
+        
+        if (response.ok) {
+            AppState.history = await response.json();
+        } else {
+            throw new Error('Ошибка загрузки истории');
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки истории:', error);
+        AppState.history = [];
     }
 }
 
@@ -2183,149 +2251,3 @@ function hideLoader() {
         loader.style.display = 'none';
     }
 }
-
-// Настройка обработчиков событий
-function setupEventListeners() {
-    // Обработка изменения темы
-    if (tg) {
-        // Слушаем изменения темы Telegram
-        document.addEventListener('themeChanged', () => {
-            console.log('Тема изменена');
-        });
-    }
-}
-
-// Загрузка начальных данных
-async function loadInitialData() {
-    try {
-        // Здесь можно загрузить начальные данные
-        console.log('Загрузка начальных данных...');
-    } catch (error) {
-        console.error('Ошибка загрузки начальных данных:', error);
-    }
-}
-
-// Получить иконку роли
-function getRoleIcon(role) {
-    const icons = {
-        'junior': '🌱',
-        'middle': '🚀',
-        'senior': '👑',
-        'lead': '⭐',
-        'architect': '🏗️',
-        'manager': '📊',
-        'analyst': '📈',
-        'designer': '🎨',
-        'qa': '🔍',
-        'devops': '⚙️',
-        'data': '📊',
-        'mobile': '📱',
-        'frontend': '🎨',
-        'backend': '⚡',
-        'fullstack': '🌐'
-    };
-    
-    return icons[role] || '👤';
-}
-
-// Показать скелетон загрузки вопросов
-function showQuestionsLoadingSkeleton(container) {
-    const skeleton = `
-        <div class="skeleton-item" style="margin-bottom: 16px;">
-            <div class="skeleton-line" style="width: 100%; height: 20px; background: var(--tg-theme-section-separator-color); border-radius: 4px; margin-bottom: 8px;"></div>
-            <div class="skeleton-line" style="width: 80%; height: 16px; background: var(--tg-theme-section-separator-color); border-radius: 4px; margin-bottom: 8px;"></div>
-            <div class="skeleton-line" style="width: 60%; height: 14px; background: var(--tg-theme-section-separator-color); border-radius: 4px;"></div>
-        </div>
-        <div class="skeleton-item" style="margin-bottom: 16px;">
-            <div class="skeleton-line" style="width: 100%; height: 20px; background: var(--tg-theme-section-separator-color); border-radius: 4px; margin-bottom: 8px;"></div>
-            <div class="skeleton-line" style="width: 70%; height: 16px; background: var(--tg-theme-section-separator-color); border-radius: 4px; margin-bottom: 8px;"></div>
-            <div class="skeleton-line" style="width: 50%; height: 14px; background: var(--tg-theme-section-separator-color); border-radius: 4px;"></div>
-        </div>
-        <div class="skeleton-item" style="margin-bottom: 16px;">
-            <div class="skeleton-line" style="width: 100%; height: 20px; background: var(--tg-theme-section-separator-color); border-radius: 4px; margin-bottom: 8px;"></div>
-            <div class="skeleton-line" style="width: 90%; height: 16px; background: var(--tg-theme-section-separator-color); border-radius: 4px; margin-bottom: 8px;"></div>
-            <div class="skeleton-line" style="width: 40%; height: 14px; background: var(--tg-theme-section-separator-color); border-radius: 4px;"></div>
-        </div>
-    `;
-    
-    container.innerHTML = skeleton;
-}
-
-// Показать скелетон загрузки истории
-function showHistoryLoadingSkeleton(container) {
-    const skeleton = `
-        <div class="skeleton-item" style="margin-bottom: 16px; padding: 16px; border: 1px solid var(--tg-theme-section-separator-color); border-radius: 8px;">
-            <div class="skeleton-line" style="width: 100%; height: 18px; background: var(--tg-theme-section-separator-color); border-radius: 4px; margin-bottom: 8px;"></div>
-            <div class="skeleton-line" style="width: 80%; height: 14px; background: var(--tg-theme-section-separator-color); border-radius: 4px; margin-bottom: 8px;"></div>
-            <div class="skeleton-line" style="width: 30%; height: 12px; background: var(--tg-theme-section-separator-color); border-radius: 4px;"></div>
-        </div>
-        <div class="skeleton-item" style="margin-bottom: 16px; padding: 16px; border: 1px solid var(--tg-theme-section-separator-color); border-radius: 8px;">
-            <div class="skeleton-line" style="width: 100%; height: 18px; background: var(--tg-theme-section-separator-color); border-radius: 4px; margin-bottom: 8px;"></div>
-            <div class="skeleton-line" style="width: 70%; height: 14px; background: var(--tg-theme-section-separator-color); border-radius: 4px; margin-bottom: 8px;"></div>
-            <div class="skeleton-line" style="width: 25%; height: 12px; background: var(--tg-theme-section-separator-color); border-radius: 4px;"></div>
-        </div>
-        <div class="skeleton-item" style="margin-bottom: 16px; padding: 16px; border: 1px solid var(--tg-theme-section-separator-color); border-radius: 8px;">
-            <div class="skeleton-line" style="width: 100%; height: 18px; background: var(--tg-theme-section-separator-color); border-radius: 4px; margin-bottom: 8px;"></div>
-            <div class="skeleton-line" style="width: 90%; height: 14px; background: var(--tg-theme-section-separator-color); border-radius: 4px; margin-bottom: 8px;"></div>
-            <div class="skeleton-line" style="width: 35%; height: 12px; background: var(--tg-theme-section-separator-color); border-radius: 4px;"></div>
-        </div>
-    `;
-    
-    container.innerHTML = skeleton;
-}
-
-// Показать кастомное модальное окно подтверждения
-function showConfirmationModal(title, text, onConfirm) {
-    let modal = document.getElementById('confirmation-modal');
-    if (modal) {
-        modal.remove();
-    }
-    
-    modal = document.createElement('div');
-    modal.id = 'confirmation-modal';
-    modal.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.6);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 10001;
-        padding: 20px;
-    `;
-
-    function closeModal() {
-        modal.style.opacity = '0';
-        setTimeout(() => modal.remove(), 200);
-    }
-
-    modal.innerHTML = `
-        <div class="modal-content" style="
-            background: var(--tg-theme-secondary-bg-color);
-            border-radius: 14px;
-            max-width: 320px;
-            width: 100%;
-            text-align: center;
-            padding-top: 24px;
-        ">
-            <h3 style="margin: 0 16px 8px; font-size: 17px; font-weight: 600; color: var(--tg-theme-text-color);">${title}</h3>
-            <p style="margin: 0 16px 20px; font-size: 14px; color: var(--tg-theme-text-color); line-height: 1.4;">${text}</p>
-            <div class="modal-actions" style="border-top: 1px solid var(--tg-theme-section-separator-color); display: flex;">
-                <button id="confirm-cancel" style="width: 50%; padding: 14px; border: 0; background: none; font-size: 17px; color: var(--tg-theme-link-color); border-right: 1px solid var(--tg-theme-section-separator-color);">Отмена</button>
-                <button id="confirm-ok" style="width: 50%; padding: 14px; border: 0; background: none; font-size: 17px; color: var(--tg-theme-destructive-text-color); font-weight: 600;">Очистить</button>
-            </div>
-        </div>
-    `;
-
-    document.body.appendChild(modal);
-
-    document.getElementById('confirm-ok').onclick = () => {
-        closeModal();
-        onConfirm();
-    };
-    
-    document.getElementById('confirm-cancel').onclick = closeModal;
-} 

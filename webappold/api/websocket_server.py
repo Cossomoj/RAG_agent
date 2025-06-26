@@ -6,13 +6,7 @@ import sys
 import os
 
 # Добавляем путь к основному проекту для импорта RAG сервиса
-import os
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.join(current_dir, '..', '..', 'src', 'main_version')
-project_root_abs = os.path.abspath(project_root)
-sys.path.append(project_root_abs)
-print(f"[DEBUG WebSocket] Добавлен путь в sys.path: {project_root_abs}")
-print(f"[DEBUG WebSocket] Путь существует: {os.path.exists(project_root_abs)}")
+sys.path.append('/var/www/html/src/main_version')
 
 try:
     from rag_service import RAGService

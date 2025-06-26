@@ -559,39 +559,7 @@ async def websocket_endpoint(websocket: WebSocket):
             prompt_template=prompt_template
         )
 
-    unwanted_chars = ["*", "**"]
-    
-    def clean_response_text(text):
-        """Очистка и улучшение форматирования ответа"""
-        if not text:
-            return text
-            
-        # Удаляем нежелательные символы
-        for char in unwanted_chars:
-            text = text.replace(char, " ")
-        
-        # Удаляем лишние пробелы
-        text = " ".join(text.split())
-        
-        # Исправляем проблемы с пунктуацией
-        import re
-        
-        # Убираем висящие двоеточия без продолжения (например "Описание :")
-        text = re.sub(r'\b([А-Яа-я]+)\s*:\s*$', r'\1.', text, flags=re.MULTILINE)
-        text = re.sub(r'\b([А-Яа-я]+)\s*:\s*\n', r'\1.\n', text)
-        
-        # Убираем повторяющиеся паттерны типа "Описание : Методики :"
-        text = re.sub(r'([А-Яа-я]+)\s*:\s*([А-Яа-я]+)\s*:', r'\1. \2.', text)
-        
-        # Убираем строки, состоящие только из одного слова и двоеточия
-        lines = text.split('\n')
-        cleaned_lines = []
-        for line in lines:
-            line = line.strip()
-            if line and not re.match(r'^[А-Яа-я]+\s*:\s*$', line):
-                cleaned_lines.append(line)
-        
-        return '\n'.join(cleaned_lines)
+    # Убираем очистку от символов форматирования - они нужны для Markdown!
     
     
     # Эта ветка больше не используется, так как промпты 777,888 всегда используют RAG
@@ -637,8 +605,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     chunk_count += 1
                     answer = chunk.content.strip()
                     
-                    # Применяем улучшенную очистку текста
-                    answer = clean_response_text(answer)
+                    # Оставляем ответ как есть для сохранения Markdown форматирования
                     
                     print(f"Отправляем chunk #{chunk_count}: {answer[:50]}...")
                     await websocket.send_text(answer)
@@ -674,8 +641,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 # Извлекаем ответ
                 answer = chunk.get("answer", "").strip()
 
-                # Применяем улучшенную очистку текста
-                answer = clean_response_text(answer)
+                # Оставляем ответ как есть для сохранения Markdown форматирования
                     
                 await websocket.send_text(answer)  # Отправляем очищенный текстовый ответ
 
@@ -698,7 +664,7 @@ async def websocket_endpoint(websocket: WebSocket):
             ).astream(full_prompt):
                 if chunk and chunk.content:
                     answer = chunk.content.strip()
-                    answer = clean_response_text(answer)
+                    # Оставляем ответ как есть для сохранения Markdown форматирования
                     await websocket.send_text(answer)
         except Exception as e:
             print(f"ОШИБКА при fallback для промпта {question_id}: {e}")
@@ -712,9 +678,6 @@ async def websocket_endpoint(websocket: WebSocket):
                                 ).stream(prompt):
             answer = chunk.content.strip()  # Используем атрибут .content
 
-            # Применяем улучшенную очистку текста
-            answer = clean_response_text(answer)
-
             # Отправляем ответ через WebSocket
             await websocket.send_text(answer)
 
@@ -725,9 +688,6 @@ async def websocket_endpoint(websocket: WebSocket):
                                 model='GigaChat'
                                 ).stream(f"Использую историю нашей с тобой беседы {context}, придумай мне тему для обсуждения"):
             answer = chunk.content.strip()  # Используем атрибут .content
-
-            # Применяем улучшенную очистку текста
-            answer = clean_response_text(answer)
 
             # Отправляем ответ через WebSocket
             await websocket.send_text(answer)
@@ -740,9 +700,6 @@ async def websocket_endpoint(websocket: WebSocket):
                                 model='GigaChat'
                                 ).stream(f"Напомни мне пожалуйста вот об этой теме {context}"):
             answer = chunk.content.strip()  # Используем атрибут .content
-
-            # Применяем улучшенную очистку текста
-            answer = clean_response_text(answer)
 
             # Отправляем ответ через WebSocket
             await websocket.send_text(answer)

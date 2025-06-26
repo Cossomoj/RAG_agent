@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тест обратной связи</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 600px; margin: 0 auto; }
+        textarea { width: 100%; height: 100px; margin: 10px 0; }
+        button { background: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #45a049; }
+        .result { margin: 20px 0; padding: 10px; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Тест API обратной связи</h1>
+        
+        <div>
+            <label for="feedback">Текст обратной связи:</label>
+            <textarea id="feedback" placeholder="Введите текст обратной связи..."></textarea>
+        </div>
+        
+        <button onclick="testFeedback()">Отправить тест</button>
+        
+        <div id="result"></div>
+    </div>
+
+    <script>
+        async function testFeedback() {
+            const feedback = document.getElementById('feedback').value.trim();
+            const resultDiv = document.getElementById('result');
+            
+            if (!feedback) {
+                resultDiv.innerHTML = '<div class="error">Введите текст обратной связи</div>';
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/feedback', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        feedback: feedback,
+                        user_id: 'test_user',
+                        user_name: 'Тестовый пользователь',
+                        username: 'test_user',
+                        role: 'Тестер',
+                        specialization: 'Тестирование'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = '<div class="success">✅ Обратная связь отправлена успешно!</div>';
+                } else {
+                    resultDiv.innerHTML = `<div class="error">❌ Ошибка: ${data.error}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ Ошибка сети: ${error.message}</div>`;
+            }
+        }
+    </script>
+</body>
+</html> 

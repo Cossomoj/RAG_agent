@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="format-detection" content="telephone=no">
+    <title>RAG Ментор</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Критический CSS для предотвращения FOUC */
+        body { 
+            margin: 0; 
+            padding: 0; 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            line-height: 1.5;
+            overflow-x: hidden;
+        }
+        .screen { display: none; }
+        .screen.active { display: block; }
+        #app { 
+            width: 100vw; 
+            min-height: 100vh; 
+            min-height: 100dvh; /* Новые единицы для мобильных браузеров */
+            overflow-x: hidden;
+        }
+        
+        /* Fix для iOS Safari */
+        @supports (-webkit-touch-callout: none) {
+            #app { 
+                min-height: -webkit-fill-available; 
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- Заголовок -->
+        <header class="header">
+            <h1>🤖 GigaMentor</h1>
+            <p>Ваш AI-помощник для профессионального развития</p>
+        </header>
+
+        <!-- Главное меню -->
+        <div id="main-menu" class="screen active">
+            <div class="menu-grid">
+                <button class="menu-btn" onclick="showScreen('ask-question')">
+                    <div class="menu-icon">❓</div>
+                    <h3>Задать вопрос</h3>
+                    <p>Получите персонализированный ответ от AI-ментора</p>
+                </button>
+                
+                <button class="menu-btn" onclick="showScreen('questions-library')">
+                    <div class="menu-icon">📚</div>
+                    <h3>Библиотека вопросов</h3>
+                    <p>Готовые вопросы по ролям и специализациям</p>
+                </button>
+                
+                <button class="menu-btn" onclick="showScreen('history')">
+                    <div class="menu-icon">📜</div>
+                    <h3>История диалогов</h3>
+                    <p>Просмотрите предыдущие беседы</p>
+                </button>
+                
+                <button class="menu-btn" onclick="showScreen('profile')">
+                    <div class="menu-icon">👤</div>
+                    <h3>Профиль</h3>
+                    <p>Настройте роль и специализацию</p>
+                </button>
+                
+                <button class="menu-btn" onclick="showScreen('feedback')">
+                    <div class="menu-icon">💬</div>
+                    <h3>Обратная связь</h3>
+                    <p>Поделитесь с нами своими предложениями по улучшению</p>
+                </button>
+            </div>
+        </div>
+
+        <!-- Экран задать вопрос -->
+        <div id="ask-question" class="screen">
+            <div class="screen-header">
+                <button class="back-btn" onclick="showScreen('main-menu')">← Назад</button>
+                <h2>Задать вопрос</h2>
+            </div>
+            
+            <div class="question-form">
+                <div class="input-group">
+                    <label for="question-input">Ваш вопрос:</label>
+                    <textarea 
+                        id="question-input" 
+                        placeholder="Опишите вашу ситуацию или задайте вопрос..."
+                        rows="4"
+                    ></textarea>
+                </div>
+                
+                <button id="send-question" class="primary-btn" onclick="sendQuestion()">
+                    <span class="btn-text">Отправить</span>
+                    <div class="spinner hidden"></div>
+                </button>
+            </div>
+            
+            <!-- Блок с заданным вопросом -->
+            <div id="asked-question-container" class="asked-question-container hidden">
+                <div class="asked-question-section">
+                    <h3>Ваш вопрос:</h3>
+                    <div id="asked-question-text" class="asked-question-text"></div>
+                </div>
+            </div>
+            
+            <div id="answer-container" class="answer-container hidden">
+                <div class="answer-section">
+                    <h3>Ответ:</h3>
+                    <div id="answer-text" class="answer-text"></div>
+                </div>
+                <!-- Связанные вопросы (теперь показываются ниже ответа) -->
+                <div id="suggested-questions" class="suggested-questions hidden">
+                    <h4>💡 Вам может быть интересно:</h4>
+                    <div id="suggested-list" class="suggested-list"></div>
+                </div>
+                <!-- Предыдущие вопросы из истории -->
+                <div id="previous-questions" class="previous-questions hidden">
+                    <h4>📜 Предыдущие вопросы:</h4>
+                    <div id="previous-list" class="previous-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Экран библиотеки вопросов -->
+        <div id="questions-library" class="screen">
+            <div class="screen-header">
+                <button class="back-btn" onclick="showScreen('main-menu')">← Назад</button>
+                <h2>Библиотека вопросов</h2>
+            </div>
+            
+            <div id="questions-list" class="questions-list">
+                <!-- Вопросы будут загружены динамически -->
+            </div>
+        </div>
+
+        <!-- Экран истории -->
+        <div id="history" class="screen">
+            <div class="screen-header">
+                <button class="back-btn" onclick="showScreen('main-menu')">← Назад</button>
+                <h2>История диалогов</h2>
+                <button class="clear-btn" onclick="clearHistory()">Очистить</button>
+            </div>
+            
+            <div id="history-list" class="history-list">
+                <!-- История будет загружена динамически -->
+            </div>
+        </div>
+
+        <!-- Экран профиля -->
+        <div id="profile" class="screen">
+            <div class="screen-header">
+                <button class="back-btn" onclick="showScreen('main-menu')">← Назад</button>
+                <h2>Профиль</h2>
+            </div>
+            
+            <div class="profile-container">
+                <!-- Информация о пользователе -->
+                <div class="profile-info">
+                    <div class="profile-avatar">
+                        <div class="avatar-placeholder">👤</div>
+                    </div>
+                    <div class="profile-details">
+                        <h3 id="profile-name">Настройка профиля</h3>
+                        <p id="profile-status">Заполните информацию о себе</p>
+                    </div>
+                </div>
+
+                <!-- Форма профиля -->
+                <div class="profile-form">
+                    <div class="form-section">
+                        <h4>Роль в команде</h4>
+                        <div class="select-wrapper">
+                            <select id="role-select" onchange="updateSpecializations()">
+                                <option value="">Выберите вашу роль</option>
+                            </select>
+                            <div class="select-icon">▼</div>
+                        </div>
+                        <p class="field-description">Выберите роль, которая лучше всего описывает вашу должность</p>
+                    </div>
+                    
+                    <div class="form-section">
+                        <h4>Специализация</h4>
+                        <div class="select-wrapper">
+                            <select id="specialization-select">
+                                <option value="">Сначала выберите роль</option>
+                            </select>
+                            <div class="select-icon">▼</div>
+                        </div>
+                        <p class="field-description">Укажите вашу техническую специализацию</p>
+                    </div>
+                </div>
+                
+                <div class="profile-actions">
+                    <button class="primary-btn full-width" onclick="saveProfile()">
+                        <span class="btn-icon">💾</span>
+                        Сохранить профиль
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Экран обратной связи -->
+        <div id="feedback" class="screen">
+            <div class="screen-header">
+                <button class="back-btn" onclick="showScreen('main-menu')">← Назад</button>
+                <h2>Обратная связь</h2>
+            </div>
+            
+            <div class="feedback-container">
+                <!-- Улучшенная информационная секция -->
+                <div class="feedback-hero">
+                    <div class="feedback-icon-large">💬</div>
+                    <h3>Поделитесь своим мнением</h3>
+                    <p>Ваши отзывы и предложения помогают нам делать GigaMentor лучше каждый день!</p>
+                </div>
+
+                <!-- Улучшенная форма обратной связи -->
+                <div class="feedback-form">
+                    <div class="input-group">
+                        <label for="feedback-input">
+                            <span class="label-text">Ваш отзыв или предложение</span>
+                        </label>
+                        <div class="textarea-wrapper">
+                            <textarea 
+                                id="feedback-input" 
+                                placeholder="Поделитесь своими мыслями о приложении, предложениями по улучшению или сообщите о проблемах..."
+                                maxlength="1000"
+                                oninput="updateCharCounter()"
+                            ></textarea>
+                            <div id="char-counter" class="char-counter">0/1000</div>
+                        </div>
+                    </div>
+                    
+                    <button id="feedback-submit-btn" class="primary-btn full-width" onclick="sendFeedback()">
+                        <span class="btn-text">📤 Отправить отзыв</span>
+                        <div class="spinner hidden"></div>
+                    </button>
+                </div>
+
+                <!-- Сообщение об успехе -->
+                <div id="feedback-success" class="feedback-success hidden">
+                    <div class="success-animation">
+                        <div class="success-icon">🎉</div>
+                        <div class="success-confetti">
+                            <div class="confetti"></div>
+                            <div class="confetti"></div>
+                            <div class="confetti"></div>
+                            <div class="confetti"></div>
+                            <div class="confetti"></div>
+                        </div>
+                    </div>
+                    <h3>Спасибо за отзыв!</h3>
+                    <p>Ваше мнение очень важно для нас. Мы обязательно рассмотрим ваши предложения.</p>
+                    <div class="success-actions">
+                        <button class="primary-btn" onclick="resetFeedbackForm()">
+                            <span>✨ Оставить еще отзыв</span>
+                        </button>
+                        <button class="secondary-btn" onclick="showScreen('main-menu')">
+                            <span>🏠 В главное меню</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Модальное окно для истории -->
+        <div id="history-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Детали диалога</h3>
+                    <button class="close-btn" onclick="closeHistoryModal()">×</button>
+                </div>
+                <div class="modal-body" id="history-detail">
+                    <!-- Содержимое будет заполнено динамически -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Лоадер -->
+        <div id="loader" class="loader hidden">
+            <div class="loader-spinner"></div>
+            <div class="loader-text">Обрабатываем ваш запрос...</div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html> 
