@@ -89,6 +89,12 @@ function initTelegramWebApp() {
         if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
             AppState.user = tg.initDataUnsafe.user;
             console.log('Пользователь Telegram:', AppState.user);
+            // Сохраняем user_id для последующего использования
+            saveUserId(AppState.user.id);
+        } else {
+            // Если нет данных пользователя, попробуем получить их из других источников
+            console.warn('Данные пользователя Telegram недоступны');
+            // Можно добавить дополнительную логику для получения ID пользователя
         }
         
         tg.MainButton.text = 'Готово';
@@ -681,7 +687,7 @@ async function useQuestionDirectly(index) {
     showLoader();
     
     try {
-        const userId = AppState.user?.id || 'guest';
+        const userId = getUserId();
         
         // Используем специальный endpoint для библиотечных вопросов с кешированием
         const response = await fetch(`${CONFIG.API_BASE_URL}/ask_library`, {
@@ -967,21 +973,35 @@ async function clearHistory() {
         async () => {
             try {
                 showLoader();
-                const userId = AppState.user?.id || 'guest';
+                const userId = getUserId();
+                console.log('Отправляем запрос на очистку истории для пользователя:', userId);
+                
                 const response = await fetch(`${CONFIG.API_BASE_URL}/history/${userId}`, {
                     method: 'DELETE'
                 });
                 
+                console.log('Ответ сервера на очистку истории:', response.status, response.statusText);
+                
                 if (response.ok) {
+                    // Очищаем локальное состояние
                     AppState.history = [];
+                    
+                    // Перезагружаем историю с сервера для подтверждения
+                    await loadHistory();
+                    
+                    // Обновляем отображение
                     renderHistory();
                     showAlert('История очищена');
+                    
+                    console.log('История успешно очищена');
                 } else {
-                    throw new Error('Ошибка очистки истории');
+                    const errorText = await response.text();
+                    console.error('Ошибка очистки истории:', response.status, errorText);
+                    throw new Error(`Ошибка очистки истории: ${response.status}`);
                 }
             } catch (error) {
                 console.error('Ошибка очистки истории:', error);
-                showAlert('Ошибка очистки истории');
+                showAlert('Ошибка очистки истории: ' + error.message);
             } finally {
                 hideLoader();
             }
@@ -1135,7 +1155,7 @@ async function saveProfile() {
     }
     
     try {
-        const userId = AppState.user?.id || 'guest';
+        const userId = getUserId();
         const response = await fetch(`${CONFIG.API_BASE_URL}/profile/${userId}`, {
             method: 'POST',
             headers: {
@@ -1293,7 +1313,7 @@ async function sendFeedback() {
     sendBtn.style.transform = 'scale(0.98)';
     
     try {
-        const userId = AppState.user?.id || 'guest';
+        const userId = getUserId();
         const userName = AppState.user?.first_name || 'Пользователь';
         const userUsername = AppState.user?.username || 'не указан';
         
@@ -1601,7 +1621,7 @@ async function sendQuestion() {
         return;
     }
     
-    const userId = AppState.user?.id || 'guest';
+    const userId = getUserId();
     
     // Показываем заданный вопрос
     displayAskedQuestion(question);
@@ -1678,16 +1698,32 @@ async function sendQuestion() {
 // Форматирование ответа с улучшенной пунктуацией
 function formatAnswerText(text) {
     if (!text) return '';
+    
+    console.log('📝 Исходный текст для форматирования:', text.substring(0, 200) + '...');
+    
     // Оставляем только базовую очистку, так как ожидаем хороший Markdown с сервера
-    return text.trim();
+    const formatted = text.trim();
+    
+    // Проверим наличие заголовков для отладки
+    const headers = formatted.match(/^#{1,6}\s+.+$/gm);
+    if (headers) {
+        console.log('🔍 Найденные заголовки:', headers);
+    }
+    
+    return formatted;
 }
 
 // Улучшенное преобразование Markdown в HTML
 function convertMarkdownToHtml(text) {
     if (!text) return '';
 
+    console.log('🔄 Конвертируем Markdown в HTML...');
+    
     // Предварительная обработка: нормализуем переносы строк
     text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    
+    // Удаляем лишние пробелы в начале и конце строк, но сохраняем структуру
+    text = text.split('\n').map(line => line.trimEnd()).join('\n');
     
     // Обработка блоков кода (```code```)
     text = text.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
@@ -1707,12 +1743,15 @@ function convertMarkdownToHtml(text) {
     let newHtml = '';
     let listTag = null;
     let inBlockquote = false;
+    let consecutiveEmptyLines = 0;
 
     blocks.forEach((line, index) => {
+        const originalLine = line;
         const trimmedLine = line.trim();
         
         // Обработка пустых строк
         if (trimmedLine === '') {
+            consecutiveEmptyLines++;
             if (listTag) {
                 newHtml += `</${listTag}>`;
                 listTag = null;
@@ -1720,12 +1759,14 @@ function convertMarkdownToHtml(text) {
             if (inBlockquote) {
                 inBlockquote = false;
             }
-            // Добавляем пустую строку между параграфами
-            if (index < blocks.length - 1 && blocks[index + 1].trim() !== '') {
+            // Добавляем только одну пустую строку между блоками
+            if (consecutiveEmptyLines === 1 && index < blocks.length - 1 && blocks[index + 1].trim() !== '') {
                 newHtml += '<br>';
             }
             return;
         }
+        
+        consecutiveEmptyLines = 0;
 
         // Обработка цитат
         if (trimmedLine.startsWith('<blockquote>')) {
@@ -1738,7 +1779,7 @@ function convertMarkdownToHtml(text) {
             return;
         }
 
-        // Заголовки (поддержка до h6)
+        // Заголовки (поддержка до h6) с улучшенной обработкой пробелов
         const headerMatch = trimmedLine.match(/^(#{1,6})\s+(.+)$/);
         if (headerMatch) {
             if (listTag) {
@@ -1746,8 +1787,11 @@ function convertMarkdownToHtml(text) {
                 listTag = null;
             }
             const level = headerMatch[1].length;
-            const headerText = headerMatch[2];
-            newHtml += `<h${level}>${headerText}</h${level}>`;
+            const headerText = headerMatch[2].trim();
+            
+            // Добавляем класс для анимации
+            newHtml += `<h${level} class="markdown-header">${headerText}</h${level}>`;
+            console.log(`📋 Найден заголовок h${level}: ${headerText}`);
             return;
         }
         
@@ -1769,7 +1813,8 @@ function convertMarkdownToHtml(text) {
                 newHtml += '<ol>';
                 listTag = 'ol';
             }
-            newHtml += `<li>${orderedMatch[2]}</li>`;
+            const listItemText = orderedMatch[2].trim();
+            newHtml += `<li>${listItemText}</li>`;
             return;
         }
         
@@ -1781,7 +1826,8 @@ function convertMarkdownToHtml(text) {
                 newHtml += '<ul>';
                 listTag = 'ul';
             }
-            newHtml += `<li>${unorderedMatch[1]}</li>`;
+            const listItemText = unorderedMatch[1].trim();
+            newHtml += `<li>${listItemText}</li>`;
             return;
         }
         
@@ -1792,10 +1838,17 @@ function convertMarkdownToHtml(text) {
         }
         
         // Проверяем, не является ли это продолжением предыдущего параграфа
-        if (newHtml.endsWith('</p>') && !trimmedLine.match(/^(#{1,6}|[-*+•]\s|>\s|\d+\.\s)/)) {
-            // Заменяем последний </p> на пробел и продолжаем параграф
+        const isNewParagraph = newHtml.endsWith('</p>') || newHtml.endsWith('</h1>') || 
+                              newHtml.endsWith('</h2>') || newHtml.endsWith('</h3>') || 
+                              newHtml.endsWith('</h4>') || newHtml.endsWith('</h5>') || 
+                              newHtml.endsWith('</h6>') || newHtml.endsWith('<br>') || 
+                              newHtml === '';
+        
+        if (!isNewParagraph && !trimmedLine.match(/^(#{1,6}|[-*+•]\s|>\s|\d+\.\s)/)) {
+            // Продолжаем предыдущий параграф
             newHtml = newHtml.slice(0, -4) + ' ' + trimmedLine + '</p>';
         } else {
+            // Новый параграф
             newHtml += `<p>${trimmedLine}</p>`;
         }
     });
@@ -1807,12 +1860,17 @@ function convertMarkdownToHtml(text) {
 
     // Постобработка: убираем лишние пробелы и исправляем форматирование
     newHtml = newHtml
-        .replace(/\s+/g, ' ')                    // множественные пробелы
-        .replace(/>\s+</g, '><')                 // пробелы между тегами
-        .replace(/<br>\s*<p>/g, '<p>')          // лишние br перед параграфами
-        .replace(/<\/p>\s*<br>/g, '</p>')       // лишние br после параграфов
+        .replace(/\s+/g, ' ')                           // множественные пробелы
+        .replace(/>\s+</g, '><')                        // пробелы между тегами
+        .replace(/<br>\s*<p>/g, '<p>')                  // лишние br перед параграфами
+        .replace(/<\/p>\s*<br>/g, '</p>')               // лишние br после параграфов
+        .replace(/<h([1-6])>\s*<\/h[1-6]>/g, '')        // пустые заголовки
+        .replace(/<p>\s*<\/p>/g, '')                    // пустые параграфы
+        .replace(/(<\/h[1-6]>)<br>/g, '$1')             // br после заголовков
+        .replace(/(<\/ul>|<\/ol>)<br>/g, '$1')          // br после списков
         .trim();
 
+    console.log('✅ Markdown конвертирован в HTML');
     return newHtml;
 }
 
@@ -2090,7 +2148,7 @@ async function displayPreviousQuestions() {
     
     try {
         // Загружаем актуальную историю из БД
-        const userId = AppState.user?.id || 'guest';
+        const userId = getUserId();
         const response = await fetch(`${CONFIG.API_BASE_URL}/history/${userId}`);
         if (!response.ok) {
             previousContainer.classList.add('hidden');
@@ -2176,7 +2234,7 @@ async function displayPreviousQuestions() {
 // Загрузка профиля пользователя
 async function loadUserProfile() {
     try {
-        const userId = AppState.user?.id || 'guest';
+        const userId = getUserId();
         const response = await fetch(`${CONFIG.API_BASE_URL}/profile/${userId}`);
         
         if (response.ok) {
@@ -2249,7 +2307,7 @@ async function loadQuestions() {
 // Загрузка истории
 async function loadHistory() {
     try {
-        const userId = AppState.user?.id || 'guest';
+        const userId = getUserId();
         const response = await fetch(`${CONFIG.API_BASE_URL}/history/${userId}`);
         
         if (response.ok) {
@@ -2300,4 +2358,221 @@ function hideLoader() {
     if (loader) {
         loader.style.display = 'none';
     }
+}
+
+// Функция показа кастомного модального окна подтверждения
+function showConfirmationModal(title, message, onConfirm) {
+    // Создаем модальное окно
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 10000;
+        backdrop-filter: blur(4px);
+    `;
+    
+    const modalContent = document.createElement('div');
+    modalContent.style.cssText = `
+        background: var(--tg-theme-bg-color);
+        border-radius: 12px;
+        padding: 24px;
+        max-width: 320px;
+        width: 90%;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        animation: modalSlideIn 0.3s ease-out;
+    `;
+    
+    modalContent.innerHTML = `
+        <h3 style="
+            color: var(--tg-theme-text-color);
+            margin: 0 0 12px 0;
+            font-size: 18px;
+            font-weight: 600;
+            text-align: center;
+        ">${title}</h3>
+        <p style="
+            color: var(--tg-theme-subtitle-text-color);
+            margin: 0 0 24px 0;
+            font-size: 14px;
+            line-height: 1.4;
+            text-align: center;
+        ">${message}</p>
+        <div style="
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+        ">
+            <button id="modal-cancel" style="
+                background: var(--tg-theme-secondary-bg-color);
+                color: var(--tg-theme-text-color);
+                border: none;
+                border-radius: 8px;
+                padding: 12px 24px;
+                font-size: 16px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                min-width: 80px;
+            ">Отмена</button>
+            <button id="modal-confirm" style="
+                background: var(--tg-theme-destructive-text-color, #ff3b30);
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 12px 24px;
+                font-size: 16px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                min-width: 80px;
+            ">Удалить</button>
+        </div>
+    `;
+    
+    modal.appendChild(modalContent);
+    document.body.appendChild(modal);
+    
+    // Добавляем стили для анимации
+    if (!document.getElementById('modal-animation-styles')) {
+        const style = document.createElement('style');
+        style.id = 'modal-animation-styles';
+        style.textContent = `
+            @keyframes modalSlideIn {
+                from {
+                    opacity: 0;
+                    transform: scale(0.9) translateY(-20px);
+                }
+                to {
+                    opacity: 1;
+                    transform: scale(1) translateY(0);
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    
+    // Обработчики кнопок
+    const cancelButton = modalContent.querySelector('#modal-cancel');
+    const confirmButton = modalContent.querySelector('#modal-confirm');
+    
+    const closeModal = () => {
+        modalContent.style.animation = 'modalSlideIn 0.2s ease-in reverse';
+        setTimeout(() => {
+            if (modal.parentNode) {
+                modal.parentNode.removeChild(modal);
+            }
+        }, 200);
+    };
+    
+    cancelButton.onclick = closeModal;
+    confirmButton.onclick = () => {
+        closeModal();
+        if (onConfirm) onConfirm();
+    };
+    
+    // Закрытие по клику на фон
+    modal.onclick = (e) => {
+        if (e.target === modal) {
+            closeModal();
+        }
+    };
+    
+    // Hover эффекты для кнопок
+    [cancelButton, confirmButton].forEach(button => {
+        button.addEventListener('mousedown', () => {
+            button.style.transform = 'scale(0.95)';
+        });
+        
+        button.addEventListener('mouseup', () => {
+            button.style.transform = 'scale(1)';
+        });
+        
+        button.addEventListener('mouseleave', () => {
+            button.style.transform = 'scale(1)';
+        });
+    });
+}
+
+// Функция для получения корректного user_id
+function getUserId() {
+    console.log('🔍 Определяем user_id...');
+    
+    // Сначала пытаемся получить ID из Telegram
+    if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.id) {
+        console.log('✅ Используем Telegram user ID:', tg.initDataUnsafe.user.id);
+        console.log('📊 Полные данные пользователя Telegram:', tg.initDataUnsafe.user);
+        return tg.initDataUnsafe.user.id.toString();
+    }
+    
+    // Если есть в AppState
+    if (AppState.user && AppState.user.id) {
+        console.log('✅ Используем AppState user ID:', AppState.user.id);
+        console.log('📊 Полные данные AppState.user:', AppState.user);
+        return AppState.user.id.toString();
+    }
+    
+    // Попробуем получить из URL параметров (если мини-приложение запущено с параметрами)
+    const urlParams = new URLSearchParams(window.location.search);
+    const userIdFromUrl = urlParams.get('user_id');
+    if (userIdFromUrl) {
+        console.log('✅ Используем user ID из URL:', userIdFromUrl);
+        return userIdFromUrl;
+    }
+    
+    // Попробуем получить из localStorage (если ранее сохранили)
+    const savedUserId = localStorage.getItem('telegram_user_id');
+    if (savedUserId) {
+        console.log('✅ Используем сохраненный user ID:', savedUserId);
+        return savedUserId;
+    }
+    
+    // Отладочная информация о доступных данных
+    console.log('❌ Не удалось получить user_id. Отладочная информация:');
+    console.log('- tg объект:', tg);
+    console.log('- tg.initDataUnsafe:', tg?.initDataUnsafe);
+    console.log('- AppState.user:', AppState.user);
+    console.log('- URL параметры:', window.location.search);
+    console.log('- localStorage telegram_user_id:', localStorage.getItem('telegram_user_id'));
+    
+    console.warn('⚠️ Используем fallback: guest');
+    return 'guest';
+}
+
+// Функция для сохранения user_id в localStorage
+function saveUserId(userId) {
+    if (userId && userId !== 'guest') {
+        localStorage.setItem('telegram_user_id', userId);
+        console.log('User ID сохранен в localStorage:', userId);
+    }
+}
+
+// Функция для тестирования Markdown парсинга (для отладки)
+function testMarkdownParsing() {
+    const testText = `# Заголовок 1
+## Заголовок 2  
+### Middle-аналитик
+Обычный текст после заголовка третьего уровня.
+
+- Пункт списка 1
+- Пункт списка 2
+
+**Жирный текст** и *курсив*.`;
+
+    console.log('🧪 Тестируем Markdown парсинг:');
+    console.log('Исходный текст:', testText);
+    
+    const formatted = formatAnswerText(testText);
+    console.log('После formatAnswerText:', formatted);
+    
+    const html = convertMarkdownToHtml(formatted);
+    console.log('После convertMarkdownToHtml:', html);
+    
+    return html;
 }

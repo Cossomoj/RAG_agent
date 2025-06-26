@@ -338,6 +338,16 @@
             }
         }
         
+        /* Специальные стили для заголовков Markdown */
+        .answer-text .markdown-header {
+            animation: slideInLeft 0.6s ease-out;
+            transition: color 0.3s ease;
+        }
+        
+        .answer-text .markdown-header:hover {
+            color: var(--tg-theme-accent-text-color, var(--tg-theme-link-color));
+        }
+        
         .answer-text ul li, .answer-text ol li {
             animation: fadeInUp 0.4s ease-out;
             animation-fill-mode: both;
