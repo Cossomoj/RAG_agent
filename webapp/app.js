@@ -78,7 +78,7 @@ function initTelegramWebApp() {
         // Используем новые возможности Telegram UI Kit 6.10+
         if (tg.setHeaderColor) {
             // Устанавливаем цвет заголовка в соответствии с темой
-            tg.setHeaderColor('bg_color');
+        tg.setHeaderColor('bg_color');
         }
         
         // Применяем цвета заголовка если доступны
@@ -2602,9 +2602,9 @@ function testMarkdownParsing() {
             <div class="message bot-message">
                 <div class="message-content">
                     ${result}
-                </div>
             </div>
-        `;
+        </div>
+    `;
         container.appendChild(testDiv);
         container.scrollTop = container.scrollHeight;
     }
@@ -2659,4 +2659,4 @@ function postProcessAnswer(text) {
     
     console.log('✅ Постобработка завершена');
     return processed.trim();
-}
+} 
