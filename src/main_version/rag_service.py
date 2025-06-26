@@ -321,9 +321,13 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
 Контекст из корпоративных документов:
 {context}
 
-Вопрос пользователя: {question}
+**КРИТИЧЕСКИ ВАЖНОЕ УСЛОВИЕ:**
+Твой ответ должен быть СТРОГО релевантен роли **'{self.role}'** и специализации **'{self.specialization}'**.
+Если в контексте есть информация для других специализаций (например, для аналитиков, если спрашивает тестировщик), **ИГНОРИРУЙ** ее.
+Формируй ответ только на основе данных, применимых к указанной специализации.
+Если в контексте нет информации конкретно для этой специализации, вежливо сообщи, что специфичной информации не найдено, но можешь предоставить общую.
 
-Ответь на вопрос, используя информацию из контекста. Если информация в контексте релевантна вопросу, обязательно используй её в ответе.
+Вопрос пользователя: {question}
 
 КРИТИЧЕСКИ ВАЖНО - ФОРМАТИРОВАНИЕ ОТВЕТА:
 Отформатируй свой ответ строго в формате Markdown с соблюдением следующих правил:
@@ -575,16 +579,18 @@ async def websocket_endpoint(websocket: WebSocket):
 
     # Выбираем соответствующий retriever в зависимости от question_id
     embedding_retriever = embedding_retriever_full
-    if question_id in [1, 2, 3, 22, 23, 24]:
+    if question_id in [1, 2, 3, 19, 20, 21, 22, 23, 24]:
         embedding_retriever = embedding_retriever_1
-    elif question_id in [4, 5, 6, 7, 8, 9, 10, 11, 12, 13]:
+    elif question_id in [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 18]:
         embedding_retriever = embedding_retriever_2
-    elif question_id in [14, 15, 16, 17, 18, 19, 20]:
+    elif question_id in [15, 16, 17]:
         embedding_retriever = embedding_retriever_3
-    elif question_id in [21]:
+    elif question_id in []: # Оставляем пустым на случай будущих расширений
         embedding_retriever = embedding_retriever_full
-    elif question_id in [777, 888] and use_rag_for_special:
-        # Для специальных промптов выбираем retriever на основе роли/специализации
+
+    # Для специальных промптов 777, 888 выбираем retriever на основе роли/специализации
+    if question_id in [777, 888]:
+        print(f"Для специального промпта {question_id} выбираем retriever на основе роли/специализации.")
         embedding_retriever = get_best_retriever_for_role_spec(role, specialization)
 
     # Создаем retrieval_chain для вопросов, которые его используют
