@@ -4,7 +4,7 @@ let tg = window.Telegram.WebApp;
 // Конфигурация
 const CONFIG = {
     API_BASE_URL: window.location.origin + '/api', // Будет работать с /var/www/html/api
-    WEBSOCKET_URL: 'ws://213.171.25.85:8000/ws' // Ваш WebSocket сервер
+    WEBSOCKET_URL: 'ws://213.171.25.85:8000/ws'
 };
 
 // Состояние приложения
@@ -19,6 +19,10 @@ const AppState = {
     questions: []
 };
 
+// Глобальные переменные для ролей и специализаций
+let roles = [];
+let specializations = [];
+
 // Инициализация приложения
 document.addEventListener('DOMContentLoaded', async function() {
     initViewportFixes();
@@ -27,26 +31,23 @@ document.addEventListener('DOMContentLoaded', async function() {
     await loadUserProfile();
     await loadHistory();
     await loadQuestions();
+    createMainMenu();
 });
 
 // Исправления для viewport на разных устройствах
 function initViewportFixes() {
-    // Фиксы для iOS Safari
     function setVhProperty() {
         const vh = window.innerHeight * 0.01;
         document.documentElement.style.setProperty('--vh', `${vh}px`);
     }
     
-    // Установка при загрузке
     setVhProperty();
     
-    // Обновление при изменении размера окна (поворот экрана)
     window.addEventListener('resize', debounce(setVhProperty, 100));
     window.addEventListener('orientationchange', () => {
         setTimeout(setVhProperty, 100);
     });
     
-    // Предотвращение масштабирования при двойном тапе
     let lastTouchEnd = 0;
     document.addEventListener('touchend', function (event) {
         const now = (new Date()).getTime();
@@ -55,23 +56,8 @@ function initViewportFixes() {
         }
         lastTouchEnd = now;
     }, false);
-    
-    // Улучшенная обработка фокуса на мобильных устройствах
-    const inputs = document.querySelectorAll('input, textarea, select');
-    inputs.forEach(input => {
-        input.addEventListener('focus', function() {
-            // Небольшая задержка для корректной работы на iOS
-            setTimeout(() => {
-                this.scrollIntoView({ 
-                    behavior: 'smooth', 
-                    block: 'center' 
-                });
-            }, 300);
-        });
-    });
 }
 
-// Утилита debounce для оптимизации производительности
 function debounce(func, wait) {
     let timeout;
     return function executedFunction(...args) {
@@ -84,26 +70,20 @@ function debounce(func, wait) {
     };
 }
 
-// Инициализация Telegram Web App
+// Инициализация Telegram WebApp
 function initTelegramWebApp() {
     try {
-        // Расширяем приложение на весь экран
         tg.expand();
-        
-        // Настраиваем цвета в соответствии с темой Telegram
         tg.setHeaderColor('bg_color');
         
-        // Получаем данные пользователя
         if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
             AppState.user = tg.initDataUnsafe.user;
             console.log('Пользователь Telegram:', AppState.user);
         }
         
-        // Настраиваем главную кнопку
         tg.MainButton.text = 'Готово';
         tg.MainButton.hide();
         
-        // Обработчик кнопки "Назад"
         tg.BackButton.onClick(() => {
             goBack();
         });
@@ -112,6 +92,303 @@ function initTelegramWebApp() {
     } catch (error) {
         console.error('Ошибка инициализации Telegram Web App:', error);
     }
+}
+
+// Инициализация Telegram UI Kit
+function initTelegramUI() {
+    if (!TelegramUI) {
+        console.error('Telegram UI Kit не загружен');
+        return;
+    }
+
+    // Создаем главное меню
+    createMainMenu();
+    
+    console.log('Telegram UI Kit инициализирован');
+}
+
+// Создание главного меню с Telegram UI компонентами
+function createMainMenu() {
+    const menuGrid = document.getElementById('menu-grid');
+    if (!menuGrid) return;
+
+    const menuItems = [
+        {
+            id: 'ask-question',
+            icon: '❓',
+            title: 'Задать вопрос',
+            description: 'Получите персонализированный ответ от AI-ментора'
+        },
+        {
+            id: 'questions-library',
+            icon: '📚',
+            title: 'Библиотека вопросов',
+            description: 'Готовые вопросы по ролям и специализациям'
+        },
+        {
+            id: 'history',
+            icon: '📜',
+            title: 'История диалогов',
+            description: 'Просмотрите предыдущие беседы'
+        },
+        {
+            id: 'profile',
+            icon: '👤',
+            title: 'Профиль',
+            description: 'Настройте роль и специализацию'
+        },
+        {
+            id: 'feedback',
+            icon: '💬',
+            title: 'Обратная связь',
+            description: 'Поделитесь предложениями по улучшению'
+        }
+    ];
+
+    menuGrid.innerHTML = '';
+
+    menuItems.forEach(item => {
+        const card = createMenuCard(item);
+        menuGrid.appendChild(card);
+    });
+}
+
+// Создание карточки меню с использованием Telegram UI
+function createMenuCard(item) {
+    const card = document.createElement('div');
+    card.className = 'menu-card';
+    card.onclick = () => showScreen(item.id);
+    
+    // Используем стили Telegram UI
+    card.style.cssText = `
+        background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+        border-radius: 12px;
+        padding: 16px;
+        text-align: center;
+        min-height: 100px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        border: 1px solid var(--tg-theme-section-separator-color, #e0e0e0);
+    `;
+
+    card.innerHTML = `
+        <div class="menu-icon">${item.icon}</div>
+        <h3 style="color: var(--tg-theme-text-color); font-size: 16px; font-weight: 600; margin-bottom: 4px;">
+            ${item.title}
+        </h3>
+        <p style="color: var(--tg-theme-hint-color); font-size: 14px; line-height: 1.3;">
+            ${item.description}
+        </p>
+    `;
+
+    return card;
+}
+
+// Создание заголовка экрана с кнопкой назад
+function createScreenHeader(title, showBackButton = true) {
+    const header = document.createElement('div');
+    header.style.cssText = `
+        display: flex;
+        align-items: center;
+        justify-content: ${showBackButton ? 'flex-start' : 'center'};
+        margin-bottom: 16px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--tg-theme-section-separator-color, #e0e0e0);
+        position: relative;
+    `;
+
+    if (showBackButton) {
+        const backButton = document.createElement('button');
+        backButton.innerHTML = 'Назад';
+        backButton.style.cssText = `
+            background: var(--tg-theme-bg-color);
+            border: none;
+            border-radius: 12px;
+            padding: 8px 16px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--tg-theme-button-color);
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s cubic-bezier(0.4, 0.0, 0.2, 1);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            position: relative;
+            overflow: hidden;
+            white-space: nowrap;
+        `;
+        
+        // Создаем ripple эффект
+        backButton.addEventListener('mousedown', (e) => {
+            backButton.style.transform = 'scale(0.92)';
+            backButton.style.boxShadow = '0 1px 4px rgba(0, 0, 0, 0.15)';
+            
+            // Ripple эффект
+            const ripple = document.createElement('div');
+            const rect = backButton.getBoundingClientRect();
+            const size = Math.max(rect.width, rect.height);
+            const x = e.clientX - rect.left - size / 2;
+            const y = e.clientY - rect.top - size / 2;
+            
+            ripple.style.cssText = `
+                position: absolute;
+                width: ${size}px;
+                height: ${size}px;
+                left: ${x}px;
+                top: ${y}px;
+                background: var(--tg-theme-button-color);
+                border-radius: 12px;
+                opacity: 0.1;
+                transform: scale(0);
+                animation: ripple 0.6s linear;
+                pointer-events: none;
+            `;
+            
+            backButton.appendChild(ripple);
+            
+            setTimeout(() => {
+                if (ripple.parentNode) {
+                    ripple.parentNode.removeChild(ripple);
+                }
+            }, 600);
+        });
+        
+        backButton.addEventListener('mouseup', () => {
+            backButton.style.transform = 'scale(1)';
+            backButton.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+        });
+        
+        backButton.addEventListener('mouseleave', () => {
+            backButton.style.transform = 'scale(1)';
+            backButton.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.1)';
+        });
+        
+        // Hover эффект
+        backButton.addEventListener('mouseenter', () => {
+            backButton.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
+        });
+        
+        backButton.onclick = () => showScreen('main-menu');
+        header.appendChild(backButton);
+    }
+
+    const titleElement = document.createElement('h2');
+    titleElement.textContent = title;
+    titleElement.style.cssText = `
+        color: var(--tg-theme-text-color);
+        font-size: 20px;
+        font-weight: 600;
+        margin: 0;
+        ${showBackButton ? 'position: absolute; left: 50%; transform: translateX(-50%);' : ''}
+    `;
+    
+    header.appendChild(titleElement);
+
+    return header;
+}
+
+// Создание кнопки в стиле Telegram
+function createButton(text, mode = 'primary', onClick = null, disabled = false) {
+    const button = document.createElement('button');
+    button.textContent = text;
+    button.disabled = disabled;
+    
+    const isPrimary = mode === 'primary';
+    
+    button.style.cssText = `
+        background: ${isPrimary ? 'var(--tg-theme-button-color, #0088cc)' : 'transparent'};
+        color: ${isPrimary ? 'var(--tg-theme-button-text-color, #ffffff)' : 'var(--tg-theme-button-color, #0088cc)'};
+        border: ${isPrimary ? 'none' : '1px solid var(--tg-theme-button-color, #0088cc)'};
+        border-radius: 8px;
+        padding: 12px 24px;
+        font-size: 16px;
+        font-weight: 500;
+        cursor: ${disabled ? 'not-allowed' : 'pointer'};
+        transition: all 0.2s ease;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: ${disabled ? '0.6' : '1'};
+    `;
+
+    if (onClick && !disabled) {
+        button.onclick = onClick;
+    }
+
+    // Добавляем hover эффект
+    if (!disabled) {
+        button.addEventListener('mousedown', () => {
+            button.style.transform = 'scale(0.98)';
+        });
+        
+        button.addEventListener('mouseup', () => {
+            button.style.transform = 'scale(1)';
+        });
+        
+        button.addEventListener('mouseleave', () => {
+            button.style.transform = 'scale(1)';
+        });
+    }
+
+    return button;
+}
+
+// Создание текстового поля в стиле Telegram
+function createTextarea(placeholder = '', rows = 4) {
+    const textarea = document.createElement('textarea');
+    textarea.placeholder = placeholder;
+    textarea.rows = rows;
+    
+    textarea.style.cssText = `
+        width: 100%;
+        background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+        border: 1px solid var(--tg-theme-section-separator-color, #e0e0e0);
+        border-radius: 8px;
+        padding: 12px;
+        font-size: 16px;
+        color: var(--tg-theme-text-color);
+        resize: vertical;
+        min-height: 100px;
+        font-family: inherit;
+        line-height: 1.4;
+    `;
+    
+    // Фокус стили
+    textarea.addEventListener('focus', () => {
+        textarea.style.borderColor = 'var(--tg-theme-button-color, #0088cc)';
+        textarea.style.outline = 'none';
+    });
+    
+    textarea.addEventListener('blur', () => {
+        textarea.style.borderColor = 'var(--tg-theme-section-separator-color, #e0e0e0)';
+    });
+
+    return textarea;
+}
+
+// Создание карточки в стиле Telegram
+function createCard(content) {
+    const card = document.createElement('div');
+    card.style.cssText = `
+        background: var(--tg-theme-secondary-bg-color, #f0f0f0);
+        border-radius: 12px;
+        padding: 16px;
+        border: 1px solid var(--tg-theme-section-separator-color, #e0e0e0);
+        margin-bottom: 12px;
+    `;
+    
+    if (typeof content === 'string') {
+        card.innerHTML = content;
+    } else {
+        card.appendChild(content);
+    }
+    
+    return card;
 }
 
 // Навигация между экранами
@@ -137,19 +414,19 @@ async function showScreen(screenId) {
 
 // Обновление кнопок Telegram
 function updateTelegramButtons(screenId) {
+    if (!tg) return;
+    
     if (screenId === 'main-menu') {
         tg.BackButton.hide();
     } else {
         tg.BackButton.show();
     }
-    
-    tg.MainButton.hide();
 }
 
 // Возврат назад
 function goBack() {
     if (AppState.currentScreen === 'main-menu') {
-        tg.close();
+        if (tg) tg.close();
     } else {
         showScreen('main-menu');
     }
@@ -158,80 +435,541 @@ function goBack() {
 // Загрузка данных для экрана
 async function loadScreenData(screenId) {
     switch (screenId) {
+        case 'ask-question':
+            createQuestionScreen();
+            // Загружаем историю для отображения предыдущих вопросов при необходимости
+            await loadHistory();
+            break;
         case 'questions-library':
+            createQuestionsLibraryScreen();
+            await loadQuestions(); // Перезагружаем вопросы с учетом текущего профиля
             renderQuestions();
             break;
         case 'history':
             await loadHistory();
+            createHistoryScreen();
             renderHistory();
             break;
         case 'profile':
+            createProfileScreen();
             renderProfile();
             break;
         case 'feedback':
+            createFeedbackScreen();
             initFeedbackScreen();
             break;
     }
 }
 
-// === ПРОФИЛЬ ===
+// Загрузка контента для экрана (старая функция для совместимости)
+function loadScreenContent(screenId) {
+    return loadScreenData(screenId);
+}
 
-// Загрузка профиля пользователя
-async function loadUserProfile() {
+// Создание экрана вопросов
+function createQuestionScreen() {
+    const header = document.getElementById('question-header');
+    const formContainer = document.getElementById('question-form-container');
+    
+    if (!header || !formContainer) return;
+    
+    // Заголовок
+    header.innerHTML = '';
+    header.appendChild(createScreenHeader('Задать вопрос'));
+    
+    // Форма
+    formContainer.innerHTML = '';
+    
+    const form = document.createElement('div');
+    form.className = 'question-form';
+    
+    const label = document.createElement('label');
+    label.textContent = 'Ваш вопрос:';
+    label.style.cssText = `
+        color: var(--tg-theme-text-color);
+        font-weight: 500;
+        margin-bottom: 8px;
+        display: block;
+    `;
+    
+    const textarea = createTextarea('Опишите вашу ситуацию или задайте вопрос...');
+    textarea.id = 'question-input';
+    
+    const sendButton = createButton('Отправить', 'primary', sendQuestion);
+    sendButton.id = 'send-question';
+    
+    form.appendChild(label);
+    form.appendChild(textarea);
+    form.appendChild(sendButton);
+    
+    formContainer.appendChild(form);
+}
+
+// Получение названия категории
+function getCategoryName(category) {
+    const names = {
+        'Взаимодействие': 'Взаимодействие',
+        'Обязанности': 'Обязанности',
+        'Развитие': 'Развитие',
+        'Дополнительно': 'Дополнительно',
+        'development': 'Разработка',
+        'analysis': 'Аналитика',
+        'management': 'Управление',
+        'testing': 'Тестирование'
+    };
+    return names[category] || category;
+}
+
+// Получение иконки для категории
+function getCategoryIcon(category) {
+    const icons = {
+        'Взаимодействие': '🤝',
+        'Обязанности': '📋',
+        'Развитие': '📈',
+        'Дополнительно': '💡',
+        'development': '💻',
+        'analysis': '📊',
+        'management': '👥',
+        'testing': '🧪'
+    };
+    return icons[category] || '❓';
+}
+
+// Отображение вопросов
+function renderQuestions() {
+    const questionsList = document.getElementById('questions-list');
+    const questions = AppState.questions || [];
+    
+    if (!questionsList) return;
+    
+    // Показываем скелетон при загрузке
+    if (questions.length === 0 && AppState.questions === null) {
+        showQuestionsLoadingSkeleton(questionsList);
+        return;
+    }
+    
+    questionsList.innerHTML = '';
+    
+    if (questions.length === 0) {
+        const emptyState = document.createElement('div');
+        emptyState.className = 'empty-state';
+        emptyState.style.cssText = `
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--tg-theme-hint-color);
+        `;
+        emptyState.innerHTML = `
+            <div style="font-size: 48px; margin-bottom: 16px;">📝</div>
+            <h3 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 600; color: var(--tg-theme-text-color);">Вопросы не найдены</h3>
+            <p style="margin: 0; font-size: 14px; line-height: 1.5;">Заполните профиль для получения персонализированных вопросов</p>
+        `;
+        questionsList.appendChild(emptyState);
+        return;
+    }
+    
+    questions.forEach((question, index) => {
+        const div = document.createElement('div');
+        div.className = 'question-item';
+        div.style.cssText = `
+            background: var(--tg-theme-secondary-bg-color);
+            border: 1px solid var(--tg-theme-section-separator-color);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        `;
+        
+        const preview = question.preview || question.text.substring(0, 120) + '...';
+        
+        div.innerHTML = `
+            <div class="question-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                <div class="question-meta" style="display: flex; align-items: center;">
+                    <div class="question-icon" style="margin-right: 8px; font-size: 20px;">${getCategoryIcon(question.category)}</div>
+                    <div class="question-title" style="font-weight: 600; color: var(--tg-theme-text-color); font-size: 16px;">${question.title || 'Вопрос'}</div>
+                </div>
+                <div class="question-category" style="background: var(--tg-theme-button-color); color: var(--tg-theme-button-text-color); padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 500;">${getCategoryName(question.category)}</div>
+            </div>
+            <div class="question-preview" style="color: var(--tg-theme-text-color); font-size: 14px; line-height: 1.4;">${preview}</div>
+        `;
+        
+        div.addEventListener('mousedown', () => {
+            div.style.transform = 'scale(0.98)';
+        });
+        
+        div.addEventListener('mouseup', () => {
+            div.style.transform = 'scale(1)';
+        });
+        
+        div.addEventListener('mouseleave', () => {
+            div.style.transform = 'scale(1)';
+        });
+        
+        div.onclick = async () => await useQuestionDirectly(index);
+        questionsList.appendChild(div);
+    });
+}
+
+// Использование вопроса из библиотеки
+async function useQuestionDirectly(index) {
+    const questions = AppState.questions || [];
+    const question = questions[index];
+    
+    if (!question) {
+        showAlert('Вопрос не найден');
+        return;
+    }
+    
+    // Показываем заданный вопрос
+    displayAskedQuestion(question.text);
+    
+    // Сохраняем вопрос для генерации связанных вопросов
+    SuggestedQuestionsState.userQuestion = question.text;
+    
+    // Показываем полноэкранный лоадер
+    showLoader();
+    
     try {
         const userId = AppState.user?.id || 'guest';
-        const response = await fetch(`${CONFIG.API_BASE_URL}/profile/${userId}`);
+        
+        // Используем специальный endpoint для библиотечных вопросов с кешированием
+        const response = await fetch(`${CONFIG.API_BASE_URL}/ask_library`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                question: question.text,
+                question_id: question.id,
+                user_id: userId,
+                role: AppState.profile.role,
+                specialization: AppState.profile.specialization
+            })
+        });
         
         if (response.ok) {
-            const profile = await response.json();
-            AppState.profile = profile;
+            const data = await response.json();
+            await displayAnswer(question.text, data.answer);
+            
+            // Добавляем в локальную историю
+            AppState.history.unshift({
+                id: Date.now(),
+                question: question.text,
+                answer: data.answer,
+                timestamp: new Date(),
+                role: AppState.profile.role,
+                specialization: AppState.profile.specialization,
+                cached: data.cached || false
+            });
+            
+            // Перезагружаем историю из БД с задержкой
+            setTimeout(async () => {
+                await loadHistory();
+                console.log('✅ История обновлена из БД');
+            }, 500);
+            
+            // Переходим к экрану с ответом
+            showScreen('ask-question');
+            
+            // Предыдущие вопросы будут показаны в displayAnswer
+        } else {
+            throw new Error('Ошибка получения ответа');
         }
     } catch (error) {
-        console.error('Ошибка загрузки профиля:', error);
+        console.error('Ошибка отправки библиотечного вопроса:', error);
+        showAlert('Ошибка получения ответа. Попробуйте снова.');
+    } finally {
+        hideLoader();
     }
 }
 
-// Глобальные переменные для ролей и специализаций (загружаются из API)
-let roles = [];
-let specializations = [];
+// Создание экрана библиотеки вопросов
+function createQuestionsLibraryScreen() {
+    const header = document.getElementById('library-header');
+    const questionsList = document.getElementById('questions-list');
+    
+    if (!header || !questionsList) return;
+    
+    header.innerHTML = '';
+    header.appendChild(createScreenHeader('Библиотека вопросов'));
+    
+    questionsList.innerHTML = '<p style="color: var(--tg-theme-hint-color); text-align: center; padding: 20px;">Загрузка вопросов...</p>';
+    
+    // Рендерим вопросы
+    setTimeout(() => {
+        renderQuestions();
+    }, 100);
+}
 
-// Загрузка ролей и специализаций
-async function loadRolesAndSpecializations() {
-    try {
-        const [rolesResponse, specsResponse] = await Promise.all([
-            fetch(`${CONFIG.API_BASE_URL}/roles`),
-            fetch(`${CONFIG.API_BASE_URL}/specializations`)
-        ]);
-        
-        if (rolesResponse.ok && specsResponse.ok) {
-            roles = await rolesResponse.json();
-            specializations = await specsResponse.json();
-        } else {
-            throw new Error('Ошибка загрузки данных');
-        }
-    } catch (error) {
-        console.error('Ошибка загрузки ролей и специализаций:', error);
-        // Fallback значения из телеграм бота
-        roles = [
-            { value: 'PO/PM', label: 'PO/PM' },
-            { value: 'Лид компетенции', label: 'Лид компетенции' },
-            { value: 'Специалист', label: 'Специалист' },
-            { value: 'Стажер', label: 'Стажер' }
-        ];
-        specializations = [
-            { value: 'Аналитик', label: 'Аналитик' },
-            { value: 'Тестировщик', label: 'Тестировщик' },
-            { value: 'WEB', label: 'WEB' },
-            { value: 'Java', label: 'Java' },
-            { value: 'Python', label: 'Python' }
-        ];
+// Отображение истории
+function renderHistory() {
+    const historyList = document.getElementById('history-list');
+    
+    if (!historyList) return;
+    
+    // Показываем скелетон при загрузке
+    if (AppState.history.length === 0 && AppState.history === null) {
+        showHistoryLoadingSkeleton(historyList);
+        return;
     }
+    
+    historyList.innerHTML = '';
+    
+    console.log('Рендерим историю, количество элементов:', AppState.history.length);
+    
+    if (AppState.history.length === 0) {
+        const emptyState = document.createElement('div');
+        emptyState.style.cssText = `
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--tg-theme-hint-color);
+        `;
+        emptyState.innerHTML = `
+            <div style="font-size: 48px; margin-bottom: 16px;">📜</div>
+            <h3 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 600; color: var(--tg-theme-text-color);">История пуста</h3>
+            <p style="margin: 0; font-size: 14px; line-height: 1.5;">Задайте первый вопрос, чтобы начать</p>
+        `;
+        historyList.appendChild(emptyState);
+        return;
+    }
+    
+    AppState.history.forEach((item, index) => {
+        const div = document.createElement('div');
+        div.className = 'history-item';
+        div.style.cssText = `
+            background: var(--tg-theme-secondary-bg-color);
+            border: 1px solid var(--tg-theme-section-separator-color);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        `;
+        
+        const date = new Date(item.timestamp).toLocaleDateString('ru-RU', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        
+        const questionPreview = item.question.length > 80 ? 
+            item.question.substring(0, 80) + '...' : 
+            item.question;
+            
+        const answerPreview = item.answer.replace(/<[^>]*>/g, ''); // Убираем HTML теги
+        const shortAnswer = answerPreview.length > 100 ? 
+            answerPreview.substring(0, 100) + '...' : 
+            answerPreview;
+        
+        div.innerHTML = `
+            <div class="history-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                <div class="history-date" style="color: var(--tg-theme-hint-color); font-size: 12px;">${date}</div>
+            </div>
+            <div class="history-question" style="color: var(--tg-theme-text-color); font-weight: 600; font-size: 14px; margin-bottom: 8px;">${questionPreview}</div>
+            <div class="history-answer" style="color: var(--tg-theme-hint-color); font-size: 13px; line-height: 1.4;">${shortAnswer}</div>
+        `;
+        
+        div.addEventListener('mousedown', () => {
+            div.style.transform = 'scale(0.98)';
+        });
+        
+        div.addEventListener('mouseup', () => {
+            div.style.transform = 'scale(1)';
+        });
+        
+        div.addEventListener('mouseleave', () => {
+            div.style.transform = 'scale(1)';
+        });
+        
+        div.onclick = () => showHistoryDetail(item);
+        historyList.appendChild(div);
+    });
+}
+
+// Показать детали истории
+function showHistoryDetail(item) {
+    // Создаем модальное окно
+    let modal = document.getElementById('history-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'history-modal';
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            padding: 20px;
+        `;
+        document.body.appendChild(modal);
+    }
+    
+    const date = new Date(item.timestamp).toLocaleDateString('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+    
+    modal.innerHTML = `
+        <div class="modal-content" style="
+            background: var(--tg-theme-bg-color);
+            border-radius: 16px;
+            max-width: 90%;
+            max-height: 80%;
+            overflow-y: auto;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        ">
+            <div class="modal-header" style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 20px 20px 16px 20px;
+                border-bottom: 1px solid var(--tg-theme-section-separator-color);
+            ">
+                <h3 style="margin: 0; color: var(--tg-theme-text-color); font-size: 18px; font-weight: 600;">Детали диалога</h3>
+                <button class="close-btn" onclick="closeHistoryModal()" style="
+                    background: none;
+                    border: none;
+                    font-size: 24px;
+                    color: var(--tg-theme-hint-color);
+                    cursor: pointer;
+                    padding: 0;
+                    width: 32px;
+                    height: 32px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    border-radius: 50%;
+                ">×</button>
+            </div>
+            <div class="modal-body" style="padding: 20px;">
+                <div class="history-detail-meta" style="
+                    display: flex;
+                    justify-content: flex-end;
+                    align-items: center;
+                    margin-bottom: 16px;
+                    padding: 12px;
+                    background: var(--tg-theme-secondary-bg-color);
+                    border-radius: 8px;
+                ">
+                    <span style="color: var(--tg-theme-hint-color); font-size: 14px;">${date}</span>
+                </div>
+                
+                <div class="history-detail-question" style="margin-bottom: 20px;">
+                    <h4 style="color: var(--tg-theme-text-color); margin-bottom: 8px; font-size: 16px; font-weight: 600;">Вопрос:</h4>
+                    <div style="
+                        background: var(--tg-theme-secondary-bg-color);
+                        padding: 12px;
+                        border-radius: 8px;
+                        color: var(--tg-theme-text-color);
+                        line-height: 1.5;
+                    ">${item.question}</div>
+                </div>
+                
+                <div class="history-detail-answer">
+                    <h4 style="color: var(--tg-theme-text-color); margin-bottom: 8px; font-size: 16px; font-weight: 600;">Ответ:</h4>
+                    <div style="
+                        background: var(--tg-theme-secondary-bg-color);
+                        padding: 12px;
+                        border-radius: 8px;
+                        color: var(--tg-theme-text-color);
+                        line-height: 1.6;
+                    " class="answer-text">${convertMarkdownToHtml(formatAnswerText(item.answer))}</div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    modal.style.display = 'flex';
+    
+    // Закрытие по клику на фон
+    modal.onclick = (e) => {
+        if (e.target === modal) {
+            closeHistoryModal();
+        }
+    };
+}
+
+// Закрыть модальное окно истории
+function closeHistoryModal() {
+    const modal = document.getElementById('history-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// Очистка истории
+async function clearHistory() {
+    // Показываем кастомное подтверждение
+    showConfirmationModal(
+        'Очистить историю?',
+        'Это действие удалит все ваши предыдущие диалоги без возможности восстановления.',
+        async () => {
+            try {
+                showLoader();
+                const userId = AppState.user?.id || 'guest';
+                const response = await fetch(`${CONFIG.API_BASE_URL}/history/${userId}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    AppState.history = [];
+                    renderHistory();
+                    showAlert('История очищена');
+                } else {
+                    throw new Error('Ошибка очистки истории');
+                }
+            } catch (error) {
+                console.error('Ошибка очистки истории:', error);
+                showAlert('Ошибка очистки истории');
+            } finally {
+                hideLoader();
+            }
+        }
+    );
+}
+
+// Создание экрана истории
+function createHistoryScreen() {
+    const header = document.getElementById('history-header');
+    const historyList = document.getElementById('history-list');
+    
+    if (!header || !historyList) return;
+    
+    header.innerHTML = '';
+    const headerElement = createScreenHeader('История диалогов');
+    
+    // Добавляем кнопку очистки
+    const clearButton = createButton('Очистить', 'secondary', clearHistory);
+    clearButton.style.cssText += 'margin-left: auto; padding: 8px 16px; font-size: 14px;';
+    headerElement.appendChild(clearButton);
+    
+    header.appendChild(headerElement);
+    
+    historyList.innerHTML = '<p style="color: var(--tg-theme-hint-color); text-align: center; padding: 20px;">Загрузка истории...</p>';
+    
+    // Рендерим историю
+    setTimeout(() => {
+        renderHistory();
+    }, 100);
 }
 
 // Обновление специализаций при выборе роли
 function updateSpecializations() {
     const roleSelect = document.getElementById('role-select');
     const specializationSelect = document.getElementById('specialization-select');
+    
+    if (!roleSelect || !specializationSelect) return;
+    
     const role = roleSelect.value;
     
     // Очищаем список специализаций
@@ -267,6 +1005,14 @@ function updateProfileInfo() {
     const profileName = document.getElementById('profile-name');
     const profileStatus = document.getElementById('profile-status');
     
+    if (!profileName || !profileStatus) return;
+    
+    const roleSelect = document.getElementById('role-select');
+    const specializationSelect = document.getElementById('specialization-select');
+    
+    if (roleSelect) AppState.profile.role = roleSelect.value;
+    if (specializationSelect) AppState.profile.specialization = specializationSelect.value;
+    
     if (AppState.profile.role && AppState.profile.specialization) {
         profileName.textContent = `${AppState.profile.role} • ${AppState.profile.specialization}`;
         profileStatus.textContent = 'Профиль настроен';
@@ -280,6 +1026,8 @@ function updateProfileInfo() {
 function renderProfile() {
     const roleSelect = document.getElementById('role-select');
     const specializationSelect = document.getElementById('specialization-select');
+    
+    if (!roleSelect || !specializationSelect) return;
     
     // Заполняем список ролей
     roleSelect.innerHTML = '<option value="">Выберите вашу роль</option>';
@@ -303,12 +1051,17 @@ function renderProfile() {
     // Добавляем обработчики изменений
     roleSelect.addEventListener('change', function() {
         AppState.profile.role = this.value;
+        updateSpecializations();
         updateProfileInfo();
     });
     
-    specializationSelect.addEventListener('change', function() {
+    specializationSelect.addEventListener('change', async function() {
         AppState.profile.specialization = this.value;
         updateProfileInfo();
+        // Перезагружаем вопросы при изменении специализации
+        if (AppState.profile.role && AppState.profile.specialization) {
+            await loadQuestions();
+        }
     });
     
     // Обновляем информацию о профиле
@@ -319,6 +1072,8 @@ function renderProfile() {
 async function saveProfile() {
     const roleSelect = document.getElementById('role-select');
     const specializationSelect = document.getElementById('specialization-select');
+    
+    if (!roleSelect || !specializationSelect) return;
     
     AppState.profile.role = roleSelect.value;
     AppState.profile.specialization = specializationSelect.value;
@@ -351,991 +1106,112 @@ async function saveProfile() {
     }
 }
 
-// === ВОПРОСЫ ===
-
-// Отображение заданного вопроса
-function displayAskedQuestion(question) {
-    const askedQuestionContainer = document.getElementById('asked-question-container');
-    const askedQuestionText = document.getElementById('asked-question-text');
+// Создание экрана профиля
+function createProfileScreen() {
+    const header = document.getElementById('profile-header');
+    const profileContent = document.getElementById('profile-content');
     
-    askedQuestionText.textContent = question;
-    askedQuestionContainer.classList.remove('hidden');
-}
-
-// Отправка вопроса
-async function sendQuestion() {
-    const questionInput = document.getElementById('question-input');
-    const sendBtn = document.getElementById('send-question');
-    const btnText = sendBtn.querySelector('.btn-text');
-    const spinner = sendBtn.querySelector('.spinner');
+    if (!header || !profileContent) return;
     
-    const question = questionInput.value.trim();
-    if (!question) {
-        showAlert('Пожалуйста, введите вопрос');
-        return;
-    }
+    header.innerHTML = '';
+    header.appendChild(createScreenHeader('Профиль'));
     
-    // Показываем заданный вопрос
-    displayAskedQuestion(question);
-    
-    // Сохраняем вопрос пользователя для генерации связанных вопросов
-    SuggestedQuestionsState.userQuestion = question;
-    
-    // Показываем полноэкранный лоадер
-    showLoader();
-    
-    // Показываем лоадер на кнопке
-    sendBtn.disabled = true;
-    btnText.textContent = 'Отправляем...';
-    spinner.classList.remove('hidden');
-    
-    try {
-        const userId = AppState.user?.id || 'guest';
-        
-        // Создаем системный промпт для улучшения форматирования
-        const systemPrompt = `Отвечай структурированно и читабельно:
-- Используй нумерованные списки (1., 2., 3.) для пошаговых инструкций
-- Используй маркированные списки (-, *) для перечислений
-- Выделяй важные термины **жирным шрифтом**
-- Используй заголовки ### для разделов
-- Соблюдай правильную пунктуацию и грамматику
-- Каждый пункт списка начинай с новой строки
-- Делай абзацы для лучшей читабельности
-
-Вопрос пользователя: ${question}`;
-        
-        const response = await fetch(`${CONFIG.API_BASE_URL}/ask`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                question: question, // только текст вопроса пользователя!
-                user_id: userId,
-                role: AppState.profile.role,
-                specialization: AppState.profile.specialization
-            })
-        });
-        
-        if (response.ok) {
-            const data = await response.json();
-            displayAnswer(data.answer, data.suggested_questions);
-            
-            // Добавляем в локальную историю
-            AppState.history.unshift({
-                id: Date.now(),
-                question: question,
-                answer: data.answer,
-                timestamp: new Date(),
-                role: AppState.profile.role,
-                specialization: AppState.profile.specialization
-            });
-            
-            // Перезагружаем историю из БД с задержкой, чтобы дать время серверу сохранить ответ
-            setTimeout(async () => {
-                await loadHistory();
-                console.log('✅ История обновлена из БД');
-            }, 500);
-            
-            // Очищаем поле ввода
-            questionInput.value = '';
-        } else {
-            throw new Error('Ошибка получения ответа');
-        }
-    } catch (error) {
-        console.error('Ошибка отправки вопроса:', error);
-        showAlert('Ошибка отправки вопроса. Попробуйте снова.');
-    } finally {
-        // Скрываем полноэкранный лоадер
-        hideLoader();
-        
-        // Скрываем лоадер на кнопке
-        sendBtn.disabled = false;
-        btnText.textContent = 'Отправить';
-        spinner.classList.add('hidden');
-    }
-}
-
-// Отображение ответа
-// Состояние для связанных вопросов
-const SuggestedQuestionsState = {
-    currentQuestions: [],
-    userQuestion: '',
-    botAnswer: ''
-};
-
-// Функция для форматирования ответа с улучшенной пунктуацией и читабельностью
-function formatAnswerText(text) {
-    if (!text) return '';
-    
-    let formatted = text.trim();
-    
-    // Нормализуем переносы строк
-    formatted = formatted.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    
-    // Убираем лишние пробелы, но сохраняем структуру
-    formatted = formatted.replace(/[ \t]+/g, ' ');
-    
-    // Добавляем переносы перед нумерованными пунктами (1., 2., и т.д.)
-    formatted = formatted.replace(/([.!?])\s*(\d+\.)/g, '$1\n\n$2');
-    
-    // Добавляем переносы перед заголовками (заглавные слова с двоеточием)
-    formatted = formatted.replace(/([.!?])\s*([А-ЯA-Z][а-яa-z\s]+:)(?!\s*\d)/g, '$1\n\n$2');
-    
-    // Разбиваем длинные предложения на абзацы
-    formatted = formatted.replace(/([.!?])\s+([А-ЯA-Z][^.!?]{100,})/g, '$1\n\n$2');
-    
-    // Убираем лишние переносы
-    formatted = formatted.replace(/\n{3,}/g, '\n\n');
-    
-    return formatted.trim();
-}
-
-// Преобразование текста в HTML с правильным форматированием
-function convertMarkdownToHtml(text) {
-    if (!text) return '';
-    let html = text
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/`(.*?)`/g, '<code>$1</code>');
-
-    // Разбиваем на строки
-    const lines = html.split(/\n/);
-    let result = [];
-    let buffer = [];
-    let listType = null;
-    let inParagraph = false;
-
-    function flushBuffer() {
-        if (buffer.length === 0) return;
-        if (listType === 'ol') {
-            result.push('<ol>' + buffer.map(item => `<li>${item}</li>`).join('') + '</ol><br>');
-        } else if (listType === 'ul') {
-            result.push('<ul>' + buffer.map(item => `<li>${item}</li>`).join('') + '</ul><br>');
-        }
-        buffer = [];
-        listType = null;
-    }
-
-    function flushParagraph() {
-        if (inParagraph) {
-            result.push('</p><br>');
-            inParagraph = false;
-        }
-    }
-
-    for (let i = 0; i < lines.length; i++) {
-        let line = lines[i].trim();
-        if (!line) {
-            flushBuffer();
-            flushParagraph();
-            continue;
-        }
-        // Markdown заголовки
-        if (/^###\s*(.+)/.test(line)) {
-            flushBuffer(); flushParagraph();
-            result.push(`<h3>${line.replace(/^###\s*/, '')}</h3><br>`);
-            continue;
-        }
-        if (/^##\s*(.+)/.test(line)) {
-            flushBuffer(); flushParagraph();
-            result.push(`<h2>${line.replace(/^##\s*/, '')}</h2><br>`);
-            continue;
-        }
-        if (/^#\s*(.+)/.test(line)) {
-            flushBuffer(); flushParagraph();
-            result.push(`<h1>${line.replace(/^#\s*/, '')}</h1><br>`);
-            continue;
-        }
-        // Заголовок с двоеточием
-        if (/^[А-ЯA-Z][а-яa-z\s]+:$/.test(line)) {
-            flushBuffer(); flushParagraph();
-            result.push(`<h4>${line}</h4><br>`);
-            continue;
-        }
-        // Нумерованный список
-        const numMatch = line.match(/^(\d+)\.\s*(.+)$/);
-        if (numMatch) {
-            if (listType !== 'ol') flushBuffer();
-            listType = 'ol';
-            buffer.push(numMatch[2]);
-            continue;
-        }
-        // Маркированный список
-        const bulletMatch = line.match(/^[-*•]\s*(.+)$/);
-        if (bulletMatch) {
-            if (listType !== 'ul') flushBuffer();
-            listType = 'ul';
-            buffer.push(bulletMatch[1]);
-            continue;
-        }
-        // Если строка не список и не заголовок
-        flushBuffer();
-        // Новый абзац, если предыдущий закончился или это начало
-        if (!inParagraph) {
-            result.push('<p>');
-            inParagraph = true;
-        } else {
-            // Если строка начинается с заглавной и предыдущая строка закончилась на точку — новый абзац
-            const prev = lines[i-1] ? lines[i-1].trim() : '';
-            if (prev && /[.!?]$/.test(prev) && /^[А-ЯA-Z]/.test(line)) {
-                result.push('</p><br><p>');
-            } else {
-                result.push(' ');
-            }
-        }
-        result.push(line);
-    }
-    flushBuffer();
-    flushParagraph();
-    // Убираем лишние <br> внутри списков и между абзацами
-    let finalHtml = result.join('');
-    finalHtml = finalHtml.replace(/(<\/ul>|<\/ol>)<br>/g, '$1');
-    finalHtml = finalHtml.replace(/<br><br>/g, '<br>');
-    finalHtml = finalHtml.replace(/<p>\s*<\/p>/g, '');
-    return finalHtml;
-}
-
-// Отображение предыдущих вопросов из истории
-async function displayPreviousQuestions() {
-    console.log('📜 displayPreviousQuestions вызвана');
-    
-    const previousContainer = document.getElementById('previous-questions');
-    const previousList = document.getElementById('previous-list');
-    
-    try {
-        // Загружаем актуальную историю из БД
-        const userId = AppState.user?.id || 'guest';
-        console.log('🔄 Загружаем актуальную историю из БД для userId:', userId);
-        
-        const response = await fetch(`${CONFIG.API_BASE_URL}/history/${userId}`);
-        if (!response.ok) {
-            console.error('❌ Ошибка загрузки истории:', response.status);
-            previousContainer.classList.add('hidden');
-            return;
-        }
-        
-        const historyFromDB = await response.json();
-        console.log('📊 История из БД:', historyFromDB);
-        console.log('📊 Длина истории из БД:', historyFromDB ? historyFromDB.length : 'undefined');
-        
-        if (!historyFromDB || historyFromDB.length === 0) {
-            console.log('⚠️ История из БД пуста');
-            previousContainer.classList.add('hidden');
-            return;
-        }
-        
-        // Получаем последние 3 вопроса из истории (исключая самый последний, который является текущим)
-        const previousQuestions = historyFromDB.slice(1, 4); // Пропускаем первый (текущий) вопрос
-        
-        console.log('📍 Предыдущие вопросы из БД:', previousQuestions);
-        console.log('📍 Количество предыдущих вопросов:', previousQuestions.length);
-        
-        if (!previousQuestions || previousQuestions.length === 0) {
-            console.log('⚠️ Нет предыдущих вопросов для отображения');
-            previousContainer.classList.add('hidden');
-            return;
-        }
-        
-        console.log('🔄 Создаем кнопки предыдущих вопросов...');
-        previousList.innerHTML = '';
-        
-        previousQuestions.forEach((historyItem, index) => {
-            console.log(`➕ Добавляем предыдущий вопрос ${index + 1}:`, historyItem.question.substring(0, 50));
-            const button = document.createElement('button');
-            button.className = 'previous-question-btn';
-            button.textContent = historyItem.question;
-            button.onclick = () => {
-                console.log('🔄 Пользователь выбрал предыдущий вопрос:', historyItem.question);
-                showHistoryDetail(historyItem);
-            };
-            previousList.appendChild(button);
-        });
-        
-        previousContainer.classList.remove('hidden');
-        console.log('✅ Предыдущие вопросы отображены');
-        
-    } catch (error) {
-        console.error('❌ Ошибка загрузки предыдущих вопросов:', error);
-        previousContainer.classList.add('hidden');
-    }
-}
-
-function displayAnswer(answer, suggestedQuestions = []) {
-    console.log('📄 displayAnswer вызвана с ответом длиной:', answer.length, 'символов');
-    
-    const answerContainer = document.getElementById('answer-container');
-    const answerText = document.getElementById('answer-text');
-    const suggestedContainer = document.getElementById('suggested-questions');
-    
-    // Форматируем ответ для лучшей читабельности
-    const formattedAnswer = formatAnswerText(answer);
-    
-    // Преобразуем Markdown в HTML
-    const htmlAnswer = convertMarkdownToHtml(formattedAnswer);
-    
-    answerText.innerHTML = htmlAnswer;
-    answerContainer.classList.remove('hidden');
-    
-    // Сохраняем данные для генерации связанных вопросов
-    SuggestedQuestionsState.botAnswer = answer;
-    console.log('💾 Ответ сохранен в SuggestedQuestionsState:', {
-        userQuestion: SuggestedQuestionsState.userQuestion,
-        botAnswer: SuggestedQuestionsState.botAnswer.substring(0, 50) + '...'
-    });
-    
-    // Прокрутка к самому верху страницы сразу после вывода ответа
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    
-    // Если есть готовые связанные вопросы, показываем их
-    if (suggestedQuestions && suggestedQuestions.length > 0) {
-        console.log('🔗 Показываем готовые связанные вопросы:', suggestedQuestions);
-        displaySuggestedQuestions(suggestedQuestions);
-    } else {
-        console.log('🤖 Генерируем связанные вопросы...');
-        // Генерируем связанные вопросы асинхронно
-        generateSuggestedQuestions();
-    }
-    
-    // Показываем предыдущие вопросы из истории в самом конце
-    setTimeout(async () => {
-        await displayPreviousQuestions();
-    }, 100);
-}
-
-// Генерация связанных вопросов как в телеграм боте
-async function generateSuggestedQuestions() {
-    console.log('🔄 Начинаем генерацию связанных вопросов...');
-    
-    const payload = {
-        user_question: SuggestedQuestionsState.userQuestion,
-        bot_answer: SuggestedQuestionsState.botAnswer.substring(0, 2000), // Обрезаем как в боте
-        role: AppState.profile.role || 'Пользователь',
-        specialization: AppState.profile.specialization || 'Не указана'
-    };
-    
-    console.log('📝 Payload для генерации вопросов:', payload);
-    
-    // Проверяем, что у нас есть необходимые данные
-    if (!SuggestedQuestionsState.userQuestion || !SuggestedQuestionsState.botAnswer) {
-        console.warn('⚠️ Недостаточно данных для генерации вопросов');
-        return;
-    }
-    
-    try {
-        console.log('🔌 Попытка подключения к WebSocket ws://127.0.0.1:8000/ws_suggest');
-        
-        // Таймаут для WebSocket соединения
-        const wsPromise = new Promise((resolve, reject) => {
-            const ws = new WebSocket('ws://127.0.0.1:8000/ws_suggest');
-            let connected = false;
-            
-            // Таймаут соединения
-            const timeout = setTimeout(() => {
-                if (!connected) {
-                    console.warn('⏱️ WebSocket соединение превысило таймаут');
-                    ws.close();
-                    reject(new Error('WebSocket connection timeout'));
-                }
-            }, 5000);
-            
-            ws.onopen = () => {
-                connected = true;
-                clearTimeout(timeout);
-                console.log('✅ WebSocket соединение установлено');
-                ws.send(JSON.stringify(payload));
-                console.log('📤 Данные отправлены на сервер');
-            };
-            
-            ws.onmessage = (event) => {
-                console.log('📥 Получен ответ от сервера:', event.data);
-                try {
-                    const questions = JSON.parse(event.data);
-                    
-                    if (questions && questions.error) {
-                        console.error('❌ Ошибка от сервера:', questions.error);
-                        reject(new Error(questions.error));
-                        return;
-                    }
-                    
-                    if (Array.isArray(questions) && questions.length > 0) {
-                        console.log('🎯 Успешно получены вопросы:', questions);
-                        // Берем только первые 3 вопроса как в боте
-                        SuggestedQuestionsState.currentQuestions = questions.slice(0, 3);
-                        displaySuggestedQuestions(SuggestedQuestionsState.currentQuestions);
-                        resolve(questions);
-                    } else {
-                        console.warn('⚠️ Получен некорректный ответ или пустой список вопросов:', questions);
-                        resolve([]);
-                    }
-                } catch (error) {
-                    console.error('❌ Ошибка парсинга ответа:', error);
-                    reject(error);
-                } finally {
-                    ws.close();
-                }
-            };
-            
-            ws.onerror = (error) => {
-                connected = true; // Останавливаем таймаут
-                clearTimeout(timeout);
-                console.error('❌ WebSocket ошибка:', error);
-                reject(error);
-            };
-            
-            ws.onclose = (event) => {
-                console.log('🔌 WebSocket соединение закрыто:', event.code, event.reason);
-            };
-        });
-        
-        await wsPromise;
-        
-    } catch (error) {
-        console.error('❌ Ошибка WebSocket соединения:', error);
-        console.log('🔄 Пробуем альтернативный способ через HTTP API...');
-        
-        // Fallback: пробуем через HTTP API
-        try {
-            const response = await fetch(`${CONFIG.API_BASE_URL}/suggest_questions`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(payload)
-            });
-            
-            if (response.ok) {
-                const questions = await response.json();
-                console.log('✅ Получены вопросы через HTTP API:', questions);
-                
-                if (Array.isArray(questions) && questions.length > 0) {
-                    SuggestedQuestionsState.currentQuestions = questions.slice(0, 3);
-                    displaySuggestedQuestions(SuggestedQuestionsState.currentQuestions);
-                }
-            } else {
-                console.error('❌ HTTP API также недоступен:', response.status, response.statusText);
-            }
-        } catch (httpError) {
-            console.error('❌ Ошибка HTTP fallback:', httpError);
-            console.log('💡 Для получения связанных вопросов убедитесь, что RAG сервис запущен на порту 8000');
-        }
-    }
-}
-
-// Отображение связанных вопросов
-function displaySuggestedQuestions(questions) {
-    console.log('🎯 displaySuggestedQuestions вызвана с вопросами:', questions);
-    
-    const suggestedContainer = document.getElementById('suggested-questions');
-    const suggestedList = document.getElementById('suggested-list');
-    const answerContainer = document.getElementById('answer-container');
-    
-    console.log('📍 Элементы DOM найдены:', {
-        suggestedContainer: !!suggestedContainer,
-        suggestedList: !!suggestedList,
-        answerContainer: !!answerContainer
-    });
-    
-    if (!questions || questions.length === 0) {
-        console.log('⚠️ Нет вопросов для отображения');
-        suggestedContainer.classList.add('hidden');
-        return;
-    }
-    
-    console.log('🔄 Очищаем и создаем новые кнопки вопросов...');
-    suggestedList.innerHTML = '';
-    
-    questions.forEach((question, index) => {
-        console.log(`➕ Добавляем вопрос ${index + 1}:`, question);
-        const button = document.createElement('button');
-        button.className = 'suggested-question-btn';
-        button.textContent = question;
-        button.onclick = () => {
-            console.log('🔄 Пользователь выбрал связанный вопрос:', question);
-            document.getElementById('question-input').value = question;
-            sendQuestion();
-        };
-        suggestedList.appendChild(button);
-    });
-    
-    // Перемещаем блок в конец answer-container
-    if (answerContainer && suggestedContainer) {
-        answerContainer.appendChild(suggestedContainer);
-    }
-    
-    suggestedContainer.classList.remove('hidden');
-    console.log('✅ Связанные вопросы отображены');
-}
-
-// === БИБЛИОТЕКА ВОПРОСОВ ===
-
-// Состояние библиотеки вопросов
-const LibraryState = {};
-
-// Загрузка готовых вопросов
-async function loadQuestions() {
-    const questionsList = document.getElementById('questions-list');
-    
-    // Показываем скелетоны загрузки
-    if (questionsList) {
-        showQuestionsLoadingSkeleton(questionsList);
-    }
-    
-    try {
-        const params = new URLSearchParams();
-        if (AppState.profile.role) {
-            params.append('role', AppState.profile.role);
-        }
-        if (AppState.profile.specialization) {
-            params.append('specialization', AppState.profile.specialization);
-        }
-        
-        const url = `${CONFIG.API_BASE_URL}/questions${params.toString() ? '?' + params.toString() : ''}`;
-        const response = await fetch(url);
-        
-        if (response.ok) {
-            AppState.questions = await response.json();
-        }
-    } catch (error) {
-        console.error('Ошибка загрузки вопросов:', error);
-    } finally {
-        // Всегда рендерим результат (даже если произошла ошибка)
-        renderQuestions();
-    }
-}
-
-// Отображение вопросов
-function renderQuestions() {
-    const questionsList = document.getElementById('questions-list');
-    const questions = AppState.questions || [];
-    
-    questionsList.innerHTML = '';
-    
-    if (questions.length === 0) {
-        const emptyState = document.createElement('div');
-        emptyState.className = 'empty-state';
-        emptyState.innerHTML = `
-            <div style="text-align: center; padding: 40px 20px; color: var(--tg-theme-hint-color);">
-                <div style="font-size: 48px; margin-bottom: 16px; animation: bounce 2s ease-in-out infinite;">📝</div>
-                <h3 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 600;">Вопросы не найдены</h3>
-                <p style="margin: 0; font-size: 14px; line-height: 1.5;">Заполните профиль для получения персонализированных вопросов</p>
+    // Создаем содержимое профиля
+    profileContent.innerHTML = `
+        <!-- Информация о пользователе -->
+        <div class="profile-info" style="display: flex; align-items: center; margin-bottom: 24px; padding: 16px; background: var(--tg-theme-secondary-bg-color); border-radius: 12px;">
+            <div class="profile-avatar" style="margin-right: 16px;">
+                <div class="avatar-placeholder" style="width: 60px; height: 60px; background: var(--tg-theme-button-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px;">👤</div>
             </div>
-        `;
-        questionsList.appendChild(emptyState);
-        return;
-    }
-    
-    questions.forEach((question, index) => {
-        const div = document.createElement('div');
-        div.className = 'question-item';
-        div.setAttribute('data-category', question.category);
-        
-        const preview = question.preview || question.text.substring(0, 120) + '...';
-        
-        div.innerHTML = `
-            <div class="question-header">
-                <div class="question-meta">
-                    <div class="question-icon">${getCategoryIcon(question.category)}</div>
-                    <div class="question-title">${question.title}</div>
-                </div>
-                <div class="question-category">${getCategoryName(question.category)}</div>
+            <div class="profile-details">
+                <h3 id="profile-name" style="color: var(--tg-theme-text-color); margin: 0 0 4px 0; font-size: 18px; font-weight: 600;">Настройка профиля</h3>
+                <p id="profile-status" style="color: var(--tg-theme-hint-color); margin: 0; font-size: 14px;">Заполните информацию о себе</p>
             </div>
-            <div class="question-preview">${preview}</div>
-        `;
-        
-        div.onclick = async () => await useQuestionDirectly(index);
-        questionsList.appendChild(div);
-    });
-}
-
-// Использование вопроса напрямую из библиотеки с кешированием
-async function useQuestionDirectly(index) {
-    const questions = AppState.questions || [];
-    const question = questions[index];
-    
-    if (!question) {
-        showAlert('Вопрос не найден');
-        return;
-    }
-    
-    // Показываем заданный вопрос
-    displayAskedQuestion(question.text);
-    
-    // Сохраняем вопрос пользователя для генерации связанных вопросов
-    SuggestedQuestionsState.userQuestion = question.text;
-    
-    // Показываем полноэкранный лоадер
-    showLoader();
-    
-    try {
-        const userId = AppState.user?.id || 'guest';
-        
-        // Используем специальный endpoint для библиотечных вопросов с кешированием
-        const response = await fetch(`${CONFIG.API_BASE_URL}/ask_library`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                question: question.text,
-                question_id: question.id, // Передаем ID вопроса для кеширования
-                user_id: userId,
-                role: AppState.profile.role,
-                specialization: AppState.profile.specialization
-            })
-        });
-        
-        if (response.ok) {
-            const data = await response.json();
-            displayAnswer(data.answer, data.suggested_questions);
-            
-            // Добавляем в локальную историю
-            AppState.history.unshift({
-                id: Date.now(),
-                question: question.text,
-                answer: data.answer,
-                timestamp: new Date(),
-                role: AppState.profile.role,
-                specialization: AppState.profile.specialization,
-                cached: data.cached || false
-            });
-            
-            // Перезагружаем историю из БД с задержкой
-            setTimeout(async () => {
-                await loadHistory();
-                console.log('✅ История обновлена из БД');
-            }, 500);
-            
-            // Переходим к экрану с ответом
-            showScreen('ask-question');
-        } else {
-            throw new Error('Ошибка получения ответа');
-        }
-    } catch (error) {
-        console.error('Ошибка отправки библиотечного вопроса:', error);
-        showAlert('Ошибка получения ответа. Попробуйте снова.');
-    } finally {
-        // Скрываем полноэкранный лоадер
-        hideLoader();
-    }
-}
-
-// Получение названия категории
-function getCategoryName(category) {
-    const names = {
-        'Взаимодействие': 'Взаимодействие',
-        'Обязанности': 'Обязанности',
-        'Развитие': 'Развитие',
-        'Дополнительно': 'Дополнительно',
-        'development': 'Разработка',
-        'analysis': 'Аналитика',
-        'management': 'Управление',
-        'testing': 'Тестирование'
-    };
-    return names[category] || category;
-}
-
-// Получение иконки для категории
-function getCategoryIcon(category) {
-    const icons = {
-        'Взаимодействие': '🤝',
-        'Обязанности': '📋',
-        'Развитие': '📈',
-        'Дополнительно': '💡',
-        'development': '💻',
-        'analysis': '📊',
-        'management': '👥',
-        'testing': '🧪'
-    };
-    return icons[category] || '❓';
-}
-
-// Получение иконки для роли
-function getRoleIcon(role) {
-    const icons = {
-        'Разработчик': '👨‍💻',
-        'Аналитик': '📊',
-        'Тестировщик': '🧪',
-        'Менеджер': '👔',
-        'Дизайнер': '🎨',
-        'DevOps': '⚙️',
-        'Архитектор': '🏗️',
-        'Продукт-менеджер': '📱',
-        'Scrum-мастер': '🎯',
-        'Технический писатель': '📝'
-    };
-    return icons[role] || '👤';
-}
-
-// === ИСТОРИЯ ===
-
-// Загрузка истории
-async function loadHistory() {
-    const userId = AppState.user?.id || 'guest';
-    const historyList = document.getElementById('history-list');
-    
-    console.log('Загружаем историю для userId:', userId);
-    
-    // Показываем скелетоны загрузки
-    if (historyList) {
-        showHistoryLoadingSkeleton(historyList);
-    }
-    
-    try {
-        const response = await fetch(`${CONFIG.API_BASE_URL}/history/${userId}`);
-        if (response.ok) {
-            AppState.history = await response.json();
-            console.log('Загружена история:', AppState.history);
-        } else {
-            console.error('Ошибка ответа сервера:', response.status, await response.text());
-        }
-    } catch (error) {
-        console.error('Ошибка загрузки истории:', error);
-    } finally {
-        // Всегда рендерим результат
-        renderHistory();
-    }
-}
-
-// Отображение истории
-function renderHistory() {
-    const historyList = document.getElementById('history-list');
-    historyList.innerHTML = '';
-    
-    console.log('Рендерим историю, количество элементов:', AppState.history.length);
-    
-    AppState.history.forEach((item, index) => {
-        const div = document.createElement('div');
-        div.className = 'history-item';
-        
-        const date = new Date(item.timestamp);
-        const dateStr = date.toLocaleDateString('ru-RU', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-        
-        const roleIcon = getRoleIcon(item.role);
-        const questionPreview = item.question.substring(0, 50) + (item.question.length > 50 ? '...' : '');
-        const answerPreview = item.answer.substring(0, 100) + (item.answer.length > 100 ? '...' : '');
-        
-        div.innerHTML = `
-            <div class="history-header">
-                <div class="history-meta">
-                    <div class="history-icon">${roleIcon}</div>
-                    <div class="history-title">${questionPreview}</div>
-                </div>
-            </div>
-            <div class="history-preview">${answerPreview}</div>
-        `;
-        
-        div.onclick = () => {
-            console.log('Клик по элементу истории:', index, item);
-            showHistoryDetail(item);
-        };
-        
-        historyList.appendChild(div);
-    });
-    
-    if (AppState.history.length === 0) {
-        historyList.innerHTML = `
-            <div style="text-align: center; padding: 40px 20px; color: var(--tg-theme-hint-color);">
-                <div style="font-size: 48px; margin-bottom: 16px; animation: bounce 2s ease-in-out infinite;">📜</div>
-                <h3 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 600;">История пуста</h3>
-                <p style="margin: 0; font-size: 14px; line-height: 1.5;">Задайте первый вопрос, чтобы начать диалог</p>
-            </div>
-        `;
-    }
-}
-
-// Показ детальной информации из истории
-function showHistoryDetail(item) {
-    const modal = document.getElementById('history-modal');
-    const historyDetail = document.getElementById('history-detail');
-    
-    console.log('Открываем модальное окно истории для:', item);
-    console.log('Modal element:', modal);
-    console.log('History detail element:', historyDetail);
-    
-    if (!modal || !historyDetail) {
-        console.error('Не найдены элементы модального окна');
-        return;
-    }
-    
-    // Форматируем ответ для лучшей читабельности
-    const formattedAnswer = formatAnswerText(item.answer);
-    
-    // Заполняем содержимое модального окна
-    historyDetail.innerHTML = `
-        <div class="question-block">
-            <h4>Вопрос</h4>
-            <p>${item.question}</p>
         </div>
-        <div class="answer-block">
-            <h4>Ответ</h4>
-            <p style="white-space: pre-wrap;">${formattedAnswer}</p>
+
+        <!-- Форма профиля -->
+        <div class="profile-form">
+            <div class="form-section" style="margin-bottom: 24px;">
+                <h4 style="color: var(--tg-theme-text-color); margin-bottom: 8px;">Роль в команде</h4>
+                <div class="select-wrapper" style="position: relative;">
+                    <select id="role-select" onchange="updateSpecializations()" style="width: 100%; padding: 12px; border: 1px solid var(--tg-theme-section-separator-color); border-radius: 8px; background: var(--tg-theme-secondary-bg-color); color: var(--tg-theme-text-color); font-size: 16px; appearance: none;">
+                        <option value="">Выберите вашу роль</option>
+                    </select>
+                    <div class="select-icon" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--tg-theme-hint-color);">▼</div>
+                </div>
+                <p class="field-description" style="color: var(--tg-theme-hint-color); font-size: 12px; margin-top: 4px;">Выберите роль, которая лучше всего описывает вашу должность</p>
+            </div>
+            
+            <div class="form-section" style="margin-bottom: 24px;">
+                <h4 style="color: var(--tg-theme-text-color); margin-bottom: 8px;">Специализация</h4>
+                <div class="select-wrapper" style="position: relative;">
+                    <select id="specialization-select" style="width: 100%; padding: 12px; border: 1px solid var(--tg-theme-section-separator-color); border-radius: 8px; background: var(--tg-theme-secondary-bg-color); color: var(--tg-theme-text-color); font-size: 16px; appearance: none;">
+                        <option value="">Сначала выберите роль</option>
+                    </select>
+                    <div class="select-icon" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--tg-theme-hint-color);">▼</div>
+                </div>
+                <p class="field-description" style="color: var(--tg-theme-hint-color); font-size: 12px; margin-top: 4px;">Укажите вашу техническую специализацию</p>
+            </div>
+        </div>
+        
+        <div class="profile-actions">
+            <button class="primary-btn full-width" onclick="saveProfile()" style="width: 100%; padding: 16px; background: var(--tg-theme-button-color); color: var(--tg-theme-button-text-color); border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer;">
+                <span class="btn-icon">💾</span>
+                Сохранить профиль
+            </button>
         </div>
     `;
     
-    // Показываем модальное окно (используем новый стиль)
-    modal.style.display = 'flex';
-    modal.classList.remove('hidden');
-    modal.classList.add('active');
-    
-    console.log('Модальное окно должно быть видимым:', modal.classList.contains('active'));
-    
-    // Закрытие по клику вне модального окна
-    modal.onclick = (e) => {
-        if (e.target === modal) {
-            closeHistoryModal();
-        }
-    };
-}
-
-// Закрытие модального окна истории
-function closeHistoryModal() {
-    const modal = document.getElementById('history-modal');
-    modal.classList.remove('active');
-    modal.classList.add('hidden');
-    
-    // Добавляем небольшую задержку перед скрытием для анимации
+    // Рендерим профиль после создания элементов
     setTimeout(() => {
-        modal.style.display = 'none';
-    }, 300);
+        renderProfile();
+    }, 100);
 }
-
-// Обработка клавиши Escape для закрытия модальных окон
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-        const historyModal = document.getElementById('history-modal');
-        
-        if (historyModal.classList.contains('active') || !historyModal.classList.contains('hidden')) {
-            closeHistoryModal();
-        }
-    }
-});
-
-// Очистка истории
-async function clearHistory() {
-    if (!confirm('Вы уверены, что хотите очистить историю?')) {
-        return;
-    }
-    
-    try {
-        const userId = AppState.user?.id || 'guest';
-        const response = await fetch(`${CONFIG.API_BASE_URL}/history/${userId}`, {
-            method: 'DELETE'
-        });
-        
-        if (response.ok) {
-            AppState.history = [];
-            renderHistory();
-            showAlert('История очищена');
-        }
-    } catch (error) {
-        console.error('Ошибка очистки истории:', error);
-        showAlert('Ошибка очистки истории');
-    }
-}
-
-// === УТИЛИТЫ ===
-
-// Показ уведомления
-function showAlert(message) {
-    // Используем нативные уведомления Telegram если доступны
-    if (tg.showAlert) {
-        tg.showAlert(message);
-    } else {
-        alert(message);
-    }
-}
-
-// Показ лоадера
-function showLoader() {
-    document.getElementById('loader').classList.remove('hidden');
-}
-
-// Скрытие лоадера
-function hideLoader() {
-    document.getElementById('loader').classList.add('hidden');
-}
-
-// Обработка ошибок сети
-window.addEventListener('online', () => {
-    showAlert('Соединение восстановлено');
-});
-
-window.addEventListener('offline', () => {
-    showAlert('Потеряно соединение с интернетом');
-});
-
-// Обработка закрытия приложения
-window.addEventListener('beforeunload', () => {
-    // Сохраняем состояние в локальное хранилище
-    localStorage.setItem('ragapp_state', JSON.stringify({
-        profile: AppState.profile,
-        history: AppState.history.slice(0, 10) // Сохраняем только последние 10 записей
-    }));
-});
-
-// Восстановление состояния при загрузке
-try {
-    const savedState = localStorage.getItem('ragapp_state');
-    if (savedState) {
-        const state = JSON.parse(savedState);
-        if (state.profile) {
-            AppState.profile = { ...AppState.profile, ...state.profile };
-        }
-        if (state.history) {
-            AppState.history = state.history;
-        }
-    }
-} catch (error) {
-    console.error('Ошибка восстановления состояния:', error);
-}
-
-// === ОБРАТНАЯ СВЯЗЬ ===
 
 // Инициализация счетчика символов
 function initCharCounter() {
     const textarea = document.getElementById('feedback-input');
-    const charCount = document.getElementById('char-count');
-    
-    if (textarea && charCount) {
-        // Обновляем счетчик при вводе
-        textarea.addEventListener('input', () => {
-            const currentLength = textarea.value.length;
-            charCount.textContent = currentLength;
-            
-            // Меняем цвет при приближении к лимиту
-            if (currentLength > 800) {
-                charCount.style.color = '#ff6b6b';
-            } else if (currentLength > 600) {
-                charCount.style.color = '#f39c12';
-            } else {
-                charCount.style.color = '';
-            }
-        });
-        
-        // Инициализируем счетчик
-        charCount.textContent = textarea.value.length;
+    if (textarea) {
+        updateCharCounter();
     }
 }
 
-// Безопасный alert для Telegram WebApp
-function safeAlert(msg) {
-    // Удаляем переносы строк, markdown, emoji и ограничиваем длину
-    let safe = String(msg)
-        .replace(/[\n\r]+/g, ' ')
-        .replace(/[\*\_\~\`\>\#\[\]\(\)\!]/g, '') // markdown
-        .replace(/[^\x20-\x7Eа-яА-ЯёЁ0-9.,:;!?@\-]/g, '') // только базовые символы
-        .slice(0, 200);
-    showAlert(safe);
+// Обновление счетчика символов
+function updateCharCounter() {
+    const textarea = document.getElementById('feedback-input');
+    const charCounter = document.getElementById('char-counter');
+    
+    if (textarea && charCounter) {
+        const length = textarea.value.length;
+        const maxLength = 1000;
+        
+        charCounter.textContent = `${length}/${maxLength}`;
+        
+        if (length > maxLength * 0.9) {
+            charCounter.style.color = 'var(--tg-theme-destructive-text-color, #ff4444)';
+        } else if (length > maxLength * 0.7) {
+            charCounter.style.color = 'var(--tg-theme-accent-text-color, #ff8800)';
+        } else {
+            charCounter.style.color = 'var(--tg-theme-hint-color)';
+        }
+    }
 }
 
-// Улучшенная отправка обратной связи
+// Безопасный alert
+function safeAlert(msg) {
+    try {
+        if (tg && typeof tg.showAlert === 'function') {
+            tg.showAlert(String(msg));
+        } else {
+            alert(String(msg));
+        }
+    } catch (error) {
+        console.error('Ошибка показа уведомления:', error);
+        console.log('Сообщение:', msg);
+    }
+}
+
+// Отправка обратной связи
 async function sendFeedback() {
     const feedbackInput = document.getElementById('feedback-input');
     const sendBtn = document.getElementById('feedback-submit-btn');
@@ -1360,7 +1236,7 @@ async function sendFeedback() {
     // Показываем лоадер на кнопке
     sendBtn.disabled = true;
     btnText.textContent = 'Отправляем...';
-    spinner.classList.remove('hidden');
+    if (spinner) spinner.classList.remove('hidden');
     
     // Добавляем эффект загрузки на кнопку
     sendBtn.style.transform = 'scale(0.98)';
@@ -1431,10 +1307,10 @@ async function sendFeedback() {
         console.log('Ответ сервера:', response.status, response.statusText);
         
         if (response.ok) {
-            // Скрываем форму и показываем сообщение об успехе с задержкой для плавности
+            // Скрываем форму и показываем сообщение об успехе
             setTimeout(() => {
-                feedbackForm.classList.add('hidden');
-                feedbackSuccess.classList.remove('hidden');
+                if (feedbackForm) feedbackForm.classList.add('hidden');
+                if (feedbackSuccess) feedbackSuccess.classList.remove('hidden');
                 
                 // Запускаем конфетти анимацию
                 triggerConfettiAnimation();
@@ -1473,7 +1349,7 @@ async function sendFeedback() {
         // Возвращаем кнопку в исходное состояние
         sendBtn.disabled = false;
         btnText.textContent = '📤 Отправить отзыв';
-        spinner.classList.add('hidden');
+        if (spinner) spinner.classList.add('hidden');
         sendBtn.style.transform = '';
     }
 }
@@ -1487,28 +1363,22 @@ function triggerConfettiAnimation() {
     });
 }
 
-// Сброс формы обратной связи к исходному состоянию
+// Сброс формы обратной связи
 function resetFeedbackForm() {
     const feedbackInput = document.getElementById('feedback-input');
     const feedbackForm = document.querySelector('.feedback-form');
     const feedbackSuccess = document.getElementById('feedback-success');
     const charCounter = document.getElementById('char-counter');
     
-    // Очищаем поле ввода
     if (feedbackInput) {
         feedbackInput.value = '';
-        feedbackInput.placeholder = "Поделитесь своими мыслями о приложении, предложениями по улучшению или сообщите о проблемах...";
     }
     
-    // Сбрасываем счетчик символов
     if (charCounter) {
         charCounter.textContent = '0/1000';
         charCounter.style.color = 'var(--tg-theme-hint-color)';
     }
     
-
-    
-    // Показываем форму и скрываем сообщение об успехе
     if (feedbackForm) {
         feedbackForm.classList.remove('hidden');
     }
@@ -1516,7 +1386,6 @@ function resetFeedbackForm() {
         feedbackSuccess.classList.add('hidden');
     }
     
-    // Фокусируемся на поле ввода
     if (feedbackInput) {
         setTimeout(() => {
             feedbackInput.focus();
@@ -1524,68 +1393,939 @@ function resetFeedbackForm() {
     }
 }
 
-// Инициализация формы обратной связи при загрузке экрана
+// Инициализация экрана обратной связи
 function initFeedbackScreen() {
     initCharCounter();
     resetFeedbackForm();
 }
 
-function updateCharCounter() {
-    const textarea = document.getElementById('feedback-input');
-    const charCounter = document.getElementById('char-counter');
+// Создание экрана обратной связи
+function createFeedbackScreen() {
+    const header = document.getElementById('feedback-header');
+    const feedbackContent = document.getElementById('feedback-content');
     
-    if (textarea && charCounter) {
-        const length = textarea.value.length;
-        charCounter.textContent = `${length}/1000`;
+    if (!header || !feedbackContent) return;
+    
+    header.innerHTML = '';
+    header.appendChild(createScreenHeader('Обратная связь'));
+    
+    // Создаем содержимое обратной связи
+    feedbackContent.innerHTML = `
+        <!-- Информационная секция -->
+        <div class="feedback-hero" style="text-align: center; margin-bottom: 24px; padding: 20px; background: var(--tg-theme-secondary-bg-color); border-radius: 12px;">
+            <div class="feedback-icon-large" style="font-size: 48px; margin-bottom: 12px;">💬</div>
+            <h3 style="color: var(--tg-theme-text-color); margin: 0 0 8px 0; font-size: 20px; font-weight: 600;">Поделитесь своим мнением</h3>
+            <p style="color: var(--tg-theme-hint-color); margin: 0; font-size: 14px; line-height: 1.5;">Ваши отзывы и предложения помогают нам делать GigaMentor лучше каждый день!</p>
+        </div>
+
+        <!-- Форма обратной связи -->
+        <div class="feedback-form">
+            <div class="input-group" style="margin-bottom: 16px;">
+                <label for="feedback-input" style="display: block; color: var(--tg-theme-text-color); font-weight: 500; margin-bottom: 8px;">
+                    <span class="label-text">Ваш отзыв или предложение</span>
+                </label>
+                <div class="textarea-wrapper" style="position: relative;">
+                    <textarea 
+                        id="feedback-input" 
+                        placeholder="Поделитесь своими мыслями о приложении, предложениями по улучшению или сообщите о проблемах..."
+                        maxlength="1000"
+                        oninput="updateCharCounter()"
+                        style="
+                            width: 100%;
+                            min-height: 120px;
+                            background: var(--tg-theme-secondary-bg-color);
+                            border: 1px solid var(--tg-theme-section-separator-color);
+                            border-radius: 8px;
+                            padding: 12px;
+                            font-size: 16px;
+                            color: var(--tg-theme-text-color);
+                            resize: vertical;
+                            font-family: inherit;
+                            line-height: 1.4;
+                        "
+                    ></textarea>
+                    <div id="char-counter" class="char-counter" style="
+                        position: absolute;
+                        bottom: 8px;
+                        right: 12px;
+                        font-size: 12px;
+                        color: var(--tg-theme-hint-color);
+                        background: var(--tg-theme-bg-color);
+                        padding: 2px 4px;
+                        border-radius: 4px;
+                    ">0/1000</div>
+                </div>
+            </div>
+            
+            <button id="feedback-submit-btn" class="primary-btn full-width" onclick="sendFeedback()" style="
+                width: 100%;
+                padding: 16px;
+                background: var(--tg-theme-button-color);
+                color: var(--tg-theme-button-text-color);
+                border: none;
+                border-radius: 8px;
+                font-size: 16px;
+                font-weight: 600;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 8px;
+            ">
+                <span class="btn-text">📤 Отправить отзыв</span>
+                <div class="spinner hidden" style="width: 16px; height: 16px;"></div>
+            </button>
+        </div>
+
+        <!-- Сообщение об успехе -->
+        <div id="feedback-success" class="feedback-success hidden" style="text-align: center; padding: 40px 20px;">
+            <div class="success-animation" style="position: relative; margin-bottom: 20px;">
+                <div class="success-icon" style="font-size: 64px; margin-bottom: 16px;">🎉</div>
+                <div class="success-confetti" style="position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 100px; height: 100px; pointer-events: none;">
+                    <div class="confetti" style="position: absolute; width: 10px; height: 10px; background: #ff6b6b; animation: confetti-fall 3s ease-out infinite;"></div>
+                    <div class="confetti" style="position: absolute; width: 10px; height: 10px; background: #4ecdc4; animation: confetti-fall 3s ease-out infinite;"></div>
+                    <div class="confetti" style="position: absolute; width: 10px; height: 10px; background: #45b7d1; animation: confetti-fall 3s ease-out infinite;"></div>
+                    <div class="confetti" style="position: absolute; width: 10px; height: 10px; background: #f9ca24; animation: confetti-fall 3s ease-out infinite;"></div>
+                    <div class="confetti" style="position: absolute; width: 10px; height: 10px; background: #6c5ce7; animation: confetti-fall 3s ease-out infinite;"></div>
+                </div>
+            </div>
+            <h3 style="color: var(--tg-theme-text-color); margin: 0 0 8px 0; font-size: 20px; font-weight: 600;">Спасибо за отзыв!</h3>
+            <p style="color: var(--tg-theme-hint-color); margin: 0 0 20px 0; font-size: 14px; line-height: 1.5;">Ваше мнение очень важно для нас. Мы обязательно рассмотрим ваши предложения.</p>
+            <div class="success-actions" style="display: flex; gap: 12px; justify-content: center;">
+                <button class="primary-btn" onclick="resetFeedbackForm()" style="
+                    padding: 12px 20px;
+                    background: var(--tg-theme-button-color);
+                    color: var(--tg-theme-button-text-color);
+                    border: none;
+                    border-radius: 8px;
+                    font-size: 14px;
+                    font-weight: 500;
+                    cursor: pointer;
+                ">
+                    <span>✨ Оставить еще отзыв</span>
+                </button>
+                <button class="secondary-btn" onclick="showScreen('main-menu')" style="
+                    padding: 12px 20px;
+                    background: transparent;
+                    color: var(--tg-theme-button-color);
+                    border: 1px solid var(--tg-theme-button-color);
+                    border-radius: 8px;
+                    font-size: 14px;
+                    font-weight: 500;
+                    cursor: pointer;
+                ">
+                    <span>🏠 В главное меню</span>
+                </button>
+            </div>
+        </div>
+    `;
+    
+    // Инициализируем экран обратной связи
+    setTimeout(() => {
+        initFeedbackScreen();
+    }, 100);
+}
+
+// Отображение заданного вопроса
+function displayAskedQuestion(question) {
+    const askedQuestionContainer = document.getElementById('asked-question-container');
+    const askedQuestionText = document.getElementById('asked-question-text');
+    
+    if (askedQuestionContainer && askedQuestionText) {
+        askedQuestionText.textContent = question;
+        askedQuestionContainer.classList.remove('hidden');
+    }
+}
+
+// Отправка вопроса
+async function sendQuestion() {
+    const questionInput = document.getElementById('question-input');
+    const sendBtn = document.getElementById('send-question');
+    
+    if (!questionInput || !sendBtn) return;
+    
+    const question = questionInput.value.trim();
+    if (!question) {
+        showAlert('Пожалуйста, введите ваш вопрос');
+        return;
+    }
+    
+    const userId = AppState.user?.id || 'guest';
+    
+    // Показываем заданный вопрос
+    displayAskedQuestion(question);
+    
+    // Показываем полноэкранный лоадер
+    showLoader();
+    
+    // Блокируем кнопку и показываем спиннер
+    sendBtn.disabled = true;
+    const btnText = sendBtn.querySelector('.btn-text') || sendBtn;
+    const spinner = sendBtn.querySelector('.spinner');
+    
+    btnText.textContent = 'Отправляем...';
+    if (spinner) spinner.classList.remove('hidden');
+    
+    try {
+        const response = await fetch(`${CONFIG.API_BASE_URL}/ask`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                question: question,
+                user_id: userId,
+                role: AppState.profile.role,
+                specialization: AppState.profile.specialization
+            })
+        });
         
-        // Изменение цвета при приближении к лимиту
-        if (length > 950) {
-            charCounter.style.color = 'var(--danger-color)';
-        } else if (length > 800) {
-            charCounter.style.color = 'var(--warning-color)';
+        if (response.ok) {
+            const data = await response.json();
+            
+            // Отображаем ответ и запускаем генерацию связанных вопросов
+            await displayAnswer(question, data.answer);
+            
+            // Добавляем в локальную историю
+            AppState.history.unshift({
+                id: Date.now(),
+                question: question,
+                answer: data.answer,
+                timestamp: new Date(),
+                role: AppState.profile.role,
+                specialization: AppState.profile.specialization
+            });
+            
+            // Перезагружаем историю из БД с задержкой
+            setTimeout(async () => {
+                await loadHistory();
+                console.log('✅ История обновлена из БД');
+            }, 500);
+            
+            // Очищаем поле ввода
+            questionInput.value = '';
+            
+            // Предыдущие вопросы будут показаны в displayAnswer
+            
         } else {
-            charCounter.style.color = 'var(--tg-theme-hint-color)';
+            throw new Error('Ошибка получения ответа');
+        }
+    } catch (error) {
+        console.error('Ошибка отправки вопроса:', error);
+        showAlert('Ошибка отправки вопроса. Попробуйте снова.');
+    } finally {
+        // Скрываем полноэкранный лоадер
+        hideLoader();
+        
+        // Скрываем лоадер на кнопке
+        sendBtn.disabled = false;
+        btnText.textContent = 'Отправить';
+        if (spinner) spinner.classList.add('hidden');
+    }
+}
+
+// Форматирование ответа с улучшенной пунктуацией
+function formatAnswerText(text) {
+    if (!text) return '';
+    // Оставляем только базовую очистку, так как ожидаем хороший Markdown с сервера
+    return text.trim();
+}
+
+// Преобразование Markdown в HTML
+function convertMarkdownToHtml(text) {
+    if (!text) return '';
+
+    // Глобальные замены для жирного, курсива и кода
+    let html = text
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/`(.*?)`/g, '<code>$1</code>');
+
+    const blocks = html.split('\n');
+    let newHtml = '';
+    let listTag = null;
+
+    blocks.forEach(line => {
+        const trimmedLine = line.trim();
+        
+        // Пропускаем пустые строки между блоками
+        if (trimmedLine === '') {
+            if (listTag) {
+                newHtml += `</${listTag}>`;
+                listTag = null;
+            }
+            return;
+        }
+
+        // Заголовки
+        if (trimmedLine.startsWith('### ')) {
+            newHtml += `<h3>${trimmedLine.substring(4)}</h3>`;
+            listTag = null;
+        } else if (trimmedLine.startsWith('## ')) {
+            newHtml += `<h2>${trimmedLine.substring(3)}</h2>`;
+            listTag = null;
+        } else if (trimmedLine.startsWith('# ')) {
+            newHtml += `<h1>${trimmedLine.substring(2)}</h1>`;
+            listTag = null;
+        } 
+        // Элементы нумерованного списка
+        else if (/^\d+\.\s/.test(trimmedLine)) {
+            if (listTag !== 'ol') {
+                if (listTag) newHtml += `</${listTag}>`;
+                newHtml += '<ol>';
+                listTag = 'ol';
+            }
+            newHtml += `<li>${trimmedLine.replace(/^\d+\.\s/, '')}</li>`;
+        } 
+        // Элементы маркированного списка
+        else if (/^[-*•]\s/.test(trimmedLine)) {
+            if (listTag !== 'ul') {
+                if (listTag) newHtml += `</${listTag}>`;
+                newHtml += '<ul>';
+                listTag = 'ul';
+            }
+            newHtml += `<li>${trimmedLine.replace(/^[-*•]\s/, '')}</li>`;
+        }
+        // Обычный параграф
+        else {
+            if (listTag) {
+                newHtml += `</${listTag}>`;
+                listTag = null;
+            }
+            newHtml += `<p>${trimmedLine}</p>`;
+        }
+    });
+
+    // Закрываем последний открытый список, если он есть
+    if (listTag) {
+        newHtml += `</${listTag}>`;
+    }
+
+    return newHtml;
+}
+
+// Отображение ответа
+async function displayAnswer(userQuestion, botAnswer) {
+    const answerContainer = document.getElementById('answer-container');
+    const answerContent = document.getElementById('answer-content');
+    if (!answerContainer || !answerContent) return;
+    
+    // Сохраняем данные для генерации связанных вопросов
+    SuggestedQuestionsState.userQuestion = userQuestion;
+    SuggestedQuestionsState.botAnswer = botAnswer;
+    
+    // Форматируем и конвертируем ответ
+    const formattedAnswer = formatAnswerText(botAnswer);
+    const htmlAnswer = convertMarkdownToHtml(formattedAnswer);
+    
+    const answerCard = createCard(`
+        <h3 style="color: var(--tg-theme-text-color); margin-bottom: 12px;">Ответ:</h3>
+        <div class="answer-text" style="color: var(--tg-theme-text-color);">${htmlAnswer}</div>
+    `);
+    
+    answerContent.innerHTML = '';
+    answerContent.appendChild(answerCard);
+    answerContainer.classList.remove('hidden');
+    
+    // Прокрутка к самому верху страницы сразу после вывода ответа
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    
+    // Запускаем асинхронную генерацию связанных вопросов
+    await generateSuggestedQuestions();
+    
+    // Показываем предыдущие вопросы из истории в самом конце
+    setTimeout(async () => {
+        await displayPreviousQuestions();
+    }, 100);
+}
+
+// Отображение предложенных вопросов
+function displaySuggestedQuestions(questions) {
+    const suggestedContainer = document.getElementById('suggested-questions');
+    const suggestedList = document.getElementById('suggested-list');
+    
+    if (!suggestedContainer || !suggestedList) return;
+    
+    suggestedList.innerHTML = '';
+    
+    // Ограничиваем количество вопросов до 3
+    const limitedQuestions = questions.slice(0, 3);
+    
+    limitedQuestions.forEach((question, index) => {
+        const questionCard = document.createElement('div');
+        questionCard.className = 'suggested-question-card';
+        questionCard.style.cssText = `
+            background: var(--tg-theme-secondary-bg-color);
+            border: 1px solid var(--tg-theme-section-separator-color);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        `;
+        
+        questionCard.innerHTML = `
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+                <div style="
+                    background: var(--tg-theme-button-color);
+                    color: var(--tg-theme-button-text-color);
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 12px;
+                    font-weight: 600;
+                    flex-shrink: 0;
+                    margin-top: 2px;
+                ">💡</div>
+                <div style="
+                    color: var(--tg-theme-text-color);
+                    font-size: 15px;
+                    line-height: 1.4;
+                    flex: 1;
+                ">${question}</div>
+            </div>
+        `;
+        
+        // Добавляем эффекты при взаимодействии
+        questionCard.addEventListener('mousedown', () => {
+            questionCard.style.transform = 'scale(0.98)';
+            questionCard.style.backgroundColor = 'var(--tg-theme-section-bg-color)';
+        });
+        
+        questionCard.addEventListener('mouseup', () => {
+            questionCard.style.transform = 'scale(1)';
+            questionCard.style.backgroundColor = 'var(--tg-theme-secondary-bg-color)';
+        });
+        
+        questionCard.addEventListener('mouseleave', () => {
+            questionCard.style.transform = 'scale(1)';
+            questionCard.style.backgroundColor = 'var(--tg-theme-secondary-bg-color)';
+        });
+        
+        questionCard.onclick = () => {
+            document.getElementById('question-input').value = question;
+            sendQuestion();
+        };
+        
+        suggestedList.appendChild(questionCard);
+    });
+    
+    suggestedContainer.classList.remove('hidden');
+}
+
+// Загрузка вопросов
+// Загрузка профиля пользователя
+async function loadUserProfile() {
+    try {
+        const userId = AppState.user?.id || 'guest';
+        const response = await fetch(`${CONFIG.API_BASE_URL}/profile/${userId}`);
+        
+        if (response.ok) {
+            const profile = await response.json();
+            AppState.profile = profile;
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки профиля:', error);
+    }
+}
+
+// Загрузка ролей и специализаций
+async function loadRolesAndSpecializations() {
+    try {
+        console.log('Загружаем роли и специализации с API:', CONFIG.API_BASE_URL);
+        const [rolesResponse, specsResponse] = await Promise.all([
+            fetch(`${CONFIG.API_BASE_URL}/roles`),
+            fetch(`${CONFIG.API_BASE_URL}/specializations`)
+        ]);
+        
+        console.log('Ответы API:', rolesResponse.status, specsResponse.status);
+        
+        if (rolesResponse.ok && specsResponse.ok) {
+            roles = await rolesResponse.json();
+            specializations = await specsResponse.json();
+            console.log('Роли загружены:', roles);
+            console.log('Специализации загружены:', specializations);
+        } else {
+            throw new Error('Ошибка загрузки данных');
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки ролей и специализаций:', error);
+        console.log('Используем fallback данные');
+        
+        // Fallback данные, если API недоступен
+        roles = [
+            { "value": "PO/PM", "label": "PO/PM" },
+            { "value": "Лид компетенции", "label": "Лид компетенции" },
+            { "value": "Специалист", "label": "Специалист" },
+            { "value": "Стажер", "label": "Стажер" }
+        ];
+        
+        specializations = [
+            { "value": "Аналитик", "label": "Аналитик" },
+            { "value": "Тестировщик", "label": "Тестировщик" },
+            { "value": "WEB", "label": "WEB" },
+            { "value": "Java", "label": "Java" },
+            { "value": "Python", "label": "Python" }
+        ];
+        
+        console.log('Fallback роли:', roles);
+        console.log('Fallback специализации:', specializations);
+    }
+}
+
+async function loadQuestions() {
+    try {
+        // Получаем роль и специализацию пользователя
+        const role = AppState.profile.role || '';
+        const specialization = AppState.profile.specialization || '';
+        
+        // Формируем URL с параметрами роли и специализации
+        const params = new URLSearchParams();
+        if (role) params.append('role', role);
+        if (specialization) params.append('specialization', specialization);
+        
+        const url = `${CONFIG.API_BASE_URL}/questions${params.toString() ? '?' + params.toString() : ''}`;
+        console.log('Загружаем вопросы для роли:', role, 'специализации:', specialization, 'URL:', url);
+        
+        const response = await fetch(url);
+        if (response.ok) {
+            AppState.questions = await response.json();
+            console.log('Загружено вопросов:', AppState.questions.length);
+        } else {
+            throw new Error('Ошибка загрузки вопросов');
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки вопросов:', error);
+        // При ошибке загрузки показываем пустой массив
+        AppState.questions = [];
+    }
+}
+
+// Загрузка истории
+async function loadHistory() {
+    try {
+        const userId = AppState.user?.id || 'guest';
+        const response = await fetch(`${CONFIG.API_BASE_URL}/history/${userId}`);
+        
+        if (response.ok) {
+            AppState.history = await response.json();
+        } else {
+            throw new Error('Ошибка загрузки истории');
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки истории:', error);
+        AppState.history = [];
+    }
+}
+
+// Показать уведомление
+// Состояние для связанных вопросов
+const SuggestedQuestionsState = {
+    currentQuestions: [],
+    userQuestion: '',
+    botAnswer: ''
+};
+
+// Генерация связанных вопросов
+async function generateSuggestedQuestions() {
+    const suggestedContainer = document.getElementById('suggested-questions');
+    const suggestedList = document.getElementById('suggested-list');
+    
+    if (!suggestedContainer || !suggestedList) return;
+    
+    try {
+        // Показываем спиннер
+        suggestedList.innerHTML = '<div class="spinner" style="margin: 20px auto;"></div>';
+        suggestedContainer.classList.remove('hidden');
+        
+        // Пробуем WebSocket
+        const ws = new WebSocket(CONFIG.WEBSOCKET_URL);
+        let wsTimeout = setTimeout(() => {
+            ws.close();
+            generateSuggestedQuestionsHTTP();
+        }, 5000);
+        
+        ws.onopen = () => {
+            clearTimeout(wsTimeout);
+            ws.send(JSON.stringify({
+                type: 'generate_questions',
+                user_question: SuggestedQuestionsState.userQuestion,
+                bot_answer: SuggestedQuestionsState.botAnswer,
+                role: AppState.profile.role,
+                specialization: AppState.profile.specialization
+            }));
+        };
+        
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === 'suggested_questions') {
+                const questions = Array.isArray(data.questions) ? data.questions : data.questions || [];
+                SuggestedQuestionsState.currentQuestions = questions;
+                displaySuggestedQuestions(questions);
+                ws.close();
+            }
+        };
+        
+        ws.onerror = () => {
+            clearTimeout(wsTimeout);
+            generateSuggestedQuestionsHTTP();
+        };
+        
+    } catch (error) {
+        console.error('Ошибка WebSocket:', error);
+        generateSuggestedQuestionsHTTP();
+    }
+}
+
+// HTTP fallback для связанных вопросов
+async function generateSuggestedQuestionsHTTP() {
+    try {
+        const response = await fetch(`${CONFIG.API_BASE_URL}/suggest_questions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                user_question: SuggestedQuestionsState.userQuestion,
+                bot_answer: SuggestedQuestionsState.botAnswer,
+                role: AppState.profile.role,
+                specialization: AppState.profile.specialization
+            })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            console.log('HTTP ответ для связанных вопросов:', data);
+            // API возвращает массив вопросов напрямую
+            const questions = Array.isArray(data) ? data : data.questions || [];
+            console.log('Обработанные связанные вопросы:', questions);
+            SuggestedQuestionsState.currentQuestions = questions;
+            displaySuggestedQuestions(questions);
+        }
+    } catch (error) {
+        console.error('Ошибка HTTP генерации вопросов:', error);
+        const suggestedContainer = document.getElementById('suggested-questions');
+        if (suggestedContainer) {
+            suggestedContainer.classList.add('hidden');
         }
     }
 }
 
-// Показ скелетонов загрузки для вопросов
-function showQuestionsLoadingSkeleton(container) {
-    container.innerHTML = '';
-    for (let i = 0; i < 5; i++) {
-        const skeleton = document.createElement('div');
-        skeleton.className = 'question-item';
-        skeleton.innerHTML = `
-            <div class="question-header">
-                <div class="question-meta">
-                    <div class="loading-skeleton" style="width: 2rem; height: 2rem; border-radius: 50%;"></div>
-                    <div class="loading-skeleton title"></div>
+// Отображение предыдущих вопросов
+async function displayPreviousQuestions() {
+    console.log('📜 displayPreviousQuestions вызвана');
+    
+    const previousContainer = document.getElementById('previous-questions');
+    const previousList = document.getElementById('previous-list');
+    
+    if (!previousContainer || !previousList) {
+        console.log('❌ Элементы previous-questions не найдены');
+        return;
+    }
+    
+    try {
+        // Загружаем актуальную историю из БД
+        const userId = AppState.user?.id || 'guest';
+        console.log('🔄 Загружаем актуальную историю из БД для userId:', userId);
+        
+        const response = await fetch(`${CONFIG.API_BASE_URL}/history/${userId}`);
+        if (!response.ok) {
+            console.error('❌ Ошибка загрузки истории:', response.status);
+            previousContainer.classList.add('hidden');
+            return;
+        }
+        
+        const historyFromDB = await response.json();
+        console.log('📊 История из БД:', historyFromDB);
+        console.log('📊 Длина истории из БД:', historyFromDB ? historyFromDB.length : 'undefined');
+        
+        if (!historyFromDB || historyFromDB.length === 0) {
+            console.log('⚠️ История из БД пуста');
+            previousContainer.classList.add('hidden');
+            return;
+        }
+        
+        // Получаем последние 3 вопроса из истории (исключая самый последний, который является текущим)
+        const recentQuestions = historyFromDB.slice(1, 4); // Пропускаем первый (текущий) вопрос
+        
+        console.log('📍 Предыдущие вопросы из БД:', recentQuestions);
+        console.log('📍 Количество предыдущих вопросов:', recentQuestions.length);
+        
+        if (!recentQuestions || recentQuestions.length === 0) {
+            console.log('⚠️ Нет предыдущих вопросов для отображения');
+            previousContainer.classList.add('hidden');
+            return;
+        }
+        
+        console.log('🔄 Создаем кнопки предыдущих вопросов...');
+        previousList.innerHTML = '';
+    
+        recentQuestions.forEach((historyItem, index) => {
+            console.log(`➕ Добавляем предыдущий вопрос ${index + 1}:`, historyItem.question.substring(0, 50));
+            
+            const historyCard = document.createElement('div');
+            historyCard.className = 'previous-question-card';
+            historyCard.style.cssText = `
+                background: var(--tg-theme-secondary-bg-color);
+                border: 1px solid var(--tg-theme-section-separator-color);
+                border-radius: 12px;
+                padding: 16px;
+                margin-bottom: 8px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                position: relative;
+                overflow: hidden;
+            `;
+            
+            const questionText = historyItem.question.length > 100 ? 
+                historyItem.question.substring(0, 100) + '...' : 
+                historyItem.question;
+            
+            historyCard.innerHTML = `
+                <div style="display: flex; align-items: flex-start; gap: 12px;">
+                    <div style="
+                        background: var(--tg-theme-hint-color);
+                        color: var(--tg-theme-bg-color);
+                        width: 24px;
+                        height: 24px;
+                        border-radius: 50%;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: 12px;
+                        font-weight: 600;
+                        flex-shrink: 0;
+                        margin-top: 2px;
+                        opacity: 0.8;
+                    ">📜</div>
+                    <div style="
+                        color: var(--tg-theme-text-color);
+                        font-size: 15px;
+                        line-height: 1.4;
+                        flex: 1;
+                    ">${questionText}</div>
                 </div>
-                <div class="loading-skeleton date"></div>
-            </div>
-            <div class="loading-skeleton text"></div>
-            <div class="loading-skeleton text" style="width: 60%;"></div>
-        `;
-        container.appendChild(skeleton);
+            `;
+            
+            // Добавляем эффекты при взаимодействии
+            historyCard.addEventListener('mousedown', () => {
+                historyCard.style.transform = 'scale(0.98)';
+                historyCard.style.backgroundColor = 'var(--tg-theme-section-bg-color)';
+            });
+            
+            historyCard.addEventListener('mouseup', () => {
+                historyCard.style.transform = 'scale(1)';
+                historyCard.style.backgroundColor = 'var(--tg-theme-secondary-bg-color)';
+            });
+            
+            historyCard.addEventListener('mouseleave', () => {
+                historyCard.style.transform = 'scale(1)';
+                historyCard.style.backgroundColor = 'var(--tg-theme-secondary-bg-color)';
+            });
+            
+            historyCard.onclick = () => {
+                console.log('🔄 Пользователь выбрал предыдущий вопрос:', historyItem.question);
+                showHistoryDetail(historyItem);
+            };
+            
+            previousList.appendChild(historyCard);
+        });
+        
+        previousContainer.classList.remove('hidden');
+        console.log('✅ Предыдущие вопросы отображены');
+        
+    } catch (error) {
+        console.error('❌ Ошибка загрузки предыдущих вопросов:', error);
+        previousContainer.classList.add('hidden');
     }
 }
 
-// Показ скелетонов загрузки для истории
-function showHistoryLoadingSkeleton(container) {
-    container.innerHTML = '';
-    for (let i = 0; i < 3; i++) {
-        const skeleton = document.createElement('div');
-        skeleton.className = 'history-item';
-        skeleton.innerHTML = `
-            <div class="history-header">
-                <div class="history-meta">
-                    <div class="loading-skeleton" style="width: 2rem; height: 2rem; border-radius: 50%;"></div>
-                    <div class="loading-skeleton title"></div>
-                </div>
-            </div>
-            <div class="loading-skeleton text"></div>
-            <div class="loading-skeleton text" style="width: 80%;"></div>
-        `;
-        container.appendChild(skeleton);
+function showAlert(message) {
+    if (tg && tg.showAlert) {
+        tg.showAlert(message);
+    } else {
+        alert(message);
     }
+}
+
+// Лоадеры
+function showLoader() {
+    let loader = document.getElementById('global-loader');
+    if (!loader) {
+        loader = document.createElement('div');
+        loader.id = 'global-loader';
+        loader.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        `;
+        loader.innerHTML = '<div class="spinner" style="width: 40px; height: 40px;"></div>';
+        document.body.appendChild(loader);
+    }
+    loader.style.display = 'flex';
+}
+
+function hideLoader() {
+    const loader = document.getElementById('global-loader');
+    if (loader) {
+        loader.style.display = 'none';
+    }
+}
+
+// Настройка обработчиков событий
+function setupEventListeners() {
+    // Обработка изменения темы
+    if (tg) {
+        // Слушаем изменения темы Telegram
+        document.addEventListener('themeChanged', () => {
+            console.log('Тема изменена');
+        });
+    }
+}
+
+// Загрузка начальных данных
+async function loadInitialData() {
+    try {
+        // Здесь можно загрузить начальные данные
+        console.log('Загрузка начальных данных...');
+    } catch (error) {
+        console.error('Ошибка загрузки начальных данных:', error);
+    }
+}
+
+// Получить иконку роли
+function getRoleIcon(role) {
+    const icons = {
+        'junior': '🌱',
+        'middle': '🚀',
+        'senior': '👑',
+        'lead': '⭐',
+        'architect': '🏗️',
+        'manager': '📊',
+        'analyst': '📈',
+        'designer': '🎨',
+        'qa': '🔍',
+        'devops': '⚙️',
+        'data': '📊',
+        'mobile': '📱',
+        'frontend': '🎨',
+        'backend': '⚡',
+        'fullstack': '🌐'
+    };
+    
+    return icons[role] || '👤';
+}
+
+// Показать скелетон загрузки вопросов
+function showQuestionsLoadingSkeleton(container) {
+    const skeleton = `
+        <div class="skeleton-item" style="margin-bottom: 16px;">
+            <div class="skeleton-line" style="width: 100%; height: 20px; background: var(--tg-theme-section-separator-color); border-radius: 4px; margin-bottom: 8px;"></div>
+            <div class="skeleton-line" style="width: 80%; height: 16px; background: var(--tg-theme-section-separator-color); border-radius: 4px; margin-bottom: 8px;"></div>
+            <div class="skeleton-line" style="width: 60%; height: 14px; background: var(--tg-theme-section-separator-color); border-radius: 4px;"></div>
+        </div>
+        <div class="skeleton-item" style="margin-bottom: 16px;">
+            <div class="skeleton-line" style="width: 100%; height: 20px; background: var(--tg-theme-section-separator-color); border-radius: 4px; margin-bottom: 8px;"></div>
+            <div class="skeleton-line" style="width: 70%; height: 16px; background: var(--tg-theme-section-separator-color); border-radius: 4px; margin-bottom: 8px;"></div>
+            <div class="skeleton-line" style="width: 50%; height: 14px; background: var(--tg-theme-section-separator-color); border-radius: 4px;"></div>
+        </div>
+        <div class="skeleton-item" style="margin-bottom: 16px;">
+            <div class="skeleton-line" style="width: 100%; height: 20px; background: var(--tg-theme-section-separator-color); border-radius: 4px; margin-bottom: 8px;"></div>
+            <div class="skeleton-line" style="width: 90%; height: 16px; background: var(--tg-theme-section-separator-color); border-radius: 4px; margin-bottom: 8px;"></div>
+            <div class="skeleton-line" style="width: 40%; height: 14px; background: var(--tg-theme-section-separator-color); border-radius: 4px;"></div>
+        </div>
+    `;
+    
+    container.innerHTML = skeleton;
+}
+
+// Показать скелетон загрузки истории
+function showHistoryLoadingSkeleton(container) {
+    const skeleton = `
+        <div class="skeleton-item" style="margin-bottom: 16px; padding: 16px; border: 1px solid var(--tg-theme-section-separator-color); border-radius: 8px;">
+            <div class="skeleton-line" style="width: 100%; height: 18px; background: var(--tg-theme-section-separator-color); border-radius: 4px; margin-bottom: 8px;"></div>
+            <div class="skeleton-line" style="width: 80%; height: 14px; background: var(--tg-theme-section-separator-color); border-radius: 4px; margin-bottom: 8px;"></div>
+            <div class="skeleton-line" style="width: 30%; height: 12px; background: var(--tg-theme-section-separator-color); border-radius: 4px;"></div>
+        </div>
+        <div class="skeleton-item" style="margin-bottom: 16px; padding: 16px; border: 1px solid var(--tg-theme-section-separator-color); border-radius: 8px;">
+            <div class="skeleton-line" style="width: 100%; height: 18px; background: var(--tg-theme-section-separator-color); border-radius: 4px; margin-bottom: 8px;"></div>
+            <div class="skeleton-line" style="width: 70%; height: 14px; background: var(--tg-theme-section-separator-color); border-radius: 4px; margin-bottom: 8px;"></div>
+            <div class="skeleton-line" style="width: 25%; height: 12px; background: var(--tg-theme-section-separator-color); border-radius: 4px;"></div>
+        </div>
+        <div class="skeleton-item" style="margin-bottom: 16px; padding: 16px; border: 1px solid var(--tg-theme-section-separator-color); border-radius: 8px;">
+            <div class="skeleton-line" style="width: 100%; height: 18px; background: var(--tg-theme-section-separator-color); border-radius: 4px; margin-bottom: 8px;"></div>
+            <div class="skeleton-line" style="width: 90%; height: 14px; background: var(--tg-theme-section-separator-color); border-radius: 4px; margin-bottom: 8px;"></div>
+            <div class="skeleton-line" style="width: 35%; height: 12px; background: var(--tg-theme-section-separator-color); border-radius: 4px;"></div>
+        </div>
+    `;
+    
+    container.innerHTML = skeleton;
+}
+
+// Показать кастомное модальное окно подтверждения
+function showConfirmationModal(title, text, onConfirm) {
+    let modal = document.getElementById('confirmation-modal');
+    if (modal) {
+        modal.remove();
+    }
+    
+    modal = document.createElement('div');
+    modal.id = 'confirmation-modal';
+    modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10001;
+        padding: 20px;
+    `;
+
+    function closeModal() {
+        modal.style.opacity = '0';
+        setTimeout(() => modal.remove(), 200);
+    }
+
+    modal.innerHTML = `
+        <div class="modal-content" style="
+            background: var(--tg-theme-secondary-bg-color);
+            border-radius: 14px;
+            max-width: 320px;
+            width: 100%;
+            text-align: center;
+            padding-top: 24px;
+        ">
+            <h3 style="margin: 0 16px 8px; font-size: 17px; font-weight: 600; color: var(--tg-theme-text-color);">${title}</h3>
+            <p style="margin: 0 16px 20px; font-size: 14px; color: var(--tg-theme-text-color); line-height: 1.4;">${text}</p>
+            <div class="modal-actions" style="border-top: 1px solid var(--tg-theme-section-separator-color); display: flex;">
+                <button id="confirm-cancel" style="width: 50%; padding: 14px; border: 0; background: none; font-size: 17px; color: var(--tg-theme-link-color); border-right: 1px solid var(--tg-theme-section-separator-color);">Отмена</button>
+                <button id="confirm-ok" style="width: 50%; padding: 14px; border: 0; background: none; font-size: 17px; color: var(--tg-theme-destructive-text-color); font-weight: 600;">Очистить</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    document.getElementById('confirm-ok').onclick = () => {
+        closeModal();
+        onConfirm();
+    };
+    
+    document.getElementById('confirm-cancel').onclick = closeModal;
 } 
