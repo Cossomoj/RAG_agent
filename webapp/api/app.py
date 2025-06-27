@@ -935,17 +935,25 @@ def get_db_connection():
         return None
 
 def clear_all_cache():
-    """Функция для полной очистки всех кешей (аналогично Telegram боту)"""
+    """Очистка всех кешей в веб-приложении"""
     global cache_dict, cache_by_specialization
     
+    count = len(cache_dict) + len(cache_by_specialization)
+    cache_dict.clear()
+    cache_by_specialization.clear()
+    
+    logger.info(f"Кеш веб-приложения очищен, удалено {count} записей.")
+    return count
+
+@app.route('/api/clear-cache', methods=['POST'])
+def clear_webapp_cache():
+    """Эндпоинт для очистки кеша веб-приложения."""
     try:
-        cache_dict.clear()
-        cache_by_specialization.clear()
-        logger.info("Все кеши успешно очищены")
-        return True
+        count = clear_all_cache()
+        return jsonify({"success": True, "message": f"Кеш веб-приложения успешно очищен, удалено {count} записей."})
     except Exception as e:
-        logger.error(f"Ошибка при очистке кешей: {e}")
-        return False
+        logger.error(f"Ошибка при очистке кеша веб-приложения: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 async def handle_cached_request(question_id, question, user_id, role, specialization):
     """Обработка кешированного запроса (аналогично Telegram боту)"""

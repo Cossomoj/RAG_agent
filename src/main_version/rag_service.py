@@ -298,91 +298,43 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
     class EnhancedRetrievalChain:
         def __init__(self, llm, filled_prompt, role, specialization, embedding_retriever):
             self.llm = llm
-            self.filled_prompt = filled_prompt
+            self.base_prompt = filled_prompt
             self.role = role
             self.specialization = specialization
             self.embedding_retriever = embedding_retriever
-        
+
         async def astream(self, input_data):
-            """Асинхронный стриминг для улучшенного поиска"""
+            """
+            Асинхронный стриминг с улучшенным поиском и генерацией ответа.
+            """
             question = input_data.get('input', '')
+            dialogue_context = input_data.get('dialogue_context', '[]')
+
+            # 1. Используем улучшенный поиск для получения релевантных документов
+            docs = await enhanced_vector_search(question, self.role, self.specialization, self.embedding_retriever)
             
-            print(f"Обрабатываем вопрос с улучшенным векторным поиском: {question}")
+            # 2. Формируем контекст из документов
+            context_text = "\n\n".join([doc.page_content for doc in docs])
             
-            # Выполняем улучшенный векторный поиск
-            relevant_docs = await enhanced_vector_search(question, self.role, self.specialization, self.embedding_retriever)
+            # 3. Формируем финальный промпт
+            dialogue_history_prompt_part = ""
+            if dialogue_context and dialogue_context != '[]':
+                dialogue_history_prompt_part = f"\\n\\nКонтекст предыдущих сообщений:\\n{dialogue_context}"
+
+            final_prompt = f"{self.base_prompt}{dialogue_history_prompt_part}\\n\\nКонтекст из документов:\\n{context_text}\\n\\nВопрос: {question}\\n\\nОтвет:"
             
-            # Формируем контекст из найденных документов
-            context = "\n\n".join([doc.page_content for doc in relevant_docs])
+            # Отладочная информация
+            # print(f"\\n--- FINAL PROMPT ---\\n{final_prompt}\\n--- END FINAL PROMPT ---\\n")
             
-            # Создаем финальный промпт
-            final_prompt = f"""{self.filled_prompt}
+            # 4. Стримим ответ от LLM
+            try:
+                async for chunk in self.llm.astream(final_prompt):
+                    if chunk and chunk.content:
+                        yield {"answer": chunk.content}
+            except Exception as e:
+                print(f"ОШИБКА в стриминге LLM: {e}")
+                yield {"answer": f"Произошла ошибка при генерации ответа: {e}"}
 
-Контекст из корпоративных документов:
-{context}
-
-**КРИТИЧЕСКИ ВАЖНОЕ УСЛОВИЕ:**
-Твой ответ должен быть СТРОГО релевантен роли **'{self.role}'** и специализации **'{self.specialization}'**.
-Если в контексте есть информация для других специализаций (например, для аналитиков, если спрашивает тестировщик), **ИГНОРИРУЙ** ее.
-Формируй ответ только на основе данных, применимых к указанной специализации.
-Если в контексте нет информации конкретно для этой специализации, вежливо сообщи, что специфичной информации не найдено, но можешь предоставить общую.
-
-Вопрос пользователя: {question}
-
-КРИТИЧЕСКИ ВАЖНО - ФОРМАТИРОВАНИЕ ОТВЕТА:
-Отформатируй свой ответ строго в формате Markdown с соблюдением следующих правил:
-
-1. **ЗАГОЛОВКИ** (обязательно с пробелами после #):
-   - # Основной заголовок ответа
-   - ## Роли и уровни (например: ## Product Owner (PO):)
-   - ### Конкретные уровни (например: ### Middle-аналитик)
-   
-2. **СТРУКТУРА ОТВЕТА**:
-   - Начинай с основного заголовка # 
-   - Каждую роль выделяй заголовком ##
-   - Каждый уровень внутри роли выделяй заголовком ###
-   - После каждого заголовка ОБЯЗАТЕЛЬНО пустая строка
-
-3. **СПИСКИ** (обязательно с пробелами):
-   - Для нумерованных: 1. пункт 2. пункт 3. пункт
-   - Для маркированных: - пункт или * пункт
-   - После двоеточия (:) переходи на новую строку для списка
-
-4. **ВЫДЕЛЕНИЕ ТЕКСТА**:
-   - **Жирный текст** для ключевых терминов
-   - *Курсив* для акцентов
-   - `код` для технических терминов
-
-5. **ЗАПРЕЩЕНО**:
-   - НЕ используй ### или ## в середине текста без создания заголовка
-   - НЕ пиши длинные абзацы без разбивки
-   - НЕ забывай пустые строки между разделами
-
-ПРИМЕР ПРАВИЛЬНОГО ФОРМАТИРОВАНИЯ:
-# Ожидания от Лида Компетенции
-
-## Product Owner (PO):
-
-### Middle-аналитик
-
-- Проведение анализа текущих процессов
-- Создание диаграмм и моделей
-- Помощь в формулировке требований
-
-### Senior-аналитик
-
-- Владение стратегиями тестирования
-- Опыт работы с командой
-
-Следуй этому формату СТРОГО!"""
-            
-            print(f"Отправляем запрос в GigaChat с стримингом...")
-            
-            # Используем стриминг LLM
-            async for chunk in self.llm.astream(final_prompt):
-                if chunk and chunk.content:
-                    yield {"answer": chunk.content}
-    
     return EnhancedRetrievalChain(llm, filled_prompt, role, specialization, embedding_retriever)
 
 async def create_enhanced_retrieval_chain_for_suggestions(role, specialization, user_question, bot_answer, embedding_retriever, prompt_template):
@@ -632,9 +584,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 full_prompt = filled_prompt + context_info + f"Вопрос пользователя: {question}"
             else:
                 full_prompt = filled_prompt + f"\n\nВопрос пользователя: {question}"
-        else:
-            # Для ID=777 просто добавляем вопрос
-            full_prompt = filled_prompt + f"\n\nВопрос пользователя: {question}"
         
         # Добавляем улучшенную инструкцию по форматированию
         full_prompt += """
@@ -721,20 +670,13 @@ async def websocket_endpoint(websocket: WebSocket):
         # Используем RAG для обычных промптов или для специальных промптов при релевантности
         print(f"Используем RAG для промпта {question_id}")
         
-        # Для специальных промптов используем улучшенный векторный поиск
-        if question_id in [777, 888]:
-            print(f"Используем улучшенный векторный поиск для промпта {question_id}")
-            enhanced_question = question
-        else:
-            enhanced_question = question
-        
-        # Для промпта 888 добавляем контекст к вопросу
+        # Для промпта 888 передаем контекст диалога в chain
+        dialogue_context_for_chain = "[]"
         if question_id == 888 and context and context != "[]":
-            enhanced_question = f"Контекст предыдущих сообщений: {context}\n\nТекущий вопрос: {enhanced_question}"
-            print(f"Промпт 888 с контекстом: {enhanced_question[:200]}...")
+            dialogue_context_for_chain = context
             
         # Используем стриминг для всех промптов одинаково
-        async for chunk in retrieval_chain.astream({'input': enhanced_question}):
+        async for chunk in retrieval_chain.astream({'input': question, 'dialogue_context': dialogue_context_for_chain}):
             if chunk:
                 # Извлекаем ответ
                 answer = chunk.get("answer", "").strip()

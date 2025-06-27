@@ -1019,9 +1019,28 @@ function createHistoryScreen() {
     header.innerHTML = '';
     const headerElement = createScreenHeader('История диалогов');
     
-    // Добавляем кнопку очистки
-            const clearButton = createButton('Очистить', 'destructive', clearHistory);
-    clearButton.style.cssText += 'margin-left: auto; padding: 8px 16px; font-size: 14px;';
+    // Создаем кнопку "Очистить" в стиле Telegram UI для деструктивных действий
+    const clearButton = document.createElement('button');
+    clearButton.textContent = 'Очистить';
+    clearButton.style.cssText = `
+        font-size: 16px;
+        font-weight: 500;
+        color: var(--tg-theme-destructive-text-color); /* Используем цвет для опасных действий */
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 8px 0; /* Такой же вертикальный паддинг как у "Назад" */
+        margin-left: auto;
+        -webkit-tap-highlight-color: transparent;
+    `;
+
+    clearButton.onclick = clearHistory;
+    
+    // Добавляем эффект при нажатии для визуальной обратной связи
+    clearButton.addEventListener('mousedown', () => clearButton.style.opacity = '0.7');
+    clearButton.addEventListener('mouseup', () => clearButton.style.opacity = '1');
+    clearButton.addEventListener('mouseleave', () => clearButton.style.opacity = '1');
+    
     headerElement.appendChild(clearButton);
     
     header.appendChild(headerElement);
@@ -1483,10 +1502,10 @@ function createFeedbackScreen() {
     // Создаем содержимое обратной связи
     feedbackContent.innerHTML = `
         <!-- Информационная секция -->
-        <div class="feedback-hero" style="text-align: center; margin-bottom: 24px; padding: 20px; background: var(--tg-theme-secondary-bg-color); border-radius: 12px;">
-            <div class="feedback-icon-large" style="font-size: 48px; margin-bottom: 12px;">💬</div>
-            <h3 style="color: var(--tg-theme-text-color); margin: 0 0 8px 0; font-size: 20px; font-weight: 600;">Поделитесь своим мнением</h3>
-            <p style="color: var(--tg-theme-hint-color); margin: 0; font-size: 14px; line-height: 1.5;">Ваши отзывы и предложения помогают нам делать GigaMentor лучше каждый день!</p>
+        <div class="feedback-hero" style="text-align: center; margin-bottom: 20px; padding: 16px; background: var(--tg-theme-secondary-bg-color); border-radius: 12px;">
+            <div class="feedback-icon-large" style="font-size: 32px; margin-bottom: 8px;">💬</div>
+            <h3 style="color: var(--tg-theme-text-color); margin: 0 0 6px 0; font-size: 18px; font-weight: 600;">Поделитесь своим мнением</h3>
+            <p style="color: var(--tg-theme-hint-color); margin: 0; font-size: 14px; line-height: 1.4;">Ваши отзывы помогают нам делать GigaMentor лучше!</p>
         </div>
 
         <!-- Форма обратной связи -->
