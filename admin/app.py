@@ -288,7 +288,7 @@ def clear_cache():
     
     # 2. Очищаем кеш веб-приложения
     try:
-        response = requests.post('http://213.159.236.100:5000/api/clear-cache', timeout=10)
+        response = requests.post('http://213.171.25.85:5000/api/clear-cache', timeout=10)
         if response.status_code == 200:
             data = response.json()
             if data.get('success'):
