@@ -26,12 +26,9 @@ pymdown-extensions==10.5
 # Machine Learning
 torch>=2.2.0
 transformers==4.36.2
-numpy==1.24.3
+numpy>=1.26.0
 scikit-learn==1.3.2
 huggingface-hub==0.19.4
-
-# База данных
-# sqlite3 встроен в Python
 
 # Утилиты
 python-dotenv==1.0.0
