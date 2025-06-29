@@ -2,7 +2,8 @@ import sqlite3
 from datetime import datetime
 import os
 
-DATABASE_URL = "/app/src/main_version/AI_agent.db"
+# Используем переменную окружения или относительный путь для локального запуска
+DATABASE_URL = os.getenv("DATABASE_URL", "/app/src/main_version/AI_agent.db")
 
 class DatabaseOperations:
     def __init__(self, db_path=DATABASE_URL):

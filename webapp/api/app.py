@@ -54,8 +54,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Конфигурация
-DATABASE_URL = "/home/user1/sqlite_data_rag/AI_agent.db"
-WEBSOCKET_URL = "ws://213.171.25.85:8000/ws"
+DATABASE_URL = os.getenv("DATABASE_URL", "/app/src/main_version/AI_agent.db")
+WEBSOCKET_URL = "ws://127.0.0.1:8000/ws"
 
 # Кеш для ответов (аналогично Telegram боту)
 cache_dict = {}
@@ -1108,97 +1108,95 @@ async def send_websocket_question(question, user_id, role="", specialization="",
             logger.info(f"Отправляем вопрос: '{question}' с question_id: {question_id}, role: '{role}', specialization: '{specialization}'")
             logger.info(f"WebSocket URL: {WEBSOCKET_URL}")
             
-            # Отправляем данные в том же порядке, что ожидает RAG-сервис
-            await websocket.send(question)          # 1. question
-            await websocket.send(role)              # 2. role  
-            await websocket.send(specialization)    # 3. specialization
-            await websocket.send(str(question_id))  # 4. question_id
-            await websocket.send(context)           # 5. context (теперь с реальным контекстом для id=888)
-            await websocket.send("1")               # 6. count (1 для первого вопроса)
+            # Новый JSON формат для Context7-оптимизированного RAG сервиса
+            message_data = {
+                "user_id": user_id,
+                "question": question,
+                "role": role,
+                "specialization": specialization,
+                "question_id": int(question_id)
+            }
             
-            # Получаем потоковый ответ (ТОЧНО как в телеграм боте)
+            await websocket.send(json.dumps(message_data))
+            
+            # Получаем потоковый ответ в новом JSON формате
             full_answer = ""
-            answer_for_cache = []
-            answer_for_continue_dialog = ""
-            empty_message_count = 0
-            max_empty_messages = 10  # Максимум пустых сообщений подряд
+            stream_started = False
             
             try:
                 while True:
                     try:
-                        # Добавляем таймаут для recv (как в телеграм боте)
-                        answer_part = await asyncio.wait_for(websocket.recv(), timeout=30.0)
+                        # Добавляем таймаут для recv
+                        response_text = await asyncio.wait_for(websocket.recv(), timeout=30.0)
+                        
+                        try:
+                            response_data = json.loads(response_text)
+                            
+                            # Обрабатываем разные типы сообщений
+                            if "stream_start" in response_data:
+                                stream_started = True
+                                logger.info("Начало стриминга ответа")
+                                continue
+                            elif "chunk" in response_data:
+                                chunk = response_data["chunk"]
+                                if chunk:
+                                    full_answer += chunk
+                                    logger.debug(f"Получен chunk: '{chunk[:50]}...'")
+                                continue
+                            elif "stream_end" in response_data:
+                                logger.info("Конец стриминга ответа")
+                                break
+                            elif "error" in response_data:
+                                logger.error(f"Ошибка от RAG сервиса: {response_data['error']}")
+                                return {
+                                    "answer": f"Ошибка: {response_data['error']}",
+                                    "suggested_questions": []
+                                }
+                                
+                        except json.JSONDecodeError:
+                            # Возможно, это старый формат - пробуем обработать как обычный текст
+                            if response_text and not stream_started:
+                                full_answer += response_text
+                                logger.debug(f"Получен текст (старый формат): '{response_text[:50]}...'")
+                            
                     except asyncio.TimeoutError:
                         logger.warning("Таймаут ожидания ответа от RAG сервиса")
                         break
-                    
-                    if answer_part:
-                        empty_message_count = 0  # Сбрасываем счетчик пустых сообщений
-                        logger.debug(f"Получена часть ответа: '{answer_part[:100]}...' (длина: {len(answer_part)})")
-                        
-                        # ТОЧНО как в телеграм-боте: просто накапливаем части БЕЗ изменения
-                        full_answer += answer_part
-                    else:
-                        # Пустое сообщение может означать конец потока
-                        empty_message_count += 1
-                        logger.debug(f"Получено пустое сообщение #{empty_message_count} от WebSocket")
-                        
-                        # Если получили слишком много пустых сообщений подряд - выходим
-                        if empty_message_count >= max_empty_messages:
-                            logger.info(f"Получено {empty_message_count} пустых сообщений подряд, завершаем обработку")
-                            break
-                        
-                        # Небольшая пауза и продолжаем (как в телеграм боте)
-                        await asyncio.sleep(0.1)
-                        continue
                         
             except websockets.exceptions.ConnectionClosed:
                 logger.info("WebSocket соединение закрыто")
-                pass  # WebSocket закрылся - это нормально
+                pass
             
-            # После завершения цикла сохраняем весь накопленный ответ
-            if full_answer != "":
-                # В телеграм-боте answer_for_cache накапливает части по времени
-                # Здесь мы сохраняем весь полученный ответ как одну часть
-                answer_for_cache = [full_answer]  # Массив с одним элементом - полным ответом
-                answer_for_continue_dialog = full_answer
+            # Проверяем результат
+            if not full_answer.strip():
+                logger.warning("Получен пустой ответ от RAG сервиса")
+                return {
+                    "answer": "Извините, не удалось получить ответ. Попробуйте переформулировать вопрос.",
+                    "suggested_questions": []
+                }
             
-            logger.info(f"Получен ответ от RAG сервиса: '{answer_for_continue_dialog[:200]}...' (длина: {len(answer_for_continue_dialog)})")
-            logger.info(f"Последние 100 символов ответа: '{answer_for_continue_dialog[-100:]}'")
-            logger.info(f"Количество частей в answer_for_cache: {len(answer_for_cache)}")
+            logger.info(f"Получен ответ от RAG сервиса: длина {len(full_answer)} символов")
+            logger.debug(f"Первые 200 символов ответа: '{full_answer[:200]}...'")
             
-            # Дополнительная диагностика для проблемы с неполными ответами
-            if len(answer_for_continue_dialog) < 500:
-                logger.warning(f"ВНИМАНИЕ: Короткий ответ! Длина: {len(answer_for_continue_dialog)}")
-                logger.warning(f"Полный ответ: '{answer_for_continue_dialog}'")
-            
-            # Проверяем, заканчивается ли ответ корректно
-            if not answer_for_continue_dialog.endswith(('.', '!', '?', ':', ';')):
-                logger.warning(f"ВНИМАНИЕ: Ответ может быть обрезан! Последние символы: '{answer_for_continue_dialog[-20:]}'")
-            
-            # Проверяем наличие ключевых слов из примера
-            keywords = ['SDLC', 'Software Development Life Cycle', 'этапы', 'разработки']
-            found_keywords = [kw for kw in keywords if kw.lower() in answer_for_continue_dialog.lower()]
-            logger.info(f"Найденные ключевые слова: {found_keywords}")
-            
-            # Кешируем ответы только для предопределенных вопросов (как в телеграм боте)
+            # Кешируем ответы только для предопределенных вопросов
             if question_id and int(question_id) not in [777, 888]:
                 question_id_int = int(question_id)
+                answer_for_cache = [full_answer]  # Массив с полным ответом
                 
-                # Определяем тип кеширования точно как в телеграм боте
+                # Определяем тип кеширования
                 if question_id_int not in [1, 2, 3, 4, 5, 18, 19, 20]:
-                    # Общий кеш - используем массив частей ответа
+                    # Общий кеш
                     cache_dict[question_id_int] = answer_for_cache
                     logger.info(f"Ответ закеширован в общем кеше: question_id={question_id_int}")
                 else:
-                    # Кешируем по специализации - используем массив частей ответа
+                    # Кешируем по специализации
                     if question_id_int not in cache_by_specialization:
                         cache_by_specialization[question_id_int] = {}
                     cache_by_specialization[question_id_int][specialization] = answer_for_cache
                     logger.info(f"Ответ закеширован по специализации: question_id={question_id_int}, specialization={specialization}")
             
             return {
-                "answer": answer_for_continue_dialog.strip(),
+                "answer": full_answer.strip(),
                 "suggested_questions": []
             }
     except Exception as e:

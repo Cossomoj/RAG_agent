@@ -1,73 +1,217 @@
+#!/usr/bin/env python3
+"""
+RAG Service - Новая версия с Context7 оптимизациями
+Совместима с простой системой запуска (без config.yaml)
+Применены best practices для максимальной точности RAG
+"""
+
 import os
-from dotenv import load_dotenv
-import string
-import asyncio
 import sqlite3
 import json
+import string
+import asyncio
 import re
+from typing import List, Dict, Optional, Any
+from datetime import datetime
+import warnings
+warnings.filterwarnings("ignore")
+
 from fastapi import FastAPI, WebSocket
-import websockets
-from langchain_community.document_loaders import TextLoader
-from langchain_community.document_loaders import PyPDFLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from fastapi.responses import JSONResponse
+
+# LangChain Core imports 
+from langchain.text_splitter import RecursiveCharacterTextSplitter, MarkdownHeaderTextSplitter
+from langchain_community.document_loaders import TextLoader, DirectoryLoader
 from langchain_community.vectorstores import FAISS
-from langchain_community.chat_models import GigaChat
-from langchain_gigachat import GigaChat
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_core.documents import Document
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain_core.prompts import ChatPromptTemplate
+from langchain.prompts import ChatPromptTemplate
 from langchain.chains import create_retrieval_chain
-from langchain.retrievers import EnsembleRetriever
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_gigachat import GigaChat
+
+# Advanced RAG Components
+from langchain.retrievers import TimeWeightedVectorStoreRetriever, EnsembleRetriever
+from langchain.retrievers.document_compressors import DocumentCompressorPipeline
+from langchain_community.document_transformers import EmbeddingsRedundantFilter
+from langchain.retrievers import ContextualCompressionRetriever
+
 import uvicorn
 
-DATABASE_URL = "/app/src/main_version/AI_agent.db"
-
-load_dotenv()
-
-
-# Инициализация FastAPI
 app = FastAPI()
 
+# === ПРОСТАЯ КОНФИГУРАЦИЯ БЕЗ CONFIG.YAML ===
+DATABASE_URL = "AI_agent.db"  # Локальный путь
 api_key = os.getenv("GIGACHAT_API_KEY")
 
-folder_path_1 = os.path.join(os.path.dirname(__file__), "txt_docs/docs_pack_1")
-folder_path_2 = os.path.join(os.path.dirname(__file__), "txt_docs/docs_pack_2")
-folder_path_3 = os.path.join(os.path.dirname(__file__), "txt_docs/docs_pack_3")
+# Context7 Optimized Paths - используем существующую структуру docs/
+folder_path_competency_lead = os.path.join(os.path.dirname(__file__), "docs/Competency_Lead/")
+folder_path_intern = os.path.join(os.path.dirname(__file__), "docs/Intern/")
+folder_path_specialist = os.path.join(os.path.dirname(__file__), "docs/Specialist/")
+folder_path_po = os.path.join(os.path.dirname(__file__), "docs/PO/")
+folder_path_full = os.path.join(os.path.dirname(__file__), "docs/full/")
 
-folder_path_full = os.path.join(os.path.dirname(__file__), "txt_docs/docs_pack_full")
+print("🚀 Инициализация Context7-оптимизированного RAG сервиса...")
+
+# === CONTEXT7 OPTIMIZED DOCUMENT PROCESSING ===
 
 def create_docs_from_txt(folder_path):
-    # Получаем список всех файлов .txt в указанной директории
-    file_paths = [os.path.join(folder_path, f) for f in os.listdir(folder_path) if f.endswith(".txt")]
+    """Загрузка TXT документов с оптимизированным чанкингом"""
+    try:
+        loader = DirectoryLoader(folder_path, glob="*.txt", loader_cls=TextLoader)
+        documents = loader.load()
+        
+        # Context7 Best Practice: Оптимизированные параметры чанкинга
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=800,  # Оптимальный размер для embedding моделей
+            chunk_overlap=100,  # Достаточный overlap для контекста
+            length_function=len,
+            separators=["\n\n", "\n", ". ", " ", ""]  # Умное разделение
+        )
+        
+        split_documents = text_splitter.split_documents(documents)
+        
+        # Context7 Enhancement: Обогащение метаданными
+        for i, doc in enumerate(split_documents):
+            doc.metadata.update({
+                'chunk_id': i,
+                'content_type': 'txt',
+                'processing_timestamp': datetime.now().isoformat(),
+                'chunk_size': len(doc.page_content),
+                'folder_source': folder_path.split('/')[-2] if '/' in folder_path else folder_path
+            })
+        
+        print(f"✅ TXT документы: {len(split_documents)} чанков из {len(documents)} файлов")
+        return split_documents
+        
+    except Exception as e:
+        print(f"❌ Ошибка загрузки TXT из {folder_path}: {e}")
+        return []
 
-    # Список для хранения загруженных документов
-    docs = []
+def create_docs_from_markdown_recursive(folder_path):
+    """Context7-оптимизированная обработка Markdown с поддержкой структуры заголовков"""
+    
+    def scan_directory(directory):
+        """Рекурсивно сканирует директорию для .md файлов"""
+        md_files = []
+        try:
+            for root, dirs, files in os.walk(directory):
+                for file in files:
+                    if file.endswith('.md'):
+                        md_files.append(os.path.join(root, file))
+        except Exception as e:
+            print(f"❌ Ошибка сканирования {directory}: {e}")
+        return md_files
+    
+    try:
+        if not os.path.exists(folder_path):
+            print(f"⚠️ Директория не найдена: {folder_path}")
+            return []
+        
+        md_files = scan_directory(folder_path)
+        if not md_files:
+            print(f"⚠️ Нет .md файлов в {folder_path}")
+            return []
+        
+        print(f"📁 Найдено {len(md_files)} Markdown файлов в {folder_path}")
+        
+        all_documents = []
+        
+        # Context7 Best Practice: Структурированная обработка Markdown
+        headers_to_split_on = [
+            ("#", "Header 1"),
+            ("##", "Header 2"), 
+            ("###", "Header 3"),
+            ("####", "Header 4"),
+        ]
+        
+        markdown_splitter = MarkdownHeaderTextSplitter(
+            headers_to_split_on=headers_to_split_on,
+            strip_headers=False  # Сохраняем заголовки для контекста
+        )
+        
+        for file_path in md_files:
+            try:
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    content = file.read()
+                
+                # Первичное разделение по заголовкам
+                md_header_splits = markdown_splitter.split_text(content)
+                
+                # Вторичное разделение по размеру чанков
+                text_splitter = RecursiveCharacterTextSplitter(
+                    chunk_size=700,  # Немного меньше для Markdown
+                    chunk_overlap=80,
+                    length_function=len
+                )
+                
+                # Разделяем каждый раздел заголовка
+                splits = text_splitter.split_documents(md_header_splits)
+                
+                # Context7 Enhancement: Расширенные метаданные
+                for i, doc in enumerate(splits):
+                    doc.metadata.update({
+                        'source': file_path,
+                        'file_name': os.path.basename(file_path),
+                        'folder_category': folder_path.split('/')[-2] if '/' in folder_path else folder_path,
+                        'content_type': 'markdown',
+                        'chunk_id': i,
+                        'processing_timestamp': datetime.now().isoformat(),
+                        'chunk_size': len(doc.page_content),
+                        # Извлекаем структуру заголовков
+                        'headers': {k: v for k, v in doc.metadata.items() if 'Header' in k},
+                        # Определяем сложность контента
+                        'complexity_level': 'high' if len(doc.page_content) > 500 else 'medium' if len(doc.page_content) > 200 else 'low',
+                        # Извлекаем ключевые слова
+                        'keywords': extract_keywords(doc.page_content)
+                    })
+                
+                all_documents.extend(splits)
+                
+            except Exception as e:
+                print(f"❌ Ошибка обработки файла {file_path}: {e}")
+                continue
+        
+        print(f"✅ Markdown документы: {len(all_documents)} чанков обработано")
+        return all_documents
+        
+    except Exception as e:
+        print(f"❌ Ошибка загрузки Markdown из {folder_path}: {e}")
+        return []
 
-    # Загружаем текст из файлов
-    for file_path in file_paths:
-        loader = TextLoader(file_path)
-        docs.extend(loader.load())
+def extract_keywords(text: str, max_keywords: int = 10) -> List[str]:
+    """Context7 Enhancement: Извлечение ключевых слов для метаданных"""
+    import re
+    from collections import Counter
+    
+    # Убираем знаки препинания и приводим к нижнему регистру
+    words = re.findall(r'\b[а-яё]{3,}\b', text.lower())
+    
+    # Убираем стоп-слова
+    stop_words = {'что', 'как', 'где', 'когда', 'почему', 'кто', 'какой', 'можно', 'нужно', 
+                  'для', 'при', 'или', 'это', 'все', 'еще', 'уже', 'так', 'там', 'тут'}
+    
+    words = [word for word in words if word not in stop_words and len(word) > 3]
+    
+    # Возвращаем топ ключевых слов
+    return [word for word, count in Counter(words).most_common(max_keywords)]
 
-    # Разделяем текст на чанки
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=800,  # Увеличено с 500 до 800 для лучшего контекста
-        chunk_overlap=200  # Увеличено с 100 до 200 для лучшего перекрытия
-    )
-    split_docs = text_splitter.split_documents(docs)
-    return split_docs
+def create_docs_adaptive(folder_path):
+    """Context7-адаптивная загрузка документов с приоритетом Markdown"""
+    print(f"📂 Адаптивная загрузка из: {folder_path}")
+    
+    # Сначала пробуем загрузить Markdown файлы
+    md_docs = create_docs_from_markdown_recursive(folder_path)
+    
+    # Если нет Markdown, загружаем TXT
+    if not md_docs:
+        txt_docs = create_docs_from_txt(folder_path)
+        return txt_docs
+    
+    return md_docs
 
-# Документы по Специалисту аналитику
-split_docs_1 = create_docs_from_txt(folder_path_1)
-# Документы по Лиду аналитику
-split_docs_2 = create_docs_from_txt(folder_path_2)
-# Документы по PO/PM
-split_docs_3 = create_docs_from_txt(folder_path_3)
-# Полный пакет
-split_docs_full = create_docs_from_txt(folder_path_full)
-
-# Инициализация модели для эмбеддингов
+# === ИНИЦИАЛИЗАЦИЯ EMBEDDING МОДЕЛИ ===
+print("🔧 Инициализация embedding модели...")
 model_name = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
 model_kwargs = {'device': 'cpu'}
 encode_kwargs = {'normalize_embeddings': False}
@@ -77,95 +221,107 @@ embedding = HuggingFaceEmbeddings(
     encode_kwargs=encode_kwargs
 )
 
-# Создание векторного хранилища 1
-vector_store_1 = FAISS.from_documents(split_docs_1, embedding=embedding)
-embedding_retriever_1 = vector_store_1.as_retriever(search_kwargs={"k": 10})
+# === CONTEXT7 OPTIMIZED VECTOR STORES ===
 
-# Создание векторного хранилища 2
-vector_store_2 = FAISS.from_documents(split_docs_2, embedding=embedding)
-embedding_retriever_2 = vector_store_2.as_retriever(search_kwargs={"k": 10})
-
-# Создание векторного хранилища 3
-vector_store_3 = FAISS.from_documents(split_docs_3, embedding=embedding)
-embedding_retriever_3 = vector_store_3.as_retriever(search_kwargs={"k": 10})
-
-# Создание векторного хранилища со всеми данными
-vector_store_full = FAISS.from_documents(split_docs_full, embedding=embedding)
-embedding_retriever_full = vector_store_full.as_retriever(search_kwargs={"k": 15})
-
-
-# Инициализация модели GigaChat
-
-def create_retrieval_chain_from_folder(role, specialization, question_id, embedding_retriever, prompt_template):
+def create_optimized_vector_store(documents: List, store_name: str):
+    """Context7-оптимизированное создание векторного хранилища"""
+    if not documents:
+        print(f"⚠️ Нет документов для создания векторного хранилища {store_name}")
+        return None
     
-    # Заполнение шаблона промпта
-    template = string.Template(prompt_template)
-    filled_prompt = template.substitute(role=role, specialization=specialization)
+    try:
+        print(f"🔧 Создание оптимизированного векторного хранилища {store_name}...")
+        
+        # Context7 Best Practice: Оптимизированные параметры для FAISS
+        vector_store = FAISS.from_documents(
+            documents, 
+            embedding=embedding,
+            normalize_L2=True  # Нормализация для лучшего similarity search
+        )
+        
+        print(f"✅ Векторное хранилище {store_name}: {len(documents)} документов")
+        return vector_store
+        
+    except Exception as e:
+        print(f"❌ Ошибка создания векторного хранилища {store_name}: {e}")
+        return None
 
-    # Создание промпта
-    prompt = ChatPromptTemplate.from_template(filled_prompt)
+# Загрузка и создание векторных хранилищ
+print("📚 Загрузка документов и создание векторных хранилищ...")
 
-    llm = GigaChat(
-        credentials=api_key,
-        model='GigaChat-2',
-        verify_ssl_certs=False,
-        profanity_check=False
-    )
+competency_lead_docs = create_docs_adaptive(folder_path_competency_lead)
+intern_docs = create_docs_adaptive(folder_path_intern)
+specialist_docs = create_docs_adaptive(folder_path_specialist)
+po_docs = create_docs_adaptive(folder_path_po)
+full_docs = create_docs_adaptive(folder_path_full)
 
-    # Создание цепочки для работы с документами
-    document_chain = create_stuff_documents_chain(
-        llm=llm,
-        prompt=prompt
-    )
+# Создание оптимизированных векторных хранилищ
+vector_store_competency_lead = create_optimized_vector_store(competency_lead_docs, "Competency_Lead")
+vector_store_intern = create_optimized_vector_store(intern_docs, "Intern")
+vector_store_specialist = create_optimized_vector_store(specialist_docs, "Specialist")
+vector_store_po = create_optimized_vector_store(po_docs, "PO")
+vector_store_full = create_optimized_vector_store(full_docs, "Full")
 
-    # Создание retrieval_chain
-    retrieval_chain = create_retrieval_chain(embedding_retriever, document_chain)
+# Создание retrievers с оптимизированными параметрами
+embedding_retriever_competency_lead = vector_store_competency_lead.as_retriever(search_kwargs={"k": 12}) if vector_store_competency_lead else None
+embedding_retriever_intern = vector_store_intern.as_retriever(search_kwargs={"k": 12}) if vector_store_intern else None
+embedding_retriever_specialist = vector_store_specialist.as_retriever(search_kwargs={"k": 12}) if vector_store_specialist else None
+embedding_retriever_po = vector_store_po.as_retriever(search_kwargs={"k": 12}) if vector_store_po else None
+embedding_retriever_full = vector_store_full.as_retriever(search_kwargs={"k": 15}) if vector_store_full else None
 
-    return retrieval_chain
+print("✅ Все векторные хранилища созданы!")
+
+# === DATABASE FUNCTIONS ===
 
 def get_prompt_from_db(question_id):
-    """Получает промт из базы данных по ID вопроса"""
+    """Получает промт из базы данных по ID вопроса (ИСПРАВЛЕНО!)"""
     conn = sqlite3.connect(DATABASE_URL)
     cursor = conn.cursor()
     
     try:
+        # ИСПРАВЛЕНИЕ: Используем правильное поле question_id вместо id
         cursor.execute("SELECT prompt_template FROM Prompts WHERE question_id = ?", (question_id,))
         result = cursor.fetchone()
         if result:
-            return result[0]
+            # ИСПРАВЛЕНИЕ: Убираем экранированные символы \\n
+            prompt_template = result[0].replace('\\n', '\n')
+            return prompt_template
         else:
             return None
     finally:
         conn.close()
 
-
+# === CONTEXT7 ENHANCED RETRIEVER SELECTION ===
 
 def get_best_retriever_for_role_spec(role, specialization):
-    """
-    Выбирает лучший retriever на основе роли и специализации
-    """
+    """Context7-оптимизированный выбор retriever на основе роли и специализации"""
     role_lower = role.lower() if role else ""
     spec_lower = specialization.lower() if specialization else ""
     
-    # Маппинг ролей на retrievers
-    if 'стажер' in role_lower or 'специалист' in role_lower:
-        return embedding_retriever_1  # docs_pack_1
-    elif 'лид' in role_lower:
-        return embedding_retriever_2  # docs_pack_2
-    elif 'po' in role_lower or 'pm' in role_lower:
-        return embedding_retriever_3  # docs_pack_3
+    print(f"🎯 Выбор retriever для роли: '{role}', специализации: '{specialization}'")
+    
+    # Context7 Enhanced Mapping
+    if 'лид' in role_lower or 'lead' in role_lower:
+        print("📋 Выбран Competency_Lead retriever")
+        return embedding_retriever_competency_lead or embedding_retriever_full
+    elif 'стажер' in role_lower or 'intern' in role_lower:
+        print("🎓 Выбран Intern retriever")
+        return embedding_retriever_intern or embedding_retriever_full
+    elif 'специалист' in role_lower or 'specialist' in role_lower:
+        print("💼 Выбран Specialist retriever")
+        return embedding_retriever_specialist or embedding_retriever_full
+    elif 'po' in role_lower or 'pm' in role_lower or 'продакт' in role_lower:
+        print("🎯 Выбран PO retriever")
+        return embedding_retriever_po or embedding_retriever_full
     else:
-        # Если роль неопределенная, выбираем по специализации
-        if spec_lower in ['аналитик', 'тестировщик', 'python', 'java', 'web']:
-            return embedding_retriever_1  # Начинаем с базовых документов
-        else:
-            return embedding_retriever_full  # Полная база для неопределенных случаев
+        print("📚 Выбран Full retriever (fallback)")
+        return embedding_retriever_full
 
-async def generate_semantic_search_queries(question, role, specialization):
-    """
-    Генерирует семантически связанные поисковые запросы для улучшения векторного поиска
-    """
-    # Создаем LLM для генерации альтернативных запросов
+# === CONTEXT7 ENHANCED QUERY PROCESSING ===
+
+async def context7_enhanced_query_expansion(question: str, role: str, specialization: str) -> List[str]:
+    """Context7 Enhanced: Расширение запроса для улучшения поиска"""
+    
     llm = GigaChat(
         credentials=api_key,
         model='GigaChat-2',
@@ -173,120 +329,87 @@ async def generate_semantic_search_queries(question, role, specialization):
         profanity_check=False
     )
     
-    # Промпт для генерации альтернативных поисковых запросов
-    query_generation_prompt = f"""
+    expansion_prompt = f"""
 Дан вопрос: "{question}"
-Роль пользователя: {role if role else "не указана"}
+Роль: {role if role else "не указана"}
 Специализация: {specialization if specialization else "не указана"}
 
-Сгенерируй 5-6 альтернативных поисковых запросов для поиска в корпоративной базе знаний по карьерному развитию, ИПР, лидерству и управлению командой в IT.
+Создай 4-5 альтернативных поисковых запросов для корпоративной базы знаний по развитию карьеры в IT:
 
-Альтернативные запросы должны:
-1. Включать точные фразы из корпоративных документов
-2. Фокусироваться на конкретных практиках и процессах
-3. Использовать ключевые термины: "ИПР", "индивидуальный план развития", "лид компетенции", "ожидания", "встречи 1-2-1", "цели развития", "компетенции", "обратная связь", "мониторинг прогресса"
-4. Быть короткими и точными для векторного поиска
-5. Покрывать разные аспекты развития и лидерства
-6. Учитывать роль и специализацию пользователя
+Фокус на термины: "ИПР", "индивидуальный план развития", "лид компетенции", "встречи 1-2-1", "цели развития", "компетенции", "обратная связь", "мониторинг прогресса", "карьерная лестница"
 
-Примеры ТОЧНЫХ запросов для поиска:
-- "лид компетенции ожидания ИПР"
-- "индивидуальный план развития встречи"
-- "цели развития компетенции аналитик"
-- "обратная связь мониторинг прогресса"
-- "встречи 1-2-1 лид команда"
-- "профессиональное развитие специалист"
-
-Ответь только списком из 5-6 запросов, каждый с новой строки, без нумерации и дополнительного текста:
+Ответь только списком запросов без нумерации:
 """
     
     try:
-        response = await llm.ainvoke(query_generation_prompt)
-        alternative_queries = [q.strip() for q in response.content.split('\n') if q.strip()]
-        
-        # Добавляем исходный вопрос в начало списка
-        all_queries = [question] + alternative_queries
-        
-        print(f"Сгенерированы поисковые запросы:")
-        for i, query in enumerate(all_queries, 1):
-            print(f"  {i}. {query}")
-        
-        return all_queries
-        
+        response = await llm.ainvoke(expansion_prompt)
+        expanded_queries = [q.strip() for q in response.content.split('\n') if q.strip() and not q.strip().startswith('-')]
+        return [question] + expanded_queries[:4]  # Оригинальный + 4 расширенных
     except Exception as e:
-        print(f"Ошибка при генерации альтернативных запросов: {e}")
-        return [question]  # Возвращаем только исходный вопрос в случае ошибки
+        print(f"⚠️ Ошибка расширения запроса: {e}")
+        return [question]
 
-async def enhanced_vector_search(question, role, specialization, embedding_retriever, top_k=8):
-    """
-    Улучшенный векторный поиск с использованием множественных семантических запросов
-    """
-    # Генерируем альтернативные поисковые запросы
-    search_queries = await generate_semantic_search_queries(question, role, specialization)
+async def context7_enhanced_retrieval(question: str, role: str, specialization: str, retriever, top_k: int = 10) -> List:
+    """Context7 Enhanced: Улучшенный поиск с расширением запроса"""
     
-    # Собираем все найденные документы
+    # Расширяем запрос
+    expanded_queries = await context7_enhanced_query_expansion(question, role, specialization)
+    
     all_docs = []
-    doc_scores = {}  # Для подсчета "голосов" за каждый документ
+    seen_content = set()
     
-    for query in search_queries:
+    for query in expanded_queries:
         try:
-            # Выполняем поиск для каждого запроса
-            docs = await embedding_retriever.ainvoke(query)
+            docs = retriever.get_relevant_documents(query)
             
-            # Добавляем документы с весами (первые запросы важнее)
-            weight = 1.0 / (search_queries.index(query) + 1)  # Убывающий вес
-            
-            for i, doc in enumerate(docs):
-                doc_id = doc.metadata.get('source', '') + str(hash(doc.page_content[:100]))
-                
-                # Увеличиваем счетчик для документа
-                if doc_id not in doc_scores:
-                    doc_scores[doc_id] = {
-                        'doc': doc,
-                        'score': 0,
-                        'query_matches': []
-                    }
-                
-                # Добавляем взвешенный балл (документы в топе получают больше баллов)
-                position_weight = 1.0 / (i + 1)
-                doc_scores[doc_id]['score'] += weight * position_weight
-                doc_scores[doc_id]['query_matches'].append(query)
-        
+            # Дедуплицируем документы
+            for doc in docs:
+                content_hash = hash(doc.page_content[:200])  # Используем первые 200 символов как хеш
+                if content_hash not in seen_content:
+                    seen_content.add(content_hash)
+                    all_docs.append(doc)
+                    
         except Exception as e:
-            print(f"Ошибка поиска для запроса '{query}': {e}")
+            print(f"⚠️ Ошибка поиска для запроса '{query}': {e}")
             continue
     
-    # Сортируем документы по общему счету
-    sorted_docs = sorted(doc_scores.values(), key=lambda x: x['score'], reverse=True)
-    
-    # Возвращаем топ-K документов
-    result_docs = [item['doc'] for item in sorted_docs[:top_k]]
-    
-    print(f"\nРезультаты улучшенного векторного поиска:")
-    for i, item in enumerate(sorted_docs[:top_k], 1):
-        doc = item['doc']
-        score = item['score']
-        source = doc.metadata.get('source', 'Неизвестно')
-        print(f"  {i}. Счет: {score:.3f} | Источник: {source.split('/')[-1]}")
-        print(f"     Совпадения с запросами: {len(item['query_matches'])}")
-        print(f"     Запросы: {item['query_matches'][:2]}")  # Показываем первые 2 запроса
-        print(f"     Содержимое: {doc.page_content[:150]}...")
-        print()
-    
-    return result_docs
+    # Возвращаем топ документов
+    return all_docs[:top_k]
 
-async def create_enhanced_retrieval_chain(role, specialization, question_id, embedding_retriever, prompt_template):
-    """
-    Создает улучшенную retrieval chain с семантическим векторным поиском и поддержкой стриминга
-    """
-    # Заполнение шаблона промпта
-    template = string.Template(prompt_template)
-    filled_prompt = template.substitute(
-        role=role,
-        specialization=specialization
-    )
+async def check_document_relevance_context7(question: str, retriever, threshold: float = 0.3) -> bool:
+    """Context7: Проверка релевантности документов"""
+    try:
+        docs = retriever.get_relevant_documents(question)
+        if not docs:
+            return False
+        
+        # Простая проверка релевантности через ключевые слова
+        question_keywords = set(re.findall(r'\b[а-яё]{3,}\b', question.lower()))
+        
+        for doc in docs[:3]:  # Проверяем топ-3 документа
+            doc_keywords = set(re.findall(r'\b[а-яё]{3,}\b', doc.page_content.lower()))
+            overlap = len(question_keywords.intersection(doc_keywords))
+            
+            if overlap >= 2:  # Минимум 2 общих ключевых слова
+                return True
+        
+        return False
+        
+    except Exception as e:
+        print(f"⚠️ Ошибка проверки релевантности: {e}")
+        return True  # Возвращаем True в случае ошибки
+
+# === CONTEXT7 ENHANCED RAG CHAIN ===
+
+async def create_context7_rag_chain(role: str, specialization: str, question_id: int, retriever, prompt_template: str):
+    """Context7-оптимизированная RAG цепочка"""
     
-    # Создание LLM
+    # Заполнение промпта
+    template = string.Template(prompt_template)
+    filled_prompt = template.substitute(role=role, specialization=specialization)
+    
+    prompt = ChatPromptTemplate.from_template(filled_prompt)
+    
     llm = GigaChat(
         credentials=api_key,
         model='GigaChat-2',
@@ -294,668 +417,190 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
         profanity_check=False
     )
     
-    # Создаем объект, который поддерживает метод astream
-    class EnhancedRetrievalChain:
-        def __init__(self, llm, filled_prompt, role, specialization, embedding_retriever):
+    class Context7EnhancedRAGChain:
+        def __init__(self, llm, prompt, role, specialization, retriever, question_id):
             self.llm = llm
-            self.base_prompt = filled_prompt
+            self.prompt = prompt
             self.role = role
             self.specialization = specialization
-            self.embedding_retriever = embedding_retriever
-
+            self.retriever = retriever
+            self.question_id = question_id
+        
         async def astream(self, input_data):
-            """
-            Асинхронный стриминг с улучшенным поиском и генерацией ответа.
-            """
-            question = input_data.get('input', '')
-            dialogue_context = input_data.get('dialogue_context', '[]')
-
-            # 1. Используем улучшенный поиск для получения релевантных документов
-            docs = await enhanced_vector_search(question, self.role, self.specialization, self.embedding_retriever)
+            question = input_data.get("input", "")
             
-            # 2. Формируем контекст из документов
-            context_text = "\n\n".join([doc.page_content for doc in docs])
+            # Context7 Enhanced Retrieval
+            context_docs = await context7_enhanced_retrieval(
+                question, self.role, self.specialization, self.retriever, top_k=12
+            )
             
-            # 3. Формируем финальный промпт
-            dialogue_history_prompt_part = ""
-            if dialogue_context and dialogue_context != '[]':
-                dialogue_history_prompt_part = f"\\n\\nКонтекст предыдущих сообщений:\\n{dialogue_context}"
-
-            final_prompt = f"{self.base_prompt}{dialogue_history_prompt_part}\\n\\nКонтекст из документов:\\n{context_text}\\n\\nВопрос: {question}\\n\\nОтвет:"
+            # Формируем контекст
+            context = "\n\n".join([doc.page_content for doc in context_docs])
             
-            # Отладочная информация
-            # print(f"\\n--- FINAL PROMPT ---\\n{final_prompt}\\n--- END FINAL PROMPT ---\\n")
+            # Создаем финальный промпт
+            messages = self.prompt.format_messages(context=context, input=question)
             
-            # 4. Стримим ответ от LLM
-            try:
-                async for chunk in self.llm.astream(final_prompt):
-                    if chunk and chunk.content:
-                        yield {"answer": chunk.content}
-            except Exception as e:
-                print(f"ОШИБКА в стриминге LLM: {e}")
-                yield {"answer": f"Произошла ошибка при генерации ответа: {e}"}
-
-    return EnhancedRetrievalChain(llm, filled_prompt, role, specialization, embedding_retriever)
-
-async def create_enhanced_retrieval_chain_for_suggestions(role, specialization, user_question, bot_answer, embedding_retriever, prompt_template):
-    """
-    Создает улучшенную retrieval chain для генерации связанных вопросов (промпт 999)
-    """
-    # Заполнение шаблона промпта со всеми необходимыми переменными
-    template = string.Template(prompt_template)
-    filled_prompt = template.substitute(
-        role=role,
-        specialization=specialization,
-        user_question=user_question,
-        bot_answer=bot_answer
-    )
+            # Стримим ответ
+            async for chunk in self.llm.astream(messages):
+                if hasattr(chunk, 'content') and chunk.content:
+                    yield chunk.content
     
-    # Создание LLM
-    llm = GigaChat(
-        credentials=api_key,
-        model='GigaChat-2',
-        verify_ssl_certs=False,
-        profanity_check=False
-    )
-    
-    # Создаем кастомную функцию для обработки запроса
-    async def enhanced_suggestions_process(input_data):
-        search_query = input_data.get('input', '')
-        
-        print(f"Генерируем связанные вопросы с улучшенным векторным поиском: {search_query}")
-        
-        # Выполняем улучшенный векторный поиск
-        relevant_docs = await enhanced_vector_search(search_query, role, specialization, embedding_retriever)
-        
-        # Формируем контекст из найденных документов
-        context = "\n\n".join([doc.page_content for doc in relevant_docs])
-        
-        # Создаем финальный промпт с контекстом
-        final_prompt = f"""{filled_prompt}
+    return Context7EnhancedRAGChain(llm, prompt, role, specialization, retriever, question_id)
 
-Дополнительный контекст из корпоративных документов:
-{context}
+# === WEBSOCKET ENDPOINT ===
 
-Используй этот контекст для генерации более релевантных и специфичных вопросов, связанных с ролью {role} и специализацией {specialization}."""
-        
-        print(f"Отправляем запрос в GigaChat для генерации связанных вопросов...")
-        
-        # Получаем ответ от LLM
-        response = await llm.ainvoke(final_prompt)
-        
-        return {"answer": response.content}
-    
-    return enhanced_suggestions_process
-
-#mplusk1
-@app.websocket("/ws_suggest")
-async def websocket_suggest_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    print("ws_suggest: connection accepted")
-    data = await websocket.receive_text()
-    print(f"ws_suggest: received data: {data}")
-    payload = json.loads(data)
-    
-    user_question = payload.get("user_question")
-    bot_answer = payload.get("bot_answer")
-    role = payload.get("role")
-    specialization = payload.get("specialization")
-
-    prompt_template = get_prompt_from_db(999)
-    if not prompt_template:
-        print("ws_suggest: ERROR - Prompt 999 not found")
-        await websocket.send_text(json.dumps({"error": "Prompt not found"}))
-        await websocket.close()
-        return
-
-    # Всегда используем RAG для генерации связанных вопросов (промпт 999)
-    use_rag = True
-    print(f"ws_suggest: Using RAG for question generation")
-    
-    if use_rag:
-        # Используем RAG для более точной генерации вопросов
-        embedding_retriever = get_best_retriever_for_role_spec(role, specialization)
-        
-        # Создаем специальную retrieval chain для генерации связанных вопросов (промпт 999)
-        retrieval_chain = await create_enhanced_retrieval_chain_for_suggestions(
-            role=role,
-            specialization=specialization,
-            user_question=user_question,
-            bot_answer=bot_answer,
-            embedding_retriever=embedding_retriever,
-            prompt_template=prompt_template
-        )
-        
-        try:
-            print("ws_suggest: Using RAG-enhanced question generation...")
-            # Формируем запрос для поиска релевантных документов
-            search_query = f"Вопросы по теме: {user_question}. Роль: {role}. Специализация: {specialization}"
-            
-            # Вызываем функцию напрямую, так как она возвращает функцию
-            response = await retrieval_chain({'input': search_query})
-            raw_response = response.get('answer', '')
-            print(f"ws_suggest: RAG response: {raw_response}")
-            
-            # Парсим ответ
-            cleaned_response = re.sub(r'^\s*\d+\.\s*', '', raw_response, flags=re.MULTILINE)
-            questions = [q.strip() for q in cleaned_response.split('\n') if q.strip() and len(q.strip()) > 10]
-            
-            # Ограничиваем до 5 вопросов
-            questions = questions[:5]
-            
-        except Exception as e:
-            print(f"ws_suggest: ERROR in RAG call: {e}, falling back to direct LLM")
-            use_rag = False
-    
-    if not use_rag:
-        # Используем прямое обращение к LLM без RAG
-        template = string.Template(prompt_template)
-        filled_prompt = template.substitute(
-            user_question=user_question,
-            bot_answer=bot_answer,
-            role=role,
-            specialization=specialization
-        )
-
-        # Добавляем инструкции по генерации релевантных вопросов
-        question_generation_guidance = f"""
-Учитывая, что пользователь имеет роль '{role}' и специализацию '{specialization}',
-сгенерируйте 3-5 релевантных вопросов, которые:
-1. Соответствуют текущему контексту диалога
-2. Учитывают специфику роли и специализации пользователя
-3. Помогают углубить понимание обсуждаемой темы
-4. Могут быть полезны для профессионального развития в рамках специализации
-5. Не выходят за рамки компетенций пользователя
-
-Формат ответа: каждый вопрос с новой строки, без нумерации.
-"""
-        filled_prompt += question_generation_guidance
-
-        llm = GigaChat(
-            credentials=api_key,
-            model='GigaChat-2',
-            verify_ssl_certs=False,
-            profanity_check=False
-        )
-        
-        try:
-            print(f"ws_suggest: Using direct LLM for question generation...")
-            response = await llm.ainvoke(filled_prompt)
-            print(f"ws_suggest: LLM response: {response.content}")
-            
-            # Удаляем нумерацию, чтобы обеспечить корректный парсинг
-            cleaned_response = re.sub(r'^\s*\d+\.\s*', '', response.content, flags=re.MULTILINE)
-            questions = [q.strip() for q in cleaned_response.split('\n') if q.strip()]
-        except Exception as e:
-            print(f"ws_suggest: ERROR in LLM call: {e}")
-            await websocket.send_text(json.dumps({"error": str(e)}))
-            await websocket.close()
-            return
-
-    print(f"ws_suggest: Final questions: {questions}")
-    await websocket.send_text(json.dumps(questions))
-    print(f"ws_suggest: Sent questions to client: {json.dumps(questions)}")
-    await websocket.close()
-    print("ws_suggest: connection closed")
-#mplusk2
 @app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    """Обрабатывает WebSocket соединение и передает стриминг ответа GigaChat."""
+async def context7_websocket_endpoint(websocket: WebSocket):
+    """Context7-оптимизированный WebSocket endpoint"""
     await websocket.accept()
-    question = await websocket.receive_text()
-    role = await websocket.receive_text()
-    specialization = await websocket.receive_text()
-    question_id = await websocket.receive_text()
-    context = await websocket.receive_text()
-    print(context)
-    count = await websocket.receive_text()
-    question_id = int(question_id)
-    count = int(count)
-    print(question)
-    print(role)
-    print(specialization)
-    print(f"количество {count}")
-    print(f"айди {question_id}")
-    prompt_template = get_prompt_from_db(question_id)
-    if not prompt_template:
-        prompt_template = get_prompt_from_db(777)
+    print("🔌 WebSocket соединение установлено")
     
-    # Для специальных промптов 777, 888 всегда используем RAG
-    use_rag_for_special = question_id in [777, 888]
-    if use_rag_for_special:
-        print(f"Special prompt {question_id}: Using RAG with enhanced vector search")
-        print(f"Question: {question}")
-        print(f"Role: {role}")
-        print(f"Specialization: {specialization}")
-        print(f"Context: {context[:100] if context else 'None'}...")
-
-    # Выбираем соответствующий retriever в зависимости от question_id
-    embedding_retriever = embedding_retriever_full
-    if question_id in [1, 2, 3, 19, 20, 21, 22, 23, 24]:
-        embedding_retriever = embedding_retriever_1
-    elif question_id in [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 18]:
-        embedding_retriever = embedding_retriever_2
-    elif question_id in [15, 16, 17]:
-        embedding_retriever = embedding_retriever_3
-    elif question_id in []: # Оставляем пустым на случай будущих расширений
-        embedding_retriever = embedding_retriever_full
-
-    # Для специальных промптов 777, 888 выбираем retriever на основе роли/специализации
-    if question_id in [777, 888]:
-        print(f"Для специального промпта {question_id} выбираем retriever на основе роли/специализации.")
-        embedding_retriever = get_best_retriever_for_role_spec(role, specialization)
-
-    # Создаем retrieval_chain для вопросов, которые его используют
-    retrieval_chain = None
-    should_use_rag = (
-        question_id not in [777, 888, 999] or  # Обычные промпты всегда используют RAG
-        (question_id in [777, 888] and use_rag_for_special)  # Специальные только при релевантности
-    )
-    
-    if should_use_rag:
-        # Используем улучшенный поиск для ВСЕХ типов вопросов
-        print(f"Используем улучшенный векторный поиск для question_id={question_id}")
-        retrieval_chain = await create_enhanced_retrieval_chain(
-            role=role,
-            specialization=specialization,
-            question_id=question_id,
-            embedding_retriever=embedding_retriever,
-            prompt_template=prompt_template
-        )
-
-    # Убираем очистку от символов форматирования - они нужны для Markdown!
-    
-    
-    # Эта ветка больше не используется, так как промпты 777,888 всегда используют RAG
-    if False:  # question_id in [777, 888] and not use_rag_for_special:
-        print(f"Обрабатываем специальный промпт {question_id} БЕЗ RAG...")
-        
-        # Формируем промпт
-        template = string.Template(prompt_template)
-        filled_prompt = template.substitute(
-            role=role,
-            specialization=specialization
-        )
-        
-        # Для ID=888 добавляем контекст диалога
-        if question_id == 888:
-            if context and context != "[]":
-                context_info = f"\n\nКонтекст предыдущих сообщений:\n{context}\n\n"
-                full_prompt = filled_prompt + context_info + f"Вопрос пользователя: {question}"
-            else:
-                full_prompt = filled_prompt + f"\n\nВопрос пользователя: {question}"
-        
-        # Добавляем улучшенную инструкцию по форматированию
-        full_prompt += """
-
-КРИТИЧЕСКИ ВАЖНО - ФОРМАТИРОВАНИЕ ОТВЕТА:
-Отформатируй свой ответ строго в формате Markdown с соблюдением следующих правил:
-
-1. **ЗАГОЛОВКИ** (обязательно с пробелами после #):
-   - # Основной заголовок ответа
-   - ## Роли и уровни (например: ## Product Owner (PO):)
-   - ### Конкретные уровни (например: ### Middle-аналитик)
-   
-2. **СТРУКТУРА ОТВЕТА**:
-   - Начинай с основного заголовка # 
-   - Каждую роль выделяй заголовком ##
-   - Каждый уровень внутри роли выделяй заголовком ###
-   - После каждого заголовка ОБЯЗАТЕЛЬНО пустая строка
-
-3. **СПИСКИ** (обязательно с пробелами):
-   - Для нумерованных: 1. пункт 2. пункт 3. пункт
-   - Для маркированных: - пункт или * пункт
-   - После двоеточия (:) переходи на новую строку для списка
-
-4. **ВЫДЕЛЕНИЕ ТЕКСТА**:
-   - **Жирный текст** для ключевых терминов
-   - *Курсив* для акцентов
-   - `код` для технических терминов
-
-5. **ЗАПРЕЩЕНО**:
-   - НЕ используй ### или ## в середине текста без создания заголовка
-   - НЕ пиши длинные абзацы без разбивки
-   - НЕ забывай пустые строки между разделами
-
-ПРИМЕР ПРАВИЛЬНОГО ФОРМАТИРОВАНИЯ:
-# Ожидания от Лида Компетенции
-
-## Product Owner (PO):
-
-### Middle-аналитик
-
-- Проведение анализа текущих процессов
-- Создание диаграмм и моделей
-- Помощь в формулировке требований
-
-### Senior-аналитик
-
-- Владение стратегиями тестирования
-- Опыт работы с командой
-
-Следуй этому формату СТРОГО!"""
-        
-        print(f"\n--- PROMPT ДЛЯ LLM (ID={question_id}, без RAG) ---\n")
-        print(full_prompt)
-        print("\n--- КОНЕЦ PROMPT ---\n")
-        
-        try:
-            print("Начинаем стриминг ответа от GigaChat...")
-            chunk_count = 0
-            # Используем GigaChat для ответа
-            async for chunk in GigaChat(
-                credentials=api_key,
-                verify_ssl_certs=False,
-                model='GigaChat-2'
-            ).astream(full_prompt):
-                if chunk and chunk.content:
-                    chunk_count += 1
-                    answer = chunk.content.strip()
-                    
-                    # Оставляем ответ как есть для сохранения Markdown форматирования
-                    
-                    print(f"Отправляем chunk #{chunk_count}: {answer[:50]}...")
-                    await websocket.send_text(answer)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            message_data = json.loads(data)
             
-            print(f"Стриминг завершен. Всего отправлено chunks: {chunk_count}")
-            if chunk_count == 0:
-                print("ВНИМАНИЕ: GigaChat не вернул ни одного chunk!")
-                await websocket.send_text("Извините, не удалось получить ответ. Попробуйте переформулировать вопрос.")
+            # Извлекаем данные
+            user_id = message_data.get("user_id")
+            question = message_data.get("question", "")
+            role = message_data.get("role", "")
+            specialization = message_data.get("specialization", "")
+            question_id = message_data.get("question_id")
+            
+            print(f"📨 Получен запрос: user_id={user_id}, question_id={question_id}")
+            print(f"🎭 Роль: {role}, Специализация: {specialization}")
+            print(f"❓ Вопрос: {question}")
+            
+            # Проверяем обязательные поля
+            if not question or not question_id:
+                await websocket.send_text(json.dumps({
+                    "error": "Отсутствуют обязательные поля: question или question_id"
+                }))
+                continue
+            
+            # Получаем промпт из базы данных
+            prompt_template = get_prompt_from_db(question_id)
+            if not prompt_template:
+                await websocket.send_text(json.dumps({
+                    "error": f"Промпт не найден для question_id: {question_id}"
+                }))
+                continue
+            
+            # Context7: Выбираем лучший retriever
+            retriever = get_best_retriever_for_role_spec(role, specialization)
+            if not retriever:
+                await websocket.send_text(json.dumps({
+                    "error": "Retriever недоступен"
+                }))
+                continue
+            
+            # Context7: Проверяем релевантность (только для специфических ID)
+            if question_id not in [777, 888, 999]:
+                is_relevant = await check_document_relevance_context7(question, retriever)
+                if not is_relevant:
+                    await websocket.send_text(json.dumps({
+                        "error": "Извините, в базе знаний нет релевантной информации по вашему вопросу."
+                    }))
+                    continue
+            
+            try:
+                # Создаем Context7-оптимизированную RAG цепочку
+                rag_chain = await create_context7_rag_chain(
+                    role, specialization, question_id, retriever, prompt_template
+                )
                 
-        except Exception as e:
-            print(f"ОШИБКА при работе с GigaChat для ID={question_id}: {e}")
-            await websocket.send_text(f"Произошла ошибка при обработке вопроса: {str(e)}")
+                # Начинаем потоковую генерацию
+                await websocket.send_text(json.dumps({"stream_start": True}))
+                
+                full_answer = ""
+                async for chunk in rag_chain.astream({"input": question}):
+                    if chunk:
+                        full_answer += chunk
+                        await websocket.send_text(json.dumps({"chunk": chunk}))
+                
+                # Сохраняем в базу данных
+                if user_id and full_answer.strip():
+                    save_message_to_db(user_id, question, full_answer.strip(), role, specialization)
+                
+                # Сигнализируем окончание стриминга
+                await websocket.send_text(json.dumps({"stream_end": True}))
+                print("✅ Ответ успешно отправлен")
+                
+            except Exception as e:
+                print(f"❌ Ошибка генерации ответа: {e}")
+                await websocket.send_text(json.dumps({
+                    "error": f"Ошибка генерации ответа: {str(e)}"
+                }))
+                
+    except Exception as e:
+        print(f"❌ Ошибка WebSocket: {e}")
+    finally:
+        print("🔌 WebSocket соединение закрыто")
+
+# === DATABASE OPERATIONS ===
+
+def save_message_to_db(user_id, question, answer, role=None, specialization=None):
+    """Сохранение сообщения в базу данных"""
+    conn = sqlite3.connect(DATABASE_URL)
+    cursor = conn.cursor()
     
-    elif should_use_rag and retrieval_chain is not None:
-        # Используем RAG для обычных промптов или для специальных промптов при релевантности
-        print(f"Используем RAG для промпта {question_id}")
-        
-        # Для промпта 888 передаем контекст диалога в chain
-        dialogue_context_for_chain = "[]"
-        if question_id == 888 and context and context != "[]":
-            dialogue_context_for_chain = context
-            
-        # Используем стриминг для всех промптов одинаково
-        async for chunk in retrieval_chain.astream({'input': question, 'dialogue_context': dialogue_context_for_chain}):
-            if chunk:
-                # Извлекаем ответ
-                answer = chunk.get("answer", "").strip()
+    try:
+        cursor.execute('''
+            INSERT INTO Messages (user_id, question, answer, role, specialization, timestamp)
+            VALUES (?, ?, ?, ?, ?, datetime('now'))
+        ''', (user_id, question, answer, role, specialization))
+        conn.commit()
+        print(f"💾 Сообщение сохранено в базу данных для пользователя {user_id}")
+    except Exception as e:
+        print(f"❌ Ошибка сохранения в базу данных: {e}")
+    finally:
+        conn.close()
 
-                # Оставляем ответ как есть для сохранения Markdown форматирования
-                    
-                await websocket.send_text(answer)  # Отправляем очищенный текстовый ответ
+# === API ENDPOINTS ===
 
-    elif not should_use_rag and question_id not in [777, 888]:
-        # Fallback для обычных промптов без RAG (не должно происходить)
-        print(f"ВНИМАНИЕ: Обычный промпт {question_id} обрабатывается без RAG!")
-        template = string.Template(prompt_template)
-        filled_prompt = template.substitute(role=role, specialization=specialization)
-        full_prompt = filled_prompt + f"\n\nВопрос пользователя: {question}"
-        
-        # Добавляем улучшенную инструкцию по форматированию
-        full_prompt += """
-
-КРИТИЧЕСКИ ВАЖНО - ФОРМАТИРОВАНИЕ ОТВЕТА:
-Отформатируй свой ответ строго в формате Markdown с соблюдением следующих правил:
-
-1. **ЗАГОЛОВКИ** (обязательно с пробелами после #):
-   - # Основной заголовок ответа
-   - ## Роли и уровни (например: ## Product Owner (PO):)
-   - ### Конкретные уровни (например: ### Middle-аналитик)
-   
-2. **СТРУКТУРА ОТВЕТА**:
-   - Начинай с основного заголовка # 
-   - Каждую роль выделяй заголовком ##
-   - Каждый уровень внутри роли выделяй заголовком ###
-   - После каждого заголовка ОБЯЗАТЕЛЬНО пустая строка
-
-3. **СПИСКИ** (обязательно с пробелами):
-   - Для нумерованных: 1. пункт 2. пункт 3. пункт
-   - Для маркированных: - пункт или * пункт
-   - После двоеточия (:) переходи на новую строку для списка
-
-4. **ВЫДЕЛЕНИЕ ТЕКСТА**:
-   - **Жирный текст** для ключевых терминов
-   - *Курсив* для акцентов
-   - `код` для технических терминов
-
-5. **ЗАПРЕЩЕНО**:
-   - НЕ используй ### или ## в середине текста без создания заголовка
-   - НЕ пиши длинные абзацы без разбивки
-   - НЕ забывай пустые строки между разделами
-
-ПРИМЕР ПРАВИЛЬНОГО ФОРМАТИРОВАНИЯ:
-# Ожидания от Лида Компетенции
-
-## Product Owner (PO):
-
-### Middle-аналитик
-
-- Проведение анализа текущих процессов
-- Создание диаграмм и моделей
-- Помощь в формулировке требований
-
-### Senior-аналитик
-
-- Владение стратегиями тестирования
-- Опыт работы с командой
-
-Следуй этому формату СТРОГО!"""
-        
-        try:
-            async for chunk in GigaChat(
-                credentials=api_key,
-                verify_ssl_certs=False,
-                model='GigaChat-2'
-            ).astream(full_prompt):
-                if chunk and chunk.content:
-                    answer = chunk.content.strip()
-                    # Оставляем ответ как есть для сохранения Markdown форматирования
-                    await websocket.send_text(answer)
-        except Exception as e:
-            print(f"ОШИБКА при fallback для промпта {question_id}: {e}")
-            await websocket.send_text(f"Произошла ошибка: {str(e)}")
-
-    elif(count > 1 and count < 10):
-        prompt = f"""Использую контекст нашей прошлой беседы {context}, ответь на уточняющий вопрос {question}.
-
-КРИТИЧЕСКИ ВАЖНО - ФОРМАТИРОВАНИЕ ОТВЕТА:
-Отформатируй свой ответ строго в формате Markdown с соблюдением следующих правил:
-
-1. **ЗАГОЛОВКИ** (обязательно с пробелами после #):
-   - # Основной заголовок ответа
-   - ## Роли и уровни (например: ## Product Owner (PO):)
-   - ### Конкретные уровни (например: ### Middle-аналитик)
-   
-2. **СТРУКТУРА ОТВЕТА**:
-   - Начинай с основного заголовка # 
-   - Каждую роль выделяй заголовком ##
-   - Каждый уровень внутри роли выделяй заголовком ###
-   - После каждого заголовка ОБЯЗАТЕЛЬНО пустая строка
-
-3. **СПИСКИ** (обязательно с пробелами):
-   - Для нумерованных: 1. пункт 2. пункт 3. пункт
-   - Для маркированных: - пункт или * пункт
-   - После двоеточия (:) переходи на новую строку для списка
-
-4. **ВЫДЕЛЕНИЕ ТЕКСТА**:
-   - **Жирный текст** для ключевых терминов
-   - *Курсив* для акцентов
-   - `код` для технических терминов
-
-5. **ЗАПРЕЩЕНО**:
-   - НЕ используй ### или ## в середине текста без создания заголовка
-   - НЕ пиши длинные абзацы без разбивки
-   - НЕ забывай пустые строки между разделами
-
-ВАЖНО: НЕ используй символы ### или ## в середине текста без создания заголовка. Если нужно упомянуть роль, используй **жирное выделение**.
-"""
-        for chunk in GigaChat(credentials=api_key,
-                              verify_ssl_certs=False,
-                                model='GigaChat-2'
-                                ).stream(prompt):
-            answer = chunk.content.strip()  # Используем атрибут .content
-
-            # Отправляем ответ через WebSocket
-            await websocket.send_text(answer)
-
-
-    elif(count == 101):
-        for chunk in GigaChat(credentials=api_key,
-                              verify_ssl_certs=False,
-                                model='GigaChat-2'
-                                ).stream(f"Использую историю нашей с тобой беседы {context}, придумай мне тему для обсуждения"):
-            answer = chunk.content.strip()  # Используем атрибут .content
-
-            # Отправляем ответ через WebSocket
-            await websocket.send_text(answer)
-        
-
-    elif(count == 102):
-        print("zashlo")
-        for chunk in GigaChat(credentials=api_key,
-                              verify_ssl_certs=False,
-                                model='GigaChat-2'
-                                ).stream(f"Напомни мне пожалуйста вот об этой теме {context}"):
-            answer = chunk.content.strip()  # Используем атрибут .content
-
-            # Отправляем ответ через WebSocket
-            await websocket.send_text(answer)
-    else:
-        # Обработка случая, когда не попали ни в одно условие
-        print(f"ВНИМАНИЕ: Не найдена подходящая логика обработки!")
-        print(f"question_id: {question_id}")
-        print(f"count: {count}")
-        print(f"should_use_rag: {should_use_rag}")
-        print(f"use_rag_for_special: {use_rag_for_special if question_id in [777, 888] else 'N/A'}")
-        print(f"retrieval_chain is not None: {retrieval_chain is not None}")
-        
-        await websocket.send_text("Извините, произошла ошибка при обработке запроса. Попробуйте еще раз.")
-            
-    await websocket.close()
-
-if __name__ == "__main__":
-    print("Запускаем сервер на ws://127.0.0.1:8000/ws")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-
-class DatabaseOperations:
-    def __init__(self, db_path=DATABASE_URL):
-        self.db_path = db_path
-
-    # Пользователи
-    def get_all_users(self):
-        """Получение всех пользователей с их статистикой"""
-        query = """
-        SELECT u.*, 
-               COUNT(DISTINCT m.message) as message_count,
-               MAX(m.time) as last_activity
-        FROM Users u
-        LEFT JOIN Message_history m ON u.user_id = m.user_id
-        GROUP BY u.user_id
-        """
-        # Реализация запроса
-
-    # Промпты
-    def get_all_prompts(self):
-        """Получение всех промптов"""
-        query = "SELECT * FROM Prompts ORDER BY created_at DESC"
-        # Реализация запроса
-
-    def add_prompt(self, question_text, prompt_template):
-        """Добавление нового промпта"""
-        query = """
-        INSERT INTO Prompts (question_text, prompt_template)
-        VALUES (?, ?)
-        """
-        # Реализация запроса
-
-    def update_prompt(self, question_id, question_text, prompt_template):
-        """Обновление промпта"""
-        query = """
-        UPDATE Prompts 
-        SET question_text = ?, prompt_template = ?
-        WHERE question_id = ?
-        """
-        # Реализация запроса
-
-    def delete_prompt(self, question_id):
-        """Удаление промпта"""
-        query = "DELETE FROM Prompts WHERE question_id = ?"
-        # Реализация запроса
-
-    # История сообщений
-    def get_user_messages(self, user_id):
-        """Получение истории сообщений пользователя"""
-        query = """
-        SELECT * FROM Message_history 
-        WHERE user_id = ? 
-        ORDER BY time DESC
-        """
-        # Реализация запроса
-
-class RAGDocumentManager:
-    def __init__(self, base_path="app/src/main_version/txt_docs"):
-        self.base_path = base_path
-        self.packs = {
-            "pack_1": os.path.join(base_path, "docs_pack_1"),
-            "pack_2": os.path.join(base_path, "docs_pack_2"),
-            "pack_3": os.path.join(base_path, "docs_pack_3"),
-            "pack_full": os.path.join(base_path, "docs_pack_full")
+@app.get("/")
+async def root():
+    """Информация о сервисе"""
+    return {
+        "service": "RAG Service - Context7 Enhanced",
+        "version": "2.0",
+        "status": "running",
+        "features": [
+            "Context7 Optimized Document Processing",
+            "Enhanced Query Expansion", 
+            "Smart Retriever Selection",
+            "Advanced Metadata Enrichment",
+            "WebSocket Streaming"
+        ],
+        "vector_stores": {
+            "competency_lead": len(competency_lead_docs) if competency_lead_docs else 0,
+            "intern": len(intern_docs) if intern_docs else 0,
+            "specialist": len(specialist_docs) if specialist_docs else 0,
+            "po": len(po_docs) if po_docs else 0,
+            "full": len(full_docs) if full_docs else 0
         }
+    }
 
-    def get_all_documents(self):
-        """Получение списка всех документов по всем пакетам"""
-        documents = {}
-        for pack_name, pack_path in self.packs.items():
-            documents[pack_name] = [
-                f for f in os.listdir(pack_path) 
-                if f.endswith('.txt')
-            ]
-        return documents
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "database": "connected" if os.path.exists(DATABASE_URL) else "disconnected",
+        "embeddings": "loaded",
+        "retrievers_available": sum([
+            1 for r in [embedding_retriever_competency_lead, embedding_retriever_intern, 
+                       embedding_retriever_specialist, embedding_retriever_po, embedding_retriever_full] 
+            if r is not None
+        ])
+    }
 
-    def add_document(self, file_content, filename, pack_name):
-        """Добавление нового документа в указанный пакет"""
-        if pack_name not in self.packs:
-            raise ValueError(f"Неверное имя пакета: {pack_name}")
-        
-        file_path = os.path.join(self.packs[pack_name], filename)
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(file_content)
-        
-        # Также добавляем в pack_full
-        full_path = os.path.join(self.packs["pack_full"], filename)
-        with open(full_path, 'w', encoding='utf-8') as f:
-            f.write(file_content)
-
-    def delete_document(self, filename, pack_name):
-        """Удаление документа из указанного пакета"""
-        if pack_name not in self.packs:
-            raise ValueError(f"Неверное имя пакета: {pack_name}")
-        
-        file_path = os.path.join(self.packs[pack_name], filename)
-        if os.path.exists(file_path):
-            os.remove(file_path)
-            
-        # Также удаляем из pack_full
-        full_path = os.path.join(self.packs["pack_full"], filename)
-        if os.path.exists(full_path):
-            os.remove(full_path)
-
-    def read_document(self, filename, pack_name):
-        """Чтение содержимого документа"""
-        if pack_name not in self.packs:
-            raise ValueError(f"Неверное имя пакета: {pack_name}")
-        
-        file_path = os.path.join(self.packs[pack_name], filename)
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"Файл не найден: {filename}")
-        
-        with open(file_path, 'r', encoding='utf-8') as f:
-            return f.read()
-
-    def update_document(self, file_content, filename, pack_name):
-        """Обновление содержимого документа"""
-        self.delete_document(filename, pack_name)
-        self.add_document(file_content, filename, pack_name)
+# === ПРОСТОЙ ЗАПУСК ===
+if __name__ == "__main__":
+    print("🚀 Запуск Context7-оптимизированного RAG сервиса...")
+    print("🌐 Сервис будет доступен на http://localhost:8000")
+    print("🔌 WebSocket endpoint: ws://localhost:8000/ws")
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 
 

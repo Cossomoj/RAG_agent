@@ -29,7 +29,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-DATABASE_URL = "/app/src/main_version/AI_agent.db"
+# Используем переменную окружения или относительный путь для локального запуска
+DATABASE_URL = os.getenv("DATABASE_URL", "/app/src/main_version/AI_agent.db")
 
 WEBSOCKET_URL = "ws://127.0.0.1:8000/ws"
 moscow_tz = pytz.timezone('Europe/Moscow')
@@ -1795,13 +1796,18 @@ async def websocket_question_from_user(question, message, role, specialization, 
         logger.info(f"Подключаемся к RAG сервису: {WEBSOCKET_URL}")
         async with websockets.connect(WEBSOCKET_URL) as websocket:
             logger.info(f"Отправляем данные в RAG сервис: question_id={question_id}")
-            await websocket.send(question) # Отправляем вопрос
-            await websocket.send(role)
-            await websocket.send(specialization)
-            await websocket.send(str(question_id))
-            await websocket.send(context_str)
-            await websocket.send(str(count_questions_users[chat_id]))
-            logger.info(f"Данные отправлены, ожидаем ответ от RAG сервиса")
+            
+            # Новый JSON формат для Context7-оптимизированного RAG сервиса
+            message_data = {
+                "user_id": chat_id,
+                "question": question,
+                "role": role,
+                "specialization": specialization,
+                "question_id": int(question_id)
+            }
+            
+            await websocket.send(json.dumps(message_data))
+            logger.info(f"Данные отправлены в JSON формате, ожидаем ответ от RAG сервиса")
 
             try:
                 message_2 = bot.send_message(message.chat.id, "Ожидайте ответа...")
@@ -1812,52 +1818,85 @@ async def websocket_question_from_user(question, message, role, specialization, 
                 empty_message_count = 0
                 max_empty_messages = 10  # Максимум пустых сообщений подряд
                 
+                stream_started = False
+                
                 while True:
                     try:
                         # Добавляем таймаут для recv
-                        answer_part = await asyncio.wait_for(websocket.recv(), timeout=30.0)
+                        response_text = await asyncio.wait_for(websocket.recv(), timeout=30.0)
+                        
+                        try:
+                            response_data = json.loads(response_text)
+                            
+                            # Обрабатываем разные типы сообщений
+                            if "stream_start" in response_data:
+                                stream_started = True
+                                logger.info(f"Начало стриминга ответа для пользователя {chat_id}")
+                                continue
+                            elif "chunk" in response_data:
+                                chunk = response_data["chunk"]
+                                if chunk:
+                                    # Применяем обработку символов как в старой версии
+                                    for char in chunk:
+                                        if (char in wanted_simbols):
+                                            chunk += "\n"
+
+                                    full_answer += chunk
+                                    if time.time() - last_send_time >= 1:
+                                        try:
+                                            message_2 = bot.send_message(chat_id=message_2.chat.id, text=full_answer, parse_mode="Markdown")
+                                            answer_for_cache.append(full_answer)
+                                            answer_for_countinue_dialog += full_answer
+                                            full_answer = ""
+                                            last_send_time = time.time()
+                                        except telebot.apihelper.ApiTelegramException as e:
+                                            if e.error_code == 429:
+                                                retry_after = int(e.result.headers.get('Retry-After', 1))
+                                                print(f"Rate limit exceeded. Retrying after {retry_after} seconds...")
+                                                time.sleep(retry_after)
+                                                message_2 = bot.send_message(chat_id=message_2.chat.id, text=full_answer, parse_mode="Markdown")
+                                                answer_for_countinue_dialog += full_answer
+                                                answer_for_cache.append(full_answer)
+                                                last_send_time = time.time()
+                                                full_answer = ""
+                                continue
+                            elif "stream_end" in response_data:
+                                logger.info(f"Конец стриминга ответа для пользователя {chat_id}")
+                                break
+                            elif "error" in response_data:
+                                logger.error(f"Ошибка от RAG сервиса для пользователя {chat_id}: {response_data['error']}")
+                                bot.send_message(chat_id, f"❌ Ошибка: {response_data['error']}")
+                                return
+                                
+                        except json.JSONDecodeError:
+                            # Возможно, это старый формат - обрабатываем как обычный текст
+                            if response_text and not stream_started:
+                                for char in response_text:
+                                    if (char in wanted_simbols):
+                                        response_text += "\n"
+
+                                full_answer += response_text
+                                if time.time() - last_send_time >= 1:
+                                    try:
+                                        message_2 = bot.send_message(chat_id=message_2.chat.id, text=full_answer, parse_mode="Markdown")
+                                        answer_for_cache.append(full_answer)
+                                        answer_for_countinue_dialog += full_answer
+                                        full_answer = ""
+                                        last_send_time = time.time()
+                                    except telebot.apihelper.ApiTelegramException as e:
+                                        if e.error_code == 429:
+                                            retry_after = int(e.result.headers.get('Retry-After', 1))
+                                            print(f"Rate limit exceeded. Retrying after {retry_after} seconds...")
+                                            time.sleep(retry_after)
+                                            message_2 = bot.send_message(chat_id=message_2.chat.id, text=full_answer, parse_mode="Markdown")
+                                            answer_for_countinue_dialog += full_answer
+                                            answer_for_cache.append(full_answer)
+                                            last_send_time = time.time()
+                                            full_answer = ""
+                            
                     except asyncio.TimeoutError:
                         logger.warning(f"Таймаут ожидания ответа от RAG сервиса для пользователя {chat_id}")
                         break
-                    if answer_part:
-                        empty_message_count = 0  # Сбрасываем счетчик пустых сообщений
-                        for char in answer_part:
-                            if (char in wanted_simbols):
-                                answer_part += "\n"
-
-                        full_answer += answer_part
-                        if time.time() - last_send_time >= 1:
-                            try:
-                                message_2 = bot.send_message(chat_id=message_2.chat.id, text=full_answer, parse_mode="Markdown")
-                                answer_for_cache.append(full_answer)
-                                answer_for_countinue_dialog += full_answer
-                                full_answer = ""
-                                last_send_time = time.time()
-                            except telebot.apihelper.ApiTelegramException as e:
-                                if e.error_code == 429:
-                                    retry_after = int(e.result.headers.get('Retry-After', 1))
-                                    print(f"Rate limit exceeded. Retrying after {retry_after} seconds...")
-                                    time.sleep(retry_after)
-                                    message_2 = bot.send_message(chat_id=message_2.chat.id, text=full_answer, parse_mode="Markdown")
-                                    answer_for_countinue_dialog += full_answer
-                                    answer_for_cache.append(full_answer)
-                                    last_send_time = time.time()
-                                    full_answer = ""
-                    else:
-                        # Пустое сообщение может означать конец потока
-                        empty_message_count += 1
-                        logger.debug(f"Получено пустое сообщение #{empty_message_count} от WebSocket для пользователя {chat_id}")
-                        
-                        # Если получили слишком много пустых сообщений подряд - выходим
-                        if empty_message_count >= max_empty_messages:
-                            logger.info(f"Получено {empty_message_count} пустых сообщений подряд, завершаем обработку для пользователя {chat_id}")
-                            break
-                            
-                        # Основная защита - счетчик пустых сообщений выше
-                            
-                        # Если не закрыто, делаем небольшую паузу и продолжаем
-                        await asyncio.sleep(0.1)
-                        continue
                 
             except websockets.exceptions.ConnectionClosed:
                 logger.info(f"WebSocket соединение закрыто для пользователя {chat_id}")
