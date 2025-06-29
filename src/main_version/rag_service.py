@@ -9,9 +9,7 @@ from fastapi import FastAPI, WebSocket
 import websockets
 from langchain_community.document_loaders import TextLoader
 from langchain_community.document_loaders import PyPDFLoader
-from langchain_community.document_loaders import UnstructuredMarkdownLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.text_splitter import MarkdownHeaderTextSplitter
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_community.chat_models import GigaChat
@@ -24,10 +22,9 @@ from langchain.chains import create_retrieval_chain
 from langchain.retrievers import EnsembleRetriever
 import uvicorn
 
-load_dotenv()
+DATABASE_URL = "/app/src/main_version/AI_agent.db"
 
-# Используем переменную окружения или относительный путь для локального запуска
-DATABASE_URL = os.getenv("DATABASE_URL", "AI_agent.db")
+load_dotenv()
 
 
 # Инициализация FastAPI
@@ -35,12 +32,11 @@ app = FastAPI()
 
 api_key = os.getenv("GIGACHAT_API_KEY")
 
-# Новые пути к документам Markdown из папки docs/
-folder_path_competency_lead = os.path.join(os.path.dirname(__file__), "docs/Competency_Lead")
-folder_path_intern = os.path.join(os.path.dirname(__file__), "docs/Intern")
-folder_path_specialist = os.path.join(os.path.dirname(__file__), "docs/Specialist")
-folder_path_po = os.path.join(os.path.dirname(__file__), "docs/PO")
-folder_path_full = os.path.join(os.path.dirname(__file__), "docs/full")
+folder_path_1 = os.path.join(os.path.dirname(__file__), "txt_docs/docs_pack_1")
+folder_path_2 = os.path.join(os.path.dirname(__file__), "txt_docs/docs_pack_2")
+folder_path_3 = os.path.join(os.path.dirname(__file__), "txt_docs/docs_pack_3")
+
+folder_path_full = os.path.join(os.path.dirname(__file__), "txt_docs/docs_pack_full")
 
 def create_docs_from_txt(folder_path):
     # Получаем список всех файлов .txt в указанной директории
@@ -62,147 +58,16 @@ def create_docs_from_txt(folder_path):
     split_docs = text_splitter.split_documents(docs)
     return split_docs
 
-def create_docs_from_markdown_recursive(folder_path):
-    """
-    Рекурсивно загружает и обрабатывает Markdown документы из папки и всех вложенных папок
-    """
-    docs = []
-    
-    def scan_directory(directory):
-        """Рекурсивно сканирует директорию для поиска .md файлов"""
-        if not os.path.exists(directory):
-            print(f"Папка {directory} не существует")
-            return
-        
-        for root, dirs, files in os.walk(directory):
-            md_files = [f for f in files if f.endswith(".md")]
-            
-            if md_files:
-                print(f"Найдено {len(md_files)} .md файлов в {root}")
-                
-                # Настройка для разбивки по заголовкам Markdown
-                headers_to_split_on = [
-                    ("#", "Header 1"),
-                    ("##", "Header 2"), 
-                    ("###", "Header 3"),
-                    ("####", "Header 4"),
-                ]
-                
-                # Создаем splitter для заголовков
-                markdown_splitter = MarkdownHeaderTextSplitter(headers_to_split_on=headers_to_split_on)
-                
-                # Загружаем и обрабатываем каждый файл
-                for file in md_files:
-                    file_path = os.path.join(root, file)
-                    try:
-                        # Используем UnstructuredMarkdownLoader для лучшей обработки Markdown
-                        loader = UnstructuredMarkdownLoader(file_path)
-                        file_docs = loader.load()
-                        
-                        # Разбиваем по заголовкам Markdown
-                        for doc in file_docs:
-                            md_header_splits = markdown_splitter.split_text(doc.page_content)
-                            
-                            # Если разбивка по заголовкам не дала результатов, используем обычную разбивку
-                            if not md_header_splits:
-                                text_splitter = RecursiveCharacterTextSplitter(
-                                    chunk_size=800,
-                                    chunk_overlap=200,
-                                    separators=["\n\n", "\n", " ", ""]
-                                )
-                                md_header_splits = text_splitter.split_documents([doc])
-                            
-                            # Добавляем информацию о папке в метаданные
-                            for split_doc in md_header_splits:
-                                if hasattr(split_doc, 'metadata'):
-                                    split_doc.metadata['folder_path'] = root
-                                    split_doc.metadata['relative_path'] = os.path.relpath(root, directory)
-                                
-                            docs.extend(md_header_splits)
-                            
-                    except Exception as e:
-                        print(f"Ошибка при загрузке файла {file_path}: {e}")
-                        # Если не удается загрузить как Markdown, пробуем как обычный текст
-                        try:
-                            loader = TextLoader(file_path)
-                            fallback_docs = loader.load()
-                            text_splitter = RecursiveCharacterTextSplitter(
-                                chunk_size=800,
-                                chunk_overlap=200
-                            )
-                            split_fallback = text_splitter.split_documents(fallback_docs)
-                            
-                            # Добавляем метаданные
-                            for split_doc in split_fallback:
-                                if hasattr(split_doc, 'metadata'):
-                                    split_doc.metadata['folder_path'] = root
-                                    split_doc.metadata['relative_path'] = os.path.relpath(root, directory)
-                            
-                            docs.extend(split_fallback)
-                        except Exception as fallback_error:
-                            print(f"Критическая ошибка при загрузке файла {file_path}: {fallback_error}")
-    
-    scan_directory(folder_path)
-    print(f"Всего загружено документов из {folder_path}: {len(docs)}")
-    return docs
-
-def create_docs_adaptive(folder_path):
-    """
-    Универсальная функция для загрузки документов (.txt или .md)
-    Теперь с приоритетом на .md файлы и рекурсивный поиск
-    """
-    if not os.path.exists(folder_path):
-        print(f"Папка {folder_path} не существует")
-        return []
-    
-    # Проверяем наличие .md файлов рекурсивно
-    md_files_found = False
-    for root, dirs, files in os.walk(folder_path):
-        if any(f.endswith(".md") for f in files):
-            md_files_found = True
-            break
-    
-    if md_files_found:
-        print(f"Найдены Markdown файлы в {folder_path}, используем рекурсивный Markdown загрузчик")
-        return create_docs_from_markdown_recursive(folder_path)
-    else:
-        # Fallback для старых .txt файлов (если нужно)
-        txt_files = []
-        for root, dirs, files in os.walk(folder_path):
-            txt_files.extend([f for f in files if f.endswith(".txt")])
-        
-        if txt_files:
-            print(f"Найдены текстовые файлы в {folder_path}, используем текстовый загрузчик")
-            return create_docs_from_txt(folder_path)
-        else:
-            print(f"В папке {folder_path} не найдены поддерживаемые файлы (.txt или .md)")
-            return []
-
-# Создание новых векторных баз на основе структуры docs/
-print("=== Инициализация новых векторных баз ===")
-
-# 1. Векторная база для Competency Lead (Лидов компетенций)
-print("Загружаем документы для Competency Lead...")
-split_docs_competency_lead = create_docs_adaptive(folder_path_competency_lead)
-
-# 2. Векторная база для Intern (Стажеров)
-print("Загружаем документы для Intern...")
-split_docs_intern = create_docs_adaptive(folder_path_intern)
-
-# 3. Векторная база для Specialist (Специалистов) 
-print("Загружаем документы для Specialist...")
-split_docs_specialist = create_docs_adaptive(folder_path_specialist)
-
-# 4. Векторная база для PO/PM (Product Owner/Project Manager)
-print("Загружаем документы для PO/PM...")
-split_docs_po = create_docs_adaptive(folder_path_po)
-
-# 5. Полная векторная база для свободных вопросов (ID 777, 888, 999)
-print("Загружаем документы для полной базы...")
-split_docs_full = create_docs_adaptive(folder_path_full)
+# Документы по Специалисту аналитику
+split_docs_1 = create_docs_from_txt(folder_path_1)
+# Документы по Лиду аналитику
+split_docs_2 = create_docs_from_txt(folder_path_2)
+# Документы по PO/PM
+split_docs_3 = create_docs_from_txt(folder_path_3)
+# Полный пакет
+split_docs_full = create_docs_from_txt(folder_path_full)
 
 # Инициализация модели для эмбеддингов
-print("Инициализация модели эмбеддингов...")
 model_name = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
 model_kwargs = {'device': 'cpu'}
 encode_kwargs = {'normalize_embeddings': False}
@@ -212,65 +77,22 @@ embedding = HuggingFaceEmbeddings(
     encode_kwargs=encode_kwargs
 )
 
-# Создание новых векторных хранилищ
-print("Создание векторных хранилищ...")
+# Создание векторного хранилища 1
+vector_store_1 = FAISS.from_documents(split_docs_1, embedding=embedding)
+embedding_retriever_1 = vector_store_1.as_retriever(search_kwargs={"k": 10})
 
-# 1. Векторное хранилище для Competency Lead
-if split_docs_competency_lead:
-    vector_store_competency_lead = FAISS.from_documents(split_docs_competency_lead, embedding=embedding)
-    embedding_retriever_competency_lead = vector_store_competency_lead.as_retriever(search_kwargs={"k": 10})
-    print(f"✅ Создано хранилище для Competency Lead: {len(split_docs_competency_lead)} документов")
-else:
-    print("⚠️ Нет документов для Competency Lead")
-    embedding_retriever_competency_lead = None
+# Создание векторного хранилища 2
+vector_store_2 = FAISS.from_documents(split_docs_2, embedding=embedding)
+embedding_retriever_2 = vector_store_2.as_retriever(search_kwargs={"k": 10})
 
-# 2. Векторное хранилище для Intern
-if split_docs_intern:
-    vector_store_intern = FAISS.from_documents(split_docs_intern, embedding=embedding)
-    embedding_retriever_intern = vector_store_intern.as_retriever(search_kwargs={"k": 10})
-    print(f"✅ Создано хранилище для Intern: {len(split_docs_intern)} документов")
-else:
-    print("⚠️ Нет документов для Intern")
-    embedding_retriever_intern = None
+# Создание векторного хранилища 3
+vector_store_3 = FAISS.from_documents(split_docs_3, embedding=embedding)
+embedding_retriever_3 = vector_store_3.as_retriever(search_kwargs={"k": 10})
 
-# 3. Векторное хранилище для Specialist
-if split_docs_specialist:
-    vector_store_specialist = FAISS.from_documents(split_docs_specialist, embedding=embedding)
-    embedding_retriever_specialist = vector_store_specialist.as_retriever(search_kwargs={"k": 10})
-    print(f"✅ Создано хранилище для Specialist: {len(split_docs_specialist)} документов")
-else:
-    print("⚠️ Нет документов для Specialist")
-    embedding_retriever_specialist = None
+# Создание векторного хранилища со всеми данными
+vector_store_full = FAISS.from_documents(split_docs_full, embedding=embedding)
+embedding_retriever_full = vector_store_full.as_retriever(search_kwargs={"k": 15})
 
-# 4. Векторное хранилище для PO/PM
-if split_docs_po:
-    vector_store_po = FAISS.from_documents(split_docs_po, embedding=embedding)
-    embedding_retriever_po = vector_store_po.as_retriever(search_kwargs={"k": 10})
-    print(f"✅ Создано хранилище для PO/PM: {len(split_docs_po)} документов")
-else:
-    print("⚠️ Нет документов для PO/PM")
-    embedding_retriever_po = None
-
-# 5. Полное векторное хранилище для свободных вопросов
-if split_docs_full:
-    vector_store_full = FAISS.from_documents(split_docs_full, embedding=embedding)
-    embedding_retriever_full = vector_store_full.as_retriever(search_kwargs={"k": 15})
-    print(f"✅ Создано полное хранилище: {len(split_docs_full)} документов")
-else:
-    print("⚠️ Нет документов для полной базы")
-    embedding_retriever_full = None
-
-print("=== Инициализация векторных баз завершена ===")
-
-# Совместимость: создаем fallback на полную базу если отдельные базы не созданы
-if not embedding_retriever_competency_lead:
-    embedding_retriever_competency_lead = embedding_retriever_full
-if not embedding_retriever_intern:
-    embedding_retriever_intern = embedding_retriever_full  
-if not embedding_retriever_specialist:
-    embedding_retriever_specialist = embedding_retriever_full
-if not embedding_retriever_po:
-    embedding_retriever_po = embedding_retriever_full
 
 # Инициализация модели GigaChat
 
@@ -302,53 +124,42 @@ def create_retrieval_chain_from_folder(role, specialization, question_id, embedd
     return retrieval_chain
 
 def get_prompt_from_db(question_id):
+    """Получает промт из базы данных по ID вопроса"""
+    conn = sqlite3.connect(DATABASE_URL)
+    cursor = conn.cursor()
+    
     try:
-        conn = sqlite3.connect(DATABASE_URL)
-        cursor = conn.cursor()
         cursor.execute("SELECT prompt_template FROM Prompts WHERE question_id = ?", (question_id,))
         result = cursor.fetchone()
-        conn.close()
         if result:
-            print(f"✅ Промпт для ID {question_id} найден в БД")
             return result[0]
         else:
-            print(f"❌ Промпт для ID {question_id} НЕ найден в БД")
             return None
-    except sqlite3.Error as e:
-        print(f"❌ Ошибка при получении промпта из БД: {e}")
-        return None
+    finally:
+        conn.close()
+
+
 
 def get_best_retriever_for_role_spec(role, specialization):
     """
     Выбирает лучший retriever на основе роли и специализации
-    Обновлено для новой архитектуры с 5 векторными базами
     """
     role_lower = role.lower() if role else ""
     spec_lower = specialization.lower() if specialization else ""
     
-    print(f"🔍 Выбор retriever для роли: '{role}', специализации: '{specialization}'")
-    
-    # Маппинг ролей на новые retrievers
-    if 'лид' in role_lower and 'компетенц' in role_lower:
-        print("→ Выбран retriever для Competency Lead")
-        return embedding_retriever_competency_lead
-    elif 'стажер' in role_lower or 'intern' in role_lower.replace(' ', ''):
-        print("→ Выбран retriever для Intern")
-        return embedding_retriever_intern
-    elif 'специалист' in role_lower or 'specialist' in role_lower.replace(' ', ''):
-        print("→ Выбран retriever для Specialist")
-        return embedding_retriever_specialist
-    elif 'po' in role_lower or 'pm' in role_lower or 'product owner' in role_lower or 'project manager' in role_lower:
-        print("→ Выбран retriever для PO/PM")
-        return embedding_retriever_po
+    # Маппинг ролей на retrievers
+    if 'стажер' in role_lower or 'специалист' in role_lower:
+        return embedding_retriever_1  # docs_pack_1
+    elif 'лид' in role_lower:
+        return embedding_retriever_2  # docs_pack_2
+    elif 'po' in role_lower or 'pm' in role_lower:
+        return embedding_retriever_3  # docs_pack_3
     else:
-        # Если роль неопределенная, выбираем по специализации или используем полную базу
+        # Если роль неопределенная, выбираем по специализации
         if spec_lower in ['аналитик', 'тестировщик', 'python', 'java', 'web']:
-            print("→ Роль неопределенная, но есть специализация - используем Specialist")
-            return embedding_retriever_specialist
+            return embedding_retriever_1  # Начинаем с базовых документов
         else:
-            print("→ Неопределенная роль/специализация - используем полную базу")
-            return embedding_retriever_full
+            return embedding_retriever_full  # Полная база для неопределенных случаев
 
 async def generate_semantic_search_queries(question, role, specialization):
     """
@@ -362,27 +173,6 @@ async def generate_semantic_search_queries(question, role, specialization):
         profanity_check=False
     )
     
-    # Специализированные ключевые термины для разных ролей
-    role_specific_terms = {
-        'тестировщик': ['тестирование', 'качество', 'баги', 'QA', 'стратегия тестирования', 'критерии приемки'],
-        'qa': ['тестирование', 'качество', 'баги', 'QA', 'стратегия тестирования', 'критерии приемки'],
-        'аналитик': ['анализ требований', 'документация', 'бизнес-процессы', 'стейкхолдеры'],
-        'python': ['разработка', 'код', 'архитектура', 'техническое решение', 'программирование'],
-        'java': ['разработка', 'код', 'архитектура', 'техническое решение', 'программирование'],
-        'web': ['фронтенд', 'интерфейс', 'UX', 'веб-разработка', 'пользовательский опыт']
-    }
-    
-    spec_lower = specialization.lower() if specialization else ""
-    specific_terms = []
-    for key, terms in role_specific_terms.items():
-        if key in spec_lower:
-            specific_terms = terms
-            break
-    
-    # Если специализация не найдена, используем общие термины
-    if not specific_terms:
-        specific_terms = ['профессиональное развитие', 'компетенции', 'навыки']
-    
     # Промпт для генерации альтернативных поисковых запросов
     query_generation_prompt = f"""
 Дан вопрос: "{question}"
@@ -391,21 +181,21 @@ async def generate_semantic_search_queries(question, role, specialization):
 
 Сгенерируй 5-6 альтернативных поисковых запросов для поиска в корпоративной базе знаний по карьерному развитию, ИПР, лидерству и управлению командой в IT.
 
-ВАЖНО: Учитывай специализацию {specialization} и используй специфичные термины: {', '.join(specific_terms)}
-
 Альтернативные запросы должны:
 1. Включать точные фразы из корпоративных документов
-2. Фокусироваться на конкретных практиках для специализации {specialization}
-3. Использовать базовые термины: "ИПР", "индивидуальный план развития", "лид компетенции", "ожидания", "встречи 1-2-1", "цели развития", "компетенции", "обратная связь"
-4. Использовать специализированные термины: {', '.join(specific_terms)}
-5. Быть короткими и точными для векторного поиска
-6. Покрывать разные аспекты работы {specialization} с PO/PM
+2. Фокусироваться на конкретных практиках и процессах
+3. Использовать ключевые термины: "ИПР", "индивидуальный план развития", "лид компетенции", "ожидания", "встречи 1-2-1", "цели развития", "компетенции", "обратная связь", "мониторинг прогресса"
+4. Быть короткими и точными для векторного поиска
+5. Покрывать разные аспекты развития и лидерства
+6. Учитывать роль и специализацию пользователя
 
-Примеры запросов для {specialization}:
-- "взаимодействие {specialization} PO PM"
-- "ожидания от PO PM {specialization}"
-- "{specific_terms[0] if specific_terms else 'развитие'} специалист команда"
-- "обратная связь {specialization} проект"
+Примеры ТОЧНЫХ запросов для поиска:
+- "лид компетенции ожидания ИПР"
+- "индивидуальный план развития встречи"
+- "цели развития компетенции аналитик"
+- "обратная связь мониторинг прогресса"
+- "встречи 1-2-1 лид команда"
+- "профессиональное развитие специалист"
 
 Ответь только списком из 5-6 запросов, каждый с новой строки, без нумерации и дополнительного текста:
 """
@@ -506,13 +296,12 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
     
     # Создаем объект, который поддерживает метод astream
     class EnhancedRetrievalChain:
-        def __init__(self, llm, filled_prompt, role, specialization, embedding_retriever, question_id):
+        def __init__(self, llm, filled_prompt, role, specialization, embedding_retriever):
             self.llm = llm
             self.base_prompt = filled_prompt
             self.role = role
             self.specialization = specialization
             self.embedding_retriever = embedding_retriever
-            self.question_id = question_id
 
         async def astream(self, input_data):
             """
@@ -530,32 +319,23 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
             # 3. Формируем финальный промпт
             dialogue_history_prompt_part = ""
             if dialogue_context and dialogue_context != '[]':
-                dialogue_history_prompt_part = f"\n\nКонтекст предыдущих сообщений:\n{dialogue_context}"
+                dialogue_history_prompt_part = f"\\n\\nКонтекст предыдущих сообщений:\\n{dialogue_context}"
 
-            final_prompt = f"{self.base_prompt}{dialogue_history_prompt_part}\n\nКонтекст из документов:\n{context_text}\n\nВопрос: {question}\n\nОтвет:"
+            final_prompt = f"{self.base_prompt}{dialogue_history_prompt_part}\\n\\nКонтекст из документов:\\n{context_text}\\n\\nВопрос: {question}\\n\\nОтвет:"
             
             # Отладочная информация
-            print(f"\n--- FINAL PROMPT для ID={self.question_id} ---\n{final_prompt[:500]}...\n--- END PROMPT ---\n")
+            # print(f"\\n--- FINAL PROMPT ---\\n{final_prompt}\\n--- END FINAL PROMPT ---\\n")
             
             # 4. Стримим ответ от LLM
             try:
-                chunk_count = 0
                 async for chunk in self.llm.astream(final_prompt):
                     if chunk and chunk.content:
-                        chunk_count += 1
-                        print(f"📤 RAG chunk #{chunk_count}: {chunk.content[:50]}...")
                         yield {"answer": chunk.content}
-                
-                print(f"✅ RAG стриминг завершен. Всего chunks: {chunk_count}")
-                if chunk_count == 0:
-                    print("❌ ВНИМАНИЕ: GigaChat не вернул ни одного chunk для RAG!")
-                    yield {"answer": "Извините, не удалось получить ответ. Попробуйте переформулировать вопрос."}
-                    
             except Exception as e:
-                print(f"❌ ОШИБКА в стриминге LLM: {e}")
+                print(f"ОШИБКА в стриминге LLM: {e}")
                 yield {"answer": f"Произошла ошибка при генерации ответа: {e}"}
 
-    return EnhancedRetrievalChain(llm, filled_prompt, role, specialization, embedding_retriever, question_id)
+    return EnhancedRetrievalChain(llm, filled_prompt, role, specialization, embedding_retriever)
 
 async def create_enhanced_retrieval_chain_for_suggestions(role, specialization, user_question, bot_answer, embedding_retriever, prompt_template):
     """
@@ -606,50 +386,6 @@ async def create_enhanced_retrieval_chain_for_suggestions(role, specialization, 
         return {"answer": response.content}
     
     return enhanced_suggestions_process
-
-async def check_document_relevance(question, embedding_retriever, threshold=0.5):
-    """
-    Проверяет релевантность найденных документов для вопроса.
-    Возвращает True если найдены релевантные документы, False если нет.
-    """
-    try:
-        # Получаем топ-3 документа для быстрой проверки релевантности
-        docs = await embedding_retriever.ainvoke(question)
-        if not docs:
-            return False
-        
-        # Простая эвристика: проверяем наличие ключевых слов из вопроса в документах
-        question_words = set(question.lower().split())
-        # Убираем стоп-слова
-        stop_words = {'что', 'как', 'где', 'когда', 'почему', 'кто', 'какой', 'можно', 'нужно', 'я', 'мне', 'и', 'в', 'на', 'с', 'по', 'для', 'от', 'до', 'из', 'к', 'о', 'об'}
-        question_words = question_words - stop_words
-        
-        if len(question_words) == 0:
-            return True  # Если нет содержательных слов, считаем релевантным
-        
-        # Проверяем первые 3 документа
-        relevant_count = 0
-        for doc in docs[:3]:
-            doc_text = doc.page_content.lower()
-            # Считаем совпадения ключевых слов
-            matches = sum(1 for word in question_words if word in doc_text)
-            if matches >= min(2, len(question_words) * 0.3):  # Минимум 2 слова или 30% от ключевых слов
-                relevant_count += 1
-        
-        # Считаем релевантными если хотя бы один из топ-3 документов содержит ключевые слова
-        is_relevant = relevant_count > 0
-        
-        print(f"🔍 Проверка релевантности: '{question[:50]}...'")
-        print(f"   Ключевые слова: {list(question_words)[:5]}")
-        print(f"   Проверено документов: {min(3, len(docs))}")
-        print(f"   Релевантных: {relevant_count}")
-        print(f"   Результат: {'РЕЛЕВАНТНО' if is_relevant else 'НЕ РЕЛЕВАНТНО'}")
-        
-        return is_relevant
-        
-    except Exception as e:
-        print(f"❌ Ошибка при проверке релевантности: {e}")
-        return True  # В случае ошибки считаем релевантным (используем RAG)
 
 #mplusk1
 @app.websocket("/ws_suggest")
@@ -780,55 +516,40 @@ async def websocket_endpoint(websocket: WebSocket):
     print(specialization)
     print(f"количество {count}")
     print(f"айди {question_id}")
-    print(f"🔍 Получаем промпт для ID={question_id}")
     prompt_template = get_prompt_from_db(question_id)
-    print(f"📝 Промпт получен: {bool(prompt_template)}")
     if not prompt_template:
-        print(f"⚠️ Промпт для ID={question_id} не найден, используем fallback 777")
         prompt_template = get_prompt_from_db(777)
-        print(f"📝 Fallback промпт получен: {bool(prompt_template)}")
     
-    if not prompt_template:
-        print(f"❌ КРИТИЧЕСКАЯ ОШИБКА: Не удалось получить промпт для ID={question_id} или fallback 777")
-        await websocket.send_text("Ошибка: не удалось загрузить промпт. Обратитесь к администратору.")
-        return
-    
-    # Новая логика выбора retriever для работы с 5 векторными базами
-    embedding_retriever = embedding_retriever_full  # По умолчанию полная база
-    use_rag_for_special = False
-    
-    # Проверяем тип промпта и выбираем стратегию
-    if question_id in [777, 888, 999]:
-        print(f"🔍 Специальный ID {question_id}: проверяем релевантность документов")
-        use_rag_for_special = await check_document_relevance(question, embedding_retriever_full)
-        if use_rag_for_special:
-            print(f"✅ Документы релевантны для ID {question_id} - используем RAG с полной базой")
-            embedding_retriever = embedding_retriever_full
-        else:
-            print(f"❌ Документы НЕ релевантны для ID {question_id} - ответ без RAG")
-    else:
-        # Для обычных вопросов выбираем retriever на основе роли и специализации
-        print(f"📋 Обычный вопрос ID={question_id}: выбираем retriever по роли/специализации")
+    # Для специальных промптов 777, 888 всегда используем RAG
+    use_rag_for_special = question_id in [777, 888]
+    if use_rag_for_special:
+        print(f"Special prompt {question_id}: Using RAG with enhanced vector search")
+        print(f"Question: {question}")
+        print(f"Role: {role}")
+        print(f"Specialization: {specialization}")
+        print(f"Context: {context[:100] if context else 'None'}...")
+
+    # Выбираем соответствующий retriever в зависимости от question_id
+    embedding_retriever = embedding_retriever_full
+    if question_id in [1, 2, 3, 19, 20, 21, 22, 23, 24]:
+        embedding_retriever = embedding_retriever_1
+    elif question_id in [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 18]:
+        embedding_retriever = embedding_retriever_2
+    elif question_id in [15, 16, 17]:
+        embedding_retriever = embedding_retriever_3
+    elif question_id in []: # Оставляем пустым на случай будущих расширений
+        embedding_retriever = embedding_retriever_full
+
+    # Для специальных промптов 777, 888 выбираем retriever на основе роли/специализации
+    if question_id in [777, 888]:
+        print(f"Для специального промпта {question_id} выбираем retriever на основе роли/специализации.")
         embedding_retriever = get_best_retriever_for_role_spec(role, specialization)
-        
-        # Если выбранный retriever None, используем полную базу как fallback
-        if embedding_retriever is None:
-            print("⚠️ Выбранный retriever недоступен, используем полную базу")
-            embedding_retriever = embedding_retriever_full
-    
-    print(f"📊 Состояние для ID {question_id}:")
-    print(f"   - use_rag_for_special: {use_rag_for_special}")
-    print(f"   - embedding_retriever: {'настроен' if embedding_retriever else 'НЕ настроен'}")
-    print(f"   - question: {question[:100]}...")
-    print(f"   - role: {role}")
-    print(f"   - specialization: {specialization}")
-    print(f"   - context: {context[:100] if context else 'None'}...")
 
     # Создаем retrieval_chain для вопросов, которые его используют
     retrieval_chain = None
     should_use_rag = (
         question_id not in [777, 888, 999] or  # Обычные промпты всегда используют RAG
-        (question_id in [777, 888, 999] and use_rag_for_special)  # Специальные только при релевантности
+        (question_id in [777, 888] and use_rag_for_special)  # Специальные только при релевантности
     )
     
     if should_use_rag:
@@ -845,8 +566,8 @@ async def websocket_endpoint(websocket: WebSocket):
     # Убираем очистку от символов форматирования - они нужны для Markdown!
     
     
-    # Fallback без RAG для специальных ID когда документы нерелевантны
-    if question_id in [777, 888, 999] and not use_rag_for_special:
+    # Эта ветка больше не используется, так как промпты 777,888 всегда используют RAG
+    if False:  # question_id in [777, 888] and not use_rag_for_special:
         print(f"Обрабатываем специальный промпт {question_id} БЕЗ RAG...")
         
         # Формируем промпт
@@ -863,9 +584,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 full_prompt = filled_prompt + context_info + f"Вопрос пользователя: {question}"
             else:
                 full_prompt = filled_prompt + f"\n\nВопрос пользователя: {question}"
-        else:
-            # Для ID=777, 999 без контекста диалога
-            full_prompt = filled_prompt + f"\n\nВопрос пользователя: {question}"
         
         # Добавляем улучшенную инструкцию по форматированию
         full_prompt += """
@@ -967,7 +685,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     
                 await websocket.send_text(answer)  # Отправляем очищенный текстовый ответ
 
-    elif not should_use_rag and question_id not in [777, 888, 999]:
+    elif not should_use_rag and question_id not in [777, 888]:
         # Fallback для обычных промптов без RAG (не должно происходить)
         print(f"ВНИМАНИЕ: Обычный промпт {question_id} обрабатывается без RAG!")
         template = string.Template(prompt_template)
@@ -1176,40 +894,23 @@ class DatabaseOperations:
         # Реализация запроса
 
 class RAGDocumentManager:
-    def __init__(self, base_path=None):
-        """
-        Инициализирует менеджер документов RAG для новой архитектуры с .md файлами
-        Args:
-            base_path: Базовый путь к папке с документами (если не указан, используется docs/)
-        """
-        if base_path is None:
-            # Используем новый путь к docs/ по умолчанию
-            self.base_path = os.path.join(os.path.dirname(__file__), "docs")
-        else:
-            self.base_path = base_path
-            
-        # Новая структура пакетов документов
+    def __init__(self, base_path="app/src/main_version/txt_docs"):
+        self.base_path = base_path
         self.packs = {
-            "competency_lead": os.path.join(self.base_path, "Competency_Lead"),
-            "intern": os.path.join(self.base_path, "Intern"),
-            "specialist": os.path.join(self.base_path, "Specialist"),
-            "po": os.path.join(self.base_path, "PO"),
-            "full": os.path.join(self.base_path, "full")
+            "pack_1": os.path.join(base_path, "docs_pack_1"),
+            "pack_2": os.path.join(base_path, "docs_pack_2"),
+            "pack_3": os.path.join(base_path, "docs_pack_3"),
+            "pack_full": os.path.join(base_path, "docs_pack_full")
         }
 
     def get_all_documents(self):
-        """Получение списка всех документов по всем пакетам (рекурсивно для .md файлов)"""
+        """Получение списка всех документов по всем пакетам"""
         documents = {}
         for pack_name, pack_path in self.packs.items():
-            documents[pack_name] = []
-            if os.path.exists(pack_path):
-                # Рекурсивно собираем все .md файлы
-                for root, dirs, files in os.walk(pack_path):
-                    md_files = [f for f in files if f.endswith('.md')]
-                    for md_file in md_files:
-                        # Добавляем относительный путь для лучшей навигации
-                        relative_path = os.path.relpath(os.path.join(root, md_file), pack_path)
-                        documents[pack_name].append(relative_path)
+            documents[pack_name] = [
+                f for f in os.listdir(pack_path) 
+                if f.endswith('.txt')
+            ]
         return documents
 
     def add_document(self, file_content, filename, pack_name):
@@ -1217,21 +918,12 @@ class RAGDocumentManager:
         if pack_name not in self.packs:
             raise ValueError(f"Неверное имя пакета: {pack_name}")
         
-        # Убеждаемся, что файл имеет расширение .md
-        if not filename.endswith('.md'):
-            filename += '.md'
-        
-        # Создаем директорию если не существует
-        pack_path = self.packs[pack_name]
-        os.makedirs(pack_path, exist_ok=True)
-        
-        file_path = os.path.join(pack_path, filename)
+        file_path = os.path.join(self.packs[pack_name], filename)
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(file_content)
         
-        # Также добавляем в полную базу
-        full_path = os.path.join(self.packs["full"], filename)
-        os.makedirs(self.packs["full"], exist_ok=True)
+        # Также добавляем в pack_full
+        full_path = os.path.join(self.packs["pack_full"], filename)
         with open(full_path, 'w', encoding='utf-8') as f:
             f.write(file_content)
 
@@ -1240,52 +932,30 @@ class RAGDocumentManager:
         if pack_name not in self.packs:
             raise ValueError(f"Неверное имя пакета: {pack_name}")
         
-        # Поддерживаем относительные пути для вложенных папок
         file_path = os.path.join(self.packs[pack_name], filename)
         if os.path.exists(file_path):
             os.remove(file_path)
-            print(f"Удален файл: {file_path}")
             
-        # Также удаляем из полной базы (только имя файла без папки)
-        filename_only = os.path.basename(filename)
-        full_path = os.path.join(self.packs["full"], filename_only)
+        # Также удаляем из pack_full
+        full_path = os.path.join(self.packs["pack_full"], filename)
         if os.path.exists(full_path):
             os.remove(full_path)
-            print(f"Удален файл из полной базы: {full_path}")
 
     def read_document(self, filename, pack_name):
         """Чтение содержимого документа"""
         if pack_name not in self.packs:
             raise ValueError(f"Неверное имя пакета: {pack_name}")
         
-        # Поддерживаем относительные пути для вложенных папок
         file_path = os.path.join(self.packs[pack_name], filename)
         if not os.path.exists(file_path):
-            raise FileNotFoundError(f"Файл не найден: {filename} в пакете {pack_name}")
+            raise FileNotFoundError(f"Файл не найден: {filename}")
         
         with open(file_path, 'r', encoding='utf-8') as f:
             return f.read()
 
     def update_document(self, file_content, filename, pack_name):
         """Обновление содержимого документа"""
-        if pack_name not in self.packs:
-            raise ValueError(f"Неверное имя пакета: {pack_name}")
-        
-        # Поддерживаем относительные пути для вложенных папок
-        file_path = os.path.join(self.packs[pack_name], filename)
-        
-        # Создаем директории если не существуют
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        
-        # Обновляем файл
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(file_content)
-        
-        # Также обновляем в полной базе (только имя файла без папки)
-        filename_only = os.path.basename(filename)
-        full_path = os.path.join(self.packs["full"], filename_only)
-        os.makedirs(self.packs["full"], exist_ok=True)
-        with open(full_path, 'w', encoding='utf-8') as f:
-            f.write(file_content)
+        self.delete_document(filename, pack_name)
+        self.add_document(file_content, filename, pack_name)
 
 
