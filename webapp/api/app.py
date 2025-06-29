@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory, send_file
 from flask_cors import CORS
 import sys
 import os
@@ -54,8 +54,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Конфигурация
-DATABASE_URL = "/home/user1/sqlite_data_rag/AI_agent.db"
-WEBSOCKET_URL = "ws://213.171.25.85:8000/ws"
+DATABASE_URL = os.getenv("DATABASE_URL", "../../src/main_version/AI_agent.db")
+WEBSOCKET_URL = "ws://127.0.0.1:8000/ws"
 
 # Кеш для ответов (аналогично Telegram боту)
 cache_dict = {}
@@ -1772,9 +1772,62 @@ def send_feedback():
         logger.error(f"Ошибка обработки обратной связи: {e}")
         return jsonify({"error": "Внутренняя ошибка сервера"}), 500
 
+# Маршруты для веб-интерфейса
+@app.route('/')
+def index():
+    """Главная страница веб-приложения"""
+    try:
+        # Путь к index.html в родительской папке webapp
+        webapp_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)))
+        index_path = os.path.join(webapp_dir, 'index.html')
+        
+        if os.path.exists(index_path):
+            return send_file(index_path)
+        else:
+            logger.error(f"index.html не найден по пути: {index_path}")
+            return jsonify({"error": "Веб-интерфейс недоступен"}), 404
+    except Exception as e:
+        logger.error(f"Ошибка загрузки главной страницы: {e}")
+        return jsonify({"error": "Ошибка загрузки страницы"}), 500
+
+@app.route('/<path:filename>')
+def static_files(filename):
+    """Статические файлы (JS, CSS, изображения)"""
+    try:
+        # Путь к папке webapp для статических файлов
+        webapp_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)))
+        
+        # Проверяем безопасность пути
+        if '..' in filename or filename.startswith('/'):
+            return jsonify({"error": "Недопустимый путь"}), 400
+            
+        file_path = os.path.join(webapp_dir, filename)
+        
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            return send_file(file_path)
+        else:
+            # Если файл не найден, возвращаем 404 для API или редирект на главную для HTML
+            if filename.startswith('api/'):
+                return jsonify({"error": "API метод не найден"}), 404
+            else:
+                # Для SPA приложений редиректим на главную страницу
+                return send_file(os.path.join(webapp_dir, 'index.html'))
+    except Exception as e:
+        logger.error(f"Ошибка загрузки статического файла {filename}: {e}")
+        return jsonify({"error": "Ошибка загрузки файла"}), 500
+
 @app.errorhandler(404)
 def not_found(error):
-    return jsonify({"error": "Метод не найден"}), 404
+    # Для API запросов возвращаем JSON
+    if request.path.startswith('/api/'):
+        return jsonify({"error": "API метод не найден"}), 404
+    else:
+        # Для веб-интерфейса редиректим на главную (SPA)
+        try:
+            webapp_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)))
+            return send_file(os.path.join(webapp_dir, 'index.html'))
+        except:
+            return jsonify({"error": "Веб-интерфейс недоступен"}), 404
 
 @app.errorhandler(500)
 def internal_error(error):

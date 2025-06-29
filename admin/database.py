@@ -2,12 +2,16 @@ import sqlite3
 from datetime import datetime
 import os
 
-DATABASE_URL = "/app/src/main_version/AI_agent.db"
+# Используем переменную окружения или относительный путь для локального запуска
+DATABASE_URL = os.getenv("DATABASE_URL", "../src/main_version/AI_agent.db")
 
 class DatabaseOperations:
     def __init__(self, db_path=DATABASE_URL):
-        # Преобразуем относительный путь в абсолютный
-        self.db_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', db_path))
+        # Если путь не абсолютный, делаем его относительным от текущей директории
+        if not os.path.isabs(db_path):
+            self.db_path = os.path.abspath(os.path.join(os.path.dirname(__file__), db_path))
+        else:
+            self.db_path = db_path
         print(f"Подключение к базе данных: {self.db_path}")  # Отладочная информация
         # Проверяем существование файла базы данных
         if not os.path.exists(self.db_path):
