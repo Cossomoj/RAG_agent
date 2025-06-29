@@ -38,7 +38,7 @@ from langchain.retrievers import ContextualCompressionRetriever
 app = FastAPI()
 
 # === CONFIGURATION ===
-DATABASE_URL = 'AI_agent.db'  
+DATABASE_URL = '/app/src/main_version/AI_agent.db'  
 api_key = os.getenv("GIGACHAT_API_KEY")
 
 # Context7 Optimized Paths - новая архитектура 5 векторных баз
