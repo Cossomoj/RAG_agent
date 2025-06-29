@@ -54,7 +54,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Конфигурация
-DATABASE_URL = os.getenv("DATABASE_URL", "../../src/main_version/AI_agent.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "/app/src/main_version/AI_agent.db")
 WEBSOCKET_URL = "ws://127.0.0.1:8000/ws"
 
 # Кеш для ответов (аналогично Telegram боту)
