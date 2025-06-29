@@ -3,7 +3,7 @@ from datetime import datetime
 import os
 
 # Используем переменную окружения или относительный путь для локального запуска
-DATABASE_URL = os.getenv("DATABASE_URL", "../src/main_version/AI_agent.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "/app/src/main_version/AI_agent.db")
 
 class DatabaseOperations:
     def __init__(self, db_path=DATABASE_URL):
