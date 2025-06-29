@@ -24,7 +24,7 @@ markdownify==0.11.6
 pymdown-extensions==10.5
 
 # Machine Learning
-torch==2.1.2
+torch>=2.2.0
 transformers==4.36.2
 numpy==1.24.3
 scikit-learn==1.3.2
