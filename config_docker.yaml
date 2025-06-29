@@ -1,0 +1,112 @@
+# Конфигурация RAG Agent для Docker контейнера
+# Специально адаптирована для контейнерной среды
+
+app:
+  name: "RAG Agent Docker"
+  version: "1.0.0"
+  environment: "production"
+  debug: false
+
+# Пути внутри контейнера
+paths:
+  database: "/app/src/main_version/AI_agent.db"
+  rag_path: "/app/src/main_version"
+  logs_dir: "/app/logs"
+  docs_dir: "/app/src/main_version/docs"
+  txt_docs_dir: "/app/src/main_version/txt_docs"
+
+# Сетевые настройки для контейнера
+network:
+  rag_service:
+    host: "0.0.0.0"
+    port: 8000
+    websocket_url: "ws://localhost:8000/ws"  # Localhost внутри контейнера
+  
+  webapp_api:
+    host: "0.0.0.0"
+    port: 5001
+    
+  admin_panel:
+    host: "0.0.0.0"
+    port: 8002
+    
+  telegram_bot:
+    cache_api_port: 8007
+
+# Учетные данные админки
+admin:
+  username: "admin_tg_bot"
+  password: "135beton531"
+
+# Настройки базы данных
+database:
+  type: "sqlite"
+  backup_enabled: true
+  backup_interval_hours: 6  # Чаще для продакшена
+  max_backups: 20
+
+# Логирование для контейнера
+logging:
+  level: "INFO"
+  rotation_enabled: true
+  max_file_size_mb: 50
+  max_files: 20
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# Context7 настройки для производительности
+context7:
+  enabled: true
+  vector_stores:
+    - name: "Competency_Lead"
+      path: "/app/src/main_version/docs/Competency_Lead"
+    - name: "Intern" 
+      path: "/app/src/main_version/docs/Intern"
+    - name: "Specialist"
+      path: "/app/src/main_version/docs/Specialist"
+    - name: "PO"
+      path: "/app/src/main_version/docs/PO"
+    - name: "Full"
+      path: "/app/src/main_version/docs/full"
+  
+  embedding:
+    model: "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
+    chunk_size: 1000
+    chunk_overlap: 200
+  
+  search:
+    top_k: 10
+    score_threshold: 0.7
+    enable_reranking: true
+
+# Настройки производительности для контейнера
+performance:
+  cache_enabled: true
+  cache_ttl_minutes: 120  # Больше для продакшена
+  max_concurrent_requests: 20
+  request_timeout_seconds: 60
+
+# Безопасность для продакшена
+security:
+  rate_limiting_enabled: true
+  max_requests_per_minute: 120
+  cors_enabled: true
+  allowed_origins: ["*"]  # В продакшене заменить на конкретные домены
+
+# Health check настройки для Docker
+health_check:
+  enabled: true
+  interval_seconds: 30
+  endpoints:
+    - name: "rag_service"
+      url: "http://localhost:8000/docs"
+    - name: "webapp_api"
+      url: "http://localhost:5001/api/health"
+    - name: "admin_panel"
+      url: "http://localhost:8002/"
+
+# Docker специфичные настройки
+docker:
+  supervisor_enabled: true
+  auto_restart: true
+  log_to_stdout: false
+  healthcheck_timeout: 30s 

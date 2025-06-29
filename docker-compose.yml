@@ -1,0 +1,136 @@
+version: '3.8'
+
+services:
+  rag_service2:
+    container_name: rag_service2_enhanced
+    working_dir: /app
+    
+    # Обновленные volumes с учетом новой структуры
+    volumes:
+      # База данных (сохраняется на хосте)
+      - /home/user1/sqlite_data_rag/AI_agent.db:/app/src/main_version/AI_agent.db
+      
+      # Документы RAG (Context7 структура)
+      - /home/user1/rag_docs:/app/src/main_version/docs
+      - /home/user1/txt_docs:/app/src/main_version/txt_docs
+      
+      # Логи (для мониторинга)
+      - /home/user1/rag_logs:/app/logs
+      - /home/user1/rag_logs:/var/log
+      
+      # Бэкапы базы данных
+      - /home/user1/rag_backups:/app/backups
+      
+      # Конфигурация (монтируем с хоста для гибкости)
+      - /home/user1/rag_config/config.yaml:/app/config.yaml:ro
+      - /home/user1/rag_config/.env:/app/.env:ro
+
+    # Обновленные порты с учетом новой архитектуры
+    ports:
+      - "8000:8000"  # RAG API (Context7 оптимизированный)
+      - "5001:5001"  # Web API (исправленный порт)
+      - "8002:8002"  # Admin панель
+      - "8007:8007"  # Telegram cache API (если используется)
+
+    # Расширенные переменные окружения
+    environment:
+      # API ключи (из .env файла)
+      - GIGACHAT_API_KEY=${GIGACHAT_API_KEY}
+      - TELEGRAM_API_KEY=${TELEGRAM_API_KEY}
+      - FEEDBACK_CHAT_ID=${FEEDBACK_CHAT_ID}
+      - FEEDBACK_BOT_TOKEN=${FEEDBACK_BOT_TOKEN}
+      - ALERT_BOT_TOKEN=${ALERT_BOT_TOKEN}
+      
+      # Конфигурация приложения
+      - CONFIG_PATH=/app/config.yaml
+      - PYTHONPATH=/app
+      - DATABASE_URL=/app/src/main_version/AI_agent.db
+      - RAG_PATH=/app/src/main_version
+      
+      # Сетевые настройки для контейнера
+      - HOST=0.0.0.0
+      - RAG_PORT=8000
+      - WEB_API_PORT=5001
+      - ADMIN_PORT=8002
+      
+      # Context7 настройки
+      - ENABLE_CONTEXT7=true
+      - VECTOR_DB_TYPE=chroma
+      - EMBEDDING_MODEL=sentence-transformers/paraphrase-multilingual-mpnet-base-v2
+      
+      # Логирование
+      - LOG_LEVEL=INFO
+      - LOG_TO_FILE=true
+      - LOG_DIR=/app/logs
+
+    build:
+      context: ./rag_service2
+      dockerfile: Dockerfile
+      
+    restart: always
+    
+    # Ресурсные ограничения для стабильности
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: '4.0'
+        reservations:
+          memory: 4G
+          cpus: '2.0'
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    networks:
+      - app_network
+
+  # Опциональный сервис для мониторинга
+  rag_monitor:
+    container_name: rag_monitor
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./monitoring/nginx.conf:/etc/nginx/nginx.conf:ro
+      - /home/user1/rag_logs:/var/log/rag:ro
+    depends_on:
+      - rag_service2
+    networks:
+      - app_network
+
+networks:
+  app_network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
+
+# Volumes для персистентного хранения
+volumes:
+  sqlite_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /home/user1/sqlite_data_rag
+  
+  rag_docs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind  
+      device: /home/user1/rag_docs
+      
+  rag_logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /home/user1/rag_logs 
