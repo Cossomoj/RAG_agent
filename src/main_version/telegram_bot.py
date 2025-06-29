@@ -30,7 +30,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Используем переменную окружения или относительный путь для локального запуска
-DATABASE_URL = os.getenv("DATABASE_URL", "AI_agent.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "/app/src/main_version/AI_agent.db")
 
 WEBSOCKET_URL = "ws://127.0.0.1:8000/ws"
 moscow_tz = pytz.timezone('Europe/Moscow')
