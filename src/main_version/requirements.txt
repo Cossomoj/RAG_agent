@@ -45,7 +45,7 @@ pyyaml==6.0.1
 marshmallow==3.20.2
 
 # Безопасность
-cryptography==41.0.8
+cryptography==41.0.7
 bcrypt==4.1.2
 
 # Telegram (если нужно)
