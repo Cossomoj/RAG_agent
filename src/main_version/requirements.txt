@@ -1,34 +1,33 @@
-# RAG Agent - Основные зависимости (обновлено для новой архитектуры)
 # FastAPI и веб-сервер
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 websockets==12.0
 pydantic==2.5.0
 
-# Работа с документами и RAG (обновлено для markdown поддержки)
-unstructured[md]==0.18.1
-langchain==0.1.20
-langchain-community==0.0.38
-langchain-core==0.1.52
-langchain-huggingface==0.0.3
-langchain-gigachat==0.3.4
-sentence-transformers==2.6.0
+# Работа с документами и RAG
+unstructured[md]==0.11.8
+langchain==0.1.0
+langchain-community==0.0.10
+langchain-core==0.1.10
+langchain-huggingface==0.0.1
+langchain-gigachat==0.3.10
+sentence-transformers==2.2.2
 faiss-cpu==1.7.4
 pypdf2==3.0.1
 python-docx==1.1.0
 openpyxl==3.1.2
 
-# Markdown обработка (новое)
+# Markdown обработка
 markdown==3.5.2
 markdownify==0.11.6
 pymdown-extensions==10.5
 
 # Machine Learning
-torch>=2.2.0
+torch==2.1.2
 transformers==4.36.2
-numpy>=1.26.0
+numpy==1.24.3
 scikit-learn==1.3.2
-huggingface-hub==0.23.0
+huggingface-hub==0.20.1
 
 # Утилиты
 python-dotenv==1.0.0
@@ -48,7 +47,7 @@ marshmallow==3.20.2
 cryptography==41.0.7
 bcrypt==4.1.2
 
-# Telegram (если нужно)
+# Telegram
 python-telegram-bot==20.7
 aiogram==3.2.0
 
