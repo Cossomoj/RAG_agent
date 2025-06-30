@@ -32,11 +32,11 @@ app = FastAPI()
 
 api_key = os.getenv("GIGACHAT_API_KEY")
 
-folder_path_1 = os.path.join(os.path.dirname(__file__), "txt_docs/docs_pack_1")
-folder_path_2 = os.path.join(os.path.dirname(__file__), "txt_docs/docs_pack_2")
-folder_path_3 = os.path.join(os.path.dirname(__file__), "txt_docs/docs_pack_3")
-
-folder_path_full = os.path.join(os.path.dirname(__file__), "txt_docs/docs_pack_full")
+folder_path_bsa = os.path.join(os.path.dirname(__file__), "docs/docs_pack_bsa")
+folder_path_test = os.path.join(os.path.dirname(__file__), "docs/docs_pack_test")
+folder_path_web = os.path.join(os.path.dirname(__file__), "docs/docs_pack_web")
+folder_path_java = os.path.join(os.path.dirname(__file__), "docs/docs_pack_java")
+folder_path_python = os.path.join(os.path.dirname(__file__), "docs/docs_pack_python")
 
 def create_docs_from_txt(folder_path):
     # Получаем список всех файлов .txt в указанной директории
@@ -58,14 +58,16 @@ def create_docs_from_txt(folder_path):
     split_docs = text_splitter.split_documents(docs)
     return split_docs
 
-# Документы по Специалисту аналитику
-split_docs_1 = create_docs_from_txt(folder_path_1)
-# Документы по Лиду аналитику
-split_docs_2 = create_docs_from_txt(folder_path_2)
-# Документы по PO/PM
-split_docs_3 = create_docs_from_txt(folder_path_3)
-# Полный пакет
-split_docs_full = create_docs_from_txt(folder_path_full)
+# Документы по аналитику
+split_docs_bsa = create_docs_from_txt(folder_path_bsa)
+# Документы по Тестировщику
+split_docs_test = create_docs_from_txt(folder_path_test)
+# Документы по Фронтендеру
+split_docs_web = create_docs_from_txt(folder_path_web)
+# Документы по Java разработчику
+split_docs_java = create_docs_from_txt(folder_path_java)
+
+split_docs_python = create_docs_from_txt(folder_path_python)
 
 # Инициализация модели для эмбеддингов
 model_name = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
@@ -77,25 +79,39 @@ embedding = HuggingFaceEmbeddings(
     encode_kwargs=encode_kwargs
 )
 
-# Создание векторного хранилища 1
-vector_store_1 = FAISS.from_documents(split_docs_1, embedding=embedding)
-embedding_retriever_1 = vector_store_1.as_retriever(search_kwargs={"k": 10})
+# Создание векторного хранилища для Аналитика
+vector_store_bsa = FAISS.from_documents(split_docs_bsa, embedding=embedding)
+embedding_retriever_bsa = vector_store_bsa.as_retriever(search_kwargs={"k": 5})
 
-# Создание векторного хранилища 2
-vector_store_2 = FAISS.from_documents(split_docs_2, embedding=embedding)
-embedding_retriever_2 = vector_store_2.as_retriever(search_kwargs={"k": 10})
+# Создание векторного хранилища для Тестировщика
+vector_store_test = FAISS.from_documents(split_docs_test, embedding=embedding)
+embedding_retriever_test = vector_store_test.as_retriever(search_kwargs={"k": 5})
 
-# Создание векторного хранилища 3
-vector_store_3 = FAISS.from_documents(split_docs_3, embedding=embedding)
-embedding_retriever_3 = vector_store_3.as_retriever(search_kwargs={"k": 10})
+# Создание векторного хранилища для Фронтенд разработчика
+vector_store_web = FAISS.from_documents(split_docs_web, embedding=embedding)
+embedding_retriever_web = vector_store_web.as_retriever(search_kwargs={"k": 5})
 
-# Создание векторного хранилища со всеми данными
-vector_store_full = FAISS.from_documents(split_docs_full, embedding=embedding)
-embedding_retriever_full = vector_store_full.as_retriever(search_kwargs={"k": 15})
+# Создание векторного хранилища для Java разработчика
+vector_store_java = FAISS.from_documents(split_docs_java, embedding=embedding)
+embedding_retriever_java = vector_store_java.as_retriever(search_kwargs={"k": 5})
 
+# Создание векторного хранилища для Python разработчика
+vector_store_python = FAISS.from_documents(split_docs_python, embedding=embedding)
+embedding_retriever_python = vector_store_python.as_retriever(search_kwargs={"k": 5})
+
+# Создание ансамбля ретриверов для поиска по всем базам
+ensemble_retriever = EnsembleRetriever(
+    retrievers=[
+        embedding_retriever_bsa,
+        embedding_retriever_test,
+        embedding_retriever_web,
+        embedding_retriever_java,
+        embedding_retriever_python
+    ],
+    weights=[0.2, 0.2, 0.2, 0.2, 0.2]  # Равные веса для всех баз
+)
 
 # Инициализация модели GigaChat
-
 def create_retrieval_chain_from_folder(role, specialization, question_id, embedding_retriever, prompt_template):
     
     # Заполнение шаблона промпта
@@ -142,24 +158,28 @@ def get_prompt_from_db(question_id):
 
 def get_best_retriever_for_role_spec(role, specialization):
     """
-    Выбирает лучший retriever на основе роли и специализации
+    Выбирает лучший retriever на основе специализации
     """
-    role_lower = role.lower() if role else ""
     spec_lower = specialization.lower() if specialization else ""
     
-    # Маппинг ролей на retrievers
-    if 'стажер' in role_lower or 'специалист' in role_lower:
-        return embedding_retriever_1  # docs_pack_1
-    elif 'лид' in role_lower:
-        return embedding_retriever_2  # docs_pack_2
-    elif 'po' in role_lower or 'pm' in role_lower:
-        return embedding_retriever_3  # docs_pack_3
+    if 'аналитик' in spec_lower:
+        print("Выбран retriever для АНАЛИТИКА")
+        return embedding_retriever_bsa
+    elif 'тестировщик' in spec_lower:
+        print("Выбран retriever для ТЕСТИРОВЩИКА")
+        return embedding_retriever_test
+    elif 'web' in spec_lower or 'фронтенд' in spec_lower:
+        print("Выбран retriever для WEB")
+        return embedding_retriever_web
+    elif 'java' in spec_lower:
+        print("Выбран retriever для JAVA")
+        return embedding_retriever_java
+    elif 'python' in spec_lower:
+        print("Выбран retriever для PYTHON")
+        return embedding_retriever_python
     else:
-        # Если роль неопределенная, выбираем по специализации
-        if spec_lower in ['аналитик', 'тестировщик', 'python', 'java', 'web']:
-            return embedding_retriever_1  # Начинаем с базовых документов
-        else:
-            return embedding_retriever_full  # Полная база для неопределенных случаев
+        print(f"Не удалось определить ретривер для специализации '{specialization}'. Используется ансамбль из 5 баз.")
+        return ensemble_retriever
 
 async def generate_semantic_search_queries(question, role, specialization):
     """
@@ -179,7 +199,7 @@ async def generate_semantic_search_queries(question, role, specialization):
 Роль пользователя: {role if role else "не указана"}
 Специализация: {specialization if specialization else "не указана"}
 
-Сгенерируй 5-6 альтернативных поисковых запросов для поиска в корпоративной базе знаний по карьерному развитию, ИПР, лидерству и управлению командой в IT.
+Сгенерируй -5 альтернативных поисковых запросов для поиска в корпоративной базе знаний.
 
 Альтернативные запросы должны:
 1. Включать точные фразы из корпоративных документов
@@ -520,37 +540,13 @@ async def websocket_endpoint(websocket: WebSocket):
     if not prompt_template:
         prompt_template = get_prompt_from_db(777)
     
-    # Для специальных промптов 777, 888 всегда используем RAG
-    use_rag_for_special = question_id in [777, 888]
-    if use_rag_for_special:
-        print(f"Special prompt {question_id}: Using RAG with enhanced vector search")
-        print(f"Question: {question}")
-        print(f"Role: {role}")
-        print(f"Specialization: {specialization}")
-        print(f"Context: {context[:100] if context else 'None'}...")
-
-    # Выбираем соответствующий retriever в зависимости от question_id
-    embedding_retriever = embedding_retriever_full
-    if question_id in [1, 2, 3, 19, 20, 21, 22, 23, 24]:
-        embedding_retriever = embedding_retriever_1
-    elif question_id in [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 18]:
-        embedding_retriever = embedding_retriever_2
-    elif question_id in [15, 16, 17]:
-        embedding_retriever = embedding_retriever_3
-    elif question_id in []: # Оставляем пустым на случай будущих расширений
-        embedding_retriever = embedding_retriever_full
-
-    # Для специальных промптов 777, 888 выбираем retriever на основе роли/специализации
-    if question_id in [777, 888]:
-        print(f"Для специального промпта {question_id} выбираем retriever на основе роли/специализации.")
-        embedding_retriever = get_best_retriever_for_role_spec(role, specialization)
+    # Логика выбора retriever теперь полностью определяется функцией get_best_retriever_for_role_spec
+    print(f"Определяем retriever для роли '{role}' и специализации '{specialization}'...")
+    embedding_retriever = get_best_retriever_for_role_spec(role, specialization)
 
     # Создаем retrieval_chain для вопросов, которые его используют
     retrieval_chain = None
-    should_use_rag = (
-        question_id not in [777, 888, 999] or  # Обычные промпты всегда используют RAG
-        (question_id in [777, 888] and use_rag_for_special)  # Специальные только при релевантности
-    )
+    should_use_rag = True # Всегда используем RAG с новой логикой
     
     if should_use_rag:
         # Используем улучшенный поиск для ВСЕХ типов вопросов
@@ -564,107 +560,6 @@ async def websocket_endpoint(websocket: WebSocket):
         )
 
     # Убираем очистку от символов форматирования - они нужны для Markdown!
-    
-    
-    # Эта ветка больше не используется, так как промпты 777,888 всегда используют RAG
-    if False:  # question_id in [777, 888] and not use_rag_for_special:
-        print(f"Обрабатываем специальный промпт {question_id} БЕЗ RAG...")
-        
-        # Формируем промпт
-        template = string.Template(prompt_template)
-        filled_prompt = template.substitute(
-            role=role,
-            specialization=specialization
-        )
-        
-        # Для ID=888 добавляем контекст диалога
-        if question_id == 888:
-            if context and context != "[]":
-                context_info = f"\n\nКонтекст предыдущих сообщений:\n{context}\n\n"
-                full_prompt = filled_prompt + context_info + f"Вопрос пользователя: {question}"
-            else:
-                full_prompt = filled_prompt + f"\n\nВопрос пользователя: {question}"
-        
-        # Добавляем улучшенную инструкцию по форматированию
-        full_prompt += """
-
-КРИТИЧЕСКИ ВАЖНО - ФОРМАТИРОВАНИЕ ОТВЕТА:
-Отформатируй свой ответ строго в формате Markdown с соблюдением следующих правил:
-
-1. **ЗАГОЛОВКИ** (обязательно с пробелами после #):
-   - # Основной заголовок ответа
-   - ## Роли и уровни (например: ## Product Owner (PO):)
-   - ### Конкретные уровни (например: ### Middle-аналитик)
-   
-2. **СТРУКТУРА ОТВЕТА**:
-   - Начинай с основного заголовка # 
-   - Каждую роль выделяй заголовком ##
-   - Каждый уровень внутри роли выделяй заголовком ###
-   - После каждого заголовка ОБЯЗАТЕЛЬНО пустая строка
-
-3. **СПИСКИ** (обязательно с пробелами):
-   - Для нумерованных: 1. пункт 2. пункт 3. пункт
-   - Для маркированных: - пункт или * пункт
-   - После двоеточия (:) переходи на новую строку для списка
-
-4. **ВЫДЕЛЕНИЕ ТЕКСТА**:
-   - **Жирный текст** для ключевых терминов
-   - *Курсив* для акцентов
-   - `код` для технических терминов
-
-5. **ЗАПРЕЩЕНО**:
-   - НЕ используй ### или ## в середине текста без создания заголовка
-   - НЕ пиши длинные абзацы без разбивки
-   - НЕ забывай пустые строки между разделами
-
-ПРИМЕР ПРАВИЛЬНОГО ФОРМАТИРОВАНИЯ:
-# Ожидания от Лида Компетенции
-
-## Product Owner (PO):
-
-### Middle-аналитик
-
-- Проведение анализа текущих процессов
-- Создание диаграмм и моделей
-- Помощь в формулировке требований
-
-### Senior-аналитик
-
-- Владение стратегиями тестирования
-- Опыт работы с командой
-
-Следуй этому формату СТРОГО!"""
-        
-        print(f"\n--- PROMPT ДЛЯ LLM (ID={question_id}, без RAG) ---\n")
-        print(full_prompt)
-        print("\n--- КОНЕЦ PROMPT ---\n")
-        
-        try:
-            print("Начинаем стриминг ответа от GigaChat...")
-            chunk_count = 0
-            # Используем GigaChat для ответа
-            async for chunk in GigaChat(
-                credentials=api_key,
-                verify_ssl_certs=False,
-                model='GigaChat-2'
-            ).astream(full_prompt):
-                if chunk and chunk.content:
-                    chunk_count += 1
-                    answer = chunk.content.strip()
-                    
-                    # Оставляем ответ как есть для сохранения Markdown форматирования
-                    
-                    print(f"Отправляем chunk #{chunk_count}: {answer[:50]}...")
-                    await websocket.send_text(answer)
-            
-            print(f"Стриминг завершен. Всего отправлено chunks: {chunk_count}")
-            if chunk_count == 0:
-                print("ВНИМАНИЕ: GigaChat не вернул ни одного chunk!")
-                await websocket.send_text("Извините, не удалось получить ответ. Попробуйте переформулировать вопрос.")
-                
-        except Exception as e:
-            print(f"ОШИБКА при работе с GigaChat для ID={question_id}: {e}")
-            await websocket.send_text(f"Произошла ошибка при обработке вопроса: {str(e)}")
     
     elif should_use_rag and retrieval_chain is not None:
         # Используем RAG для обычных промптов или для специальных промптов при релевантности
@@ -685,149 +580,12 @@ async def websocket_endpoint(websocket: WebSocket):
                     
                 await websocket.send_text(answer)  # Отправляем очищенный текстовый ответ
 
-    elif not should_use_rag and question_id not in [777, 888]:
-        # Fallback для обычных промптов без RAG (не должно происходить)
-        print(f"ВНИМАНИЕ: Обычный промпт {question_id} обрабатывается без RAG!")
-        template = string.Template(prompt_template)
-        filled_prompt = template.substitute(role=role, specialization=specialization)
-        full_prompt = filled_prompt + f"\n\nВопрос пользователя: {question}"
-        
-        # Добавляем улучшенную инструкцию по форматированию
-        full_prompt += """
-
-КРИТИЧЕСКИ ВАЖНО - ФОРМАТИРОВАНИЕ ОТВЕТА:
-Отформатируй свой ответ строго в формате Markdown с соблюдением следующих правил:
-
-1. **ЗАГОЛОВКИ** (обязательно с пробелами после #):
-   - # Основной заголовок ответа
-   - ## Роли и уровни (например: ## Product Owner (PO):)
-   - ### Конкретные уровни (например: ### Middle-аналитик)
-   
-2. **СТРУКТУРА ОТВЕТА**:
-   - Начинай с основного заголовка # 
-   - Каждую роль выделяй заголовком ##
-   - Каждый уровень внутри роли выделяй заголовком ###
-   - После каждого заголовка ОБЯЗАТЕЛЬНО пустая строка
-
-3. **СПИСКИ** (обязательно с пробелами):
-   - Для нумерованных: 1. пункт 2. пункт 3. пункт
-   - Для маркированных: - пункт или * пункт
-   - После двоеточия (:) переходи на новую строку для списка
-
-4. **ВЫДЕЛЕНИЕ ТЕКСТА**:
-   - **Жирный текст** для ключевых терминов
-   - *Курсив* для акцентов
-   - `код` для технических терминов
-
-5. **ЗАПРЕЩЕНО**:
-   - НЕ используй ### или ## в середине текста без создания заголовка
-   - НЕ пиши длинные абзацы без разбивки
-   - НЕ забывай пустые строки между разделами
-
-ПРИМЕР ПРАВИЛЬНОГО ФОРМАТИРОВАНИЯ:
-# Ожидания от Лида Компетенции
-
-## Product Owner (PO):
-
-### Middle-аналитик
-
-- Проведение анализа текущих процессов
-- Создание диаграмм и моделей
-- Помощь в формулировке требований
-
-### Senior-аналитик
-
-- Владение стратегиями тестирования
-- Опыт работы с командой
-
-Следуй этому формату СТРОГО!"""
-        
-        try:
-            async for chunk in GigaChat(
-                credentials=api_key,
-                verify_ssl_certs=False,
-                model='GigaChat-2'
-            ).astream(full_prompt):
-                if chunk and chunk.content:
-                    answer = chunk.content.strip()
-                    # Оставляем ответ как есть для сохранения Markdown форматирования
-                    await websocket.send_text(answer)
-        except Exception as e:
-            print(f"ОШИБКА при fallback для промпта {question_id}: {e}")
-            await websocket.send_text(f"Произошла ошибка: {str(e)}")
-
-    elif(count > 1 and count < 10):
-        prompt = f"""Использую контекст нашей прошлой беседы {context}, ответь на уточняющий вопрос {question}.
-
-КРИТИЧЕСКИ ВАЖНО - ФОРМАТИРОВАНИЕ ОТВЕТА:
-Отформатируй свой ответ строго в формате Markdown с соблюдением следующих правил:
-
-1. **ЗАГОЛОВКИ** (обязательно с пробелами после #):
-   - # Основной заголовок ответа
-   - ## Роли и уровни (например: ## Product Owner (PO):)
-   - ### Конкретные уровни (например: ### Middle-аналитик)
-   
-2. **СТРУКТУРА ОТВЕТА**:
-   - Начинай с основного заголовка # 
-   - Каждую роль выделяй заголовком ##
-   - Каждый уровень внутри роли выделяй заголовком ###
-   - После каждого заголовка ОБЯЗАТЕЛЬНО пустая строка
-
-3. **СПИСКИ** (обязательно с пробелами):
-   - Для нумерованных: 1. пункт 2. пункт 3. пункт
-   - Для маркированных: - пункт или * пункт
-   - После двоеточия (:) переходи на новую строку для списка
-
-4. **ВЫДЕЛЕНИЕ ТЕКСТА**:
-   - **Жирный текст** для ключевых терминов
-   - *Курсив* для акцентов
-   - `код` для технических терминов
-
-5. **ЗАПРЕЩЕНО**:
-   - НЕ используй ### или ## в середине текста без создания заголовка
-   - НЕ пиши длинные абзацы без разбивки
-   - НЕ забывай пустые строки между разделами
-
-ВАЖНО: НЕ используй символы ### или ## в середине текста без создания заголовка. Если нужно упомянуть роль, используй **жирное выделение**.
-"""
-        for chunk in GigaChat(credentials=api_key,
-                              verify_ssl_certs=False,
-                                model='GigaChat-2'
-                                ).stream(prompt):
-            answer = chunk.content.strip()  # Используем атрибут .content
-
-            # Отправляем ответ через WebSocket
-            await websocket.send_text(answer)
-
-
-    elif(count == 101):
-        for chunk in GigaChat(credentials=api_key,
-                              verify_ssl_certs=False,
-                                model='GigaChat-2'
-                                ).stream(f"Использую историю нашей с тобой беседы {context}, придумай мне тему для обсуждения"):
-            answer = chunk.content.strip()  # Используем атрибут .content
-
-            # Отправляем ответ через WebSocket
-            await websocket.send_text(answer)
-        
-
-    elif(count == 102):
-        print("zashlo")
-        for chunk in GigaChat(credentials=api_key,
-                              verify_ssl_certs=False,
-                                model='GigaChat-2'
-                                ).stream(f"Напомни мне пожалуйста вот об этой теме {context}"):
-            answer = chunk.content.strip()  # Используем атрибут .content
-
-            # Отправляем ответ через WebSocket
-            await websocket.send_text(answer)
     else:
         # Обработка случая, когда не попали ни в одно условие
         print(f"ВНИМАНИЕ: Не найдена подходящая логика обработки!")
         print(f"question_id: {question_id}")
         print(f"count: {count}")
         print(f"should_use_rag: {should_use_rag}")
-        print(f"use_rag_for_special: {use_rag_for_special if question_id in [777, 888] else 'N/A'}")
         print(f"retrieval_chain is not None: {retrieval_chain is not None}")
         
         await websocket.send_text("Извините, произошла ошибка при обработке запроса. Попробуйте еще раз.")
@@ -894,7 +652,7 @@ class DatabaseOperations:
         # Реализация запроса
 
 class RAGDocumentManager:
-    def __init__(self, base_path="app/src/main_version/txt_docs"):
+    def __init__(self, base_path="app/src/main_version/docs"):
         self.base_path = base_path
         self.packs = {
             "pack_1": os.path.join(base_path, "docs_pack_1"),

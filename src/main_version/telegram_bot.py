@@ -1152,49 +1152,66 @@ def handle_role(call):
     
     if role == "PO/PM":
         questions = [
-            types.InlineKeyboardButton(text="Что я могу ожидать от специалиста", callback_data="po_question_1"),
-            types.InlineKeyboardButton(text="Что я могу ожидать от лида компетенции", callback_data="po_question_2"),
-            types.InlineKeyboardButton(text="Что ожидается от меня", callback_data="po_question_3"),
-            types.InlineKeyboardButton(text="Прочее", callback_data="intern_questions_group"),
+            types.InlineKeyboardButton(text="Что я могу ожидать от специалиста", callback_data="qid_15"),
+            types.InlineKeyboardButton(text="Что я могу ожидать от лида компетенции", callback_data="qid_16"),
+            types.InlineKeyboardButton(text="Что ожидается от меня", callback_data="qid_17"),
+            types.InlineKeyboardButton(text="Лучшие практики", callback_data="qid_22"),
+            types.InlineKeyboardButton(text="Что такое SDLC", callback_data="qid_23"),
+            types.InlineKeyboardButton(text="Советы по тайм-менеджменту", callback_data="qid_24"),
             types.InlineKeyboardButton(text="Что еще ты умеешь?", callback_data="question_777"),
             types.InlineKeyboardButton(text="Ввести свой вопрос", callback_data="question_custom"),
             types.InlineKeyboardButton(text="В начало", callback_data="start")
         ]
     elif role == "Лид компетенции":
-        if specialization == "Аналитик":
-            questions = [
-                types.InlineKeyboardButton(text="Что я могу ожидать от специалиста ", callback_data="question_4"),
-                types.InlineKeyboardButton(text="Что я могу ожидать от своего PO/PM ", callback_data="question_5"),
-                types.InlineKeyboardButton(text="Что ожидается от меня", callback_data="questions_group_1"),
-                types.InlineKeyboardButton(text="Прочее", callback_data="questions_group_2"),
-                types.InlineKeyboardButton(text="Ввести свой вопрос", callback_data="question_custom"),
-                types.InlineKeyboardButton(text="В начало", callback_data="start")
-            ]
-        else:
-            questions = [
-                types.InlineKeyboardButton(text="Что я могу ожидать от специалиста ", callback_data="question_18"),
-                types.InlineKeyboardButton(text="Что я могу ожидать от своего PO/PM ", callback_data="question_19"),
-                types.InlineKeyboardButton(text="Что ожидается от меня", callback_data="question_20"),
-                types.InlineKeyboardButton(text="Прочее", callback_data="questions_group_2"),
-                types.InlineKeyboardButton(text="Ввести свой вопрос", callback_data="question_custom"),
-                types.InlineKeyboardButton(text="В начало", callback_data="start")
-            ]
+        # Общие вопросы для всех лидов
+        questions = [
+            types.InlineKeyboardButton(text="Что я могу ожидать от специалиста ", callback_data="qid_18"),
+            types.InlineKeyboardButton(text="Что я могу ожидать от своего PO/PM ", callback_data="qid_19"),
+            types.InlineKeyboardButton(text="Что ожидается от меня", callback_data="qid_20"),
+        ]
+        # Вопросы из группы "Что ожидается от меня"
+        questions.extend([
+            types.InlineKeyboardButton(text="Поиск кандидатов на работу", callback_data="qid_6"),
+            types.InlineKeyboardButton(text="Проведение собеседований", callback_data="qid_7"),
+            types.InlineKeyboardButton(text="Работа со стажерами/джунами", callback_data="qid_8"),
+            types.InlineKeyboardButton(text="Проведение 1-2-1", callback_data="qid_9"),
+            types.InlineKeyboardButton(text="Проведение встреч компетенции", callback_data="qid_10"),
+        ])
+        # Вопросы из группы "Прочее"
+        questions.extend([
+            types.InlineKeyboardButton(text="Построение структуры компетенции", callback_data="qid_11"),
+            types.InlineKeyboardButton(text="Создание ИПР", callback_data="qid_12"),
+            types.InlineKeyboardButton(text="Как провести онбординг", callback_data="qid_13"),
+            types.InlineKeyboardButton(text="Оптимизация процессов разработки", callback_data="qid_14"),
+            types.InlineKeyboardButton(text="Советы по тайм-менеджменту", callback_data="qid_24"),
+        ])
+        questions.extend([
+            types.InlineKeyboardButton(text="Ввести свой вопрос", callback_data="question_custom"),
+            types.InlineKeyboardButton(text="В начало", callback_data="start")
+        ])
+            
     elif role == "Стажер":
         questions = [
-            types.InlineKeyboardButton(text="Что я могу ожидать от PO/PM", callback_data="question_1"),
-            types.InlineKeyboardButton(text="Что я могу ожидать от своего лида", callback_data="question_2"),
-            types.InlineKeyboardButton(text="Рекомендации для стажеров", callback_data="question_21"),
-            types.InlineKeyboardButton(text="Посмотреть матрицу компетенций", callback_data="question_3"),
-            types.InlineKeyboardButton(text="Прочее", callback_data="intern_questions_group"),
+            types.InlineKeyboardButton(text="Что я могу ожидать от PO/PM", callback_data="qid_1"),
+            types.InlineKeyboardButton(text="Что я могу ожидать от своего лида", callback_data="qid_2"),
+            types.InlineKeyboardButton(text="Рекомендации для стажеров", callback_data="qid_21"),
+            types.InlineKeyboardButton(text="Посмотреть матрицу компетенций", callback_data="qid_3"),
+            # Добавляем вопросы из группы "Прочее"
+            types.InlineKeyboardButton(text="Лучшие практики", callback_data="qid_22"),
+            types.InlineKeyboardButton(text="Что такое SDLC", callback_data="qid_23"),
+            types.InlineKeyboardButton(text="Советы по тайм-менеджменту", callback_data="qid_24"),
             types.InlineKeyboardButton(text="Ввести свой вопрос", callback_data="question_custom"),
             types.InlineKeyboardButton(text="В начало", callback_data="start")
         ]
     else:  # Специалист
         questions = [
-            types.InlineKeyboardButton(text="Что я могу ожидать от своего PO/PM", callback_data="question_1"),
-            types.InlineKeyboardButton(text="Что я могу ожидать от своего Лида", callback_data="question_2"),
-            types.InlineKeyboardButton(text="Посмотреть матрицу компетенций", callback_data="question_3"),
-            types.InlineKeyboardButton(text="Прочее", callback_data="intern_questions_group"),
+            types.InlineKeyboardButton(text="Что я могу ожидать от своего PO/PM", callback_data="qid_1"),
+            types.InlineKeyboardButton(text="Что я могу ожидать от своего Лида", callback_data="qid_2"),
+            types.InlineKeyboardButton(text="Посмотреть матрицу компетенций", callback_data="qid_3"),
+            # Добавляем вопросы из группы "Прочее"
+            types.InlineKeyboardButton(text="Лучшие практики", callback_data="qid_22"),
+            types.InlineKeyboardButton(text="Что такое SDLC", callback_data="qid_23"),
+            types.InlineKeyboardButton(text="Советы по тайм-менеджменту", callback_data="qid_24"),
             types.InlineKeyboardButton(text="Ввести свой вопрос", callback_data="question_custom"),
             types.InlineKeyboardButton(text="В начало", callback_data="start")
         ]
@@ -1205,7 +1222,7 @@ def handle_role(call):
         message_id=call.message.message_id,
         text=(f"Вы выбрали роль: {role}\nСпециализация: {specialization}\n\n"
               f"Чтобы задать вопрос:\n"
-              f"• Выберите из списка готовых вопросов или 'Прочее' с дополнительными темами\n"
+              f"• Выберите из списка готовых вопросов\n"
               f"• Или нажмите 'Ввести свой вопрос' для свободного вопроса"),
         reply_markup=markup
     )
@@ -1302,9 +1319,9 @@ def choose_role(call):
     else:
         markup = types.InlineKeyboardMarkup(row_width=1)
         quesions = [
-            types.InlineKeyboardButton(text="Что я могу ожидать от специалиста", callback_data="po_question_1"),
-            types.InlineKeyboardButton(text="Что я могу ожидать от лида компетенции", callback_data="po_question_2"),
-            types.InlineKeyboardButton(text="Что ожидается от меня", callback_data="po_question_3"),
+            types.InlineKeyboardButton(text="Что я могу ожидать от специалиста", callback_data="qid_15"),
+            types.InlineKeyboardButton(text="Что я могу ожидать от лида компетенции", callback_data="qid_16"),
+            types.InlineKeyboardButton(text="Что ожидается от меня", callback_data="qid_17"),
             types.InlineKeyboardButton(text="Что еще ты умеешь?", callback_data="question_777"),
             types.InlineKeyboardButton(text="Ввести свой вопрос", callback_data="question_custom"),
             types.InlineKeyboardButton(text="В начало", callback_data="start")
@@ -1332,22 +1349,22 @@ def handle_predefined_question_group(call):
     markup = types.InlineKeyboardMarkup(row_width=1)
     if switcher == 0:
         questions = [
-            types.InlineKeyboardButton(text="Поиск кандидатов на работу", callback_data="group_1_question_1"),
-            types.InlineKeyboardButton(text="Проведение собеседований", callback_data="group_1_question_2"),
-            types.InlineKeyboardButton(text="Работа со стажерами/джунами", callback_data="group_1_question_3"),
-            types.InlineKeyboardButton(text="Проведение 1-2-1", callback_data="group_1_question_4"),
-            types.InlineKeyboardButton(text="Проведение встреч компетенции", callback_data="group_1_question_5"),
+            types.InlineKeyboardButton(text="Поиск кандидатов на работу", callback_data="qid_6"),
+            types.InlineKeyboardButton(text="Проведение собеседований", callback_data="qid_7"),
+            types.InlineKeyboardButton(text="Работа со стажерами/джунами", callback_data="qid_8"),
+            types.InlineKeyboardButton(text="Проведение 1-2-1", callback_data="qid_9"),
+            types.InlineKeyboardButton(text="Проведение встреч компетенции", callback_data="qid_10"),
             types.InlineKeyboardButton(text="В начало", callback_data="start")
         ]
         markup.add(*questions)
         bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=f"Вы выбрали категорию: \nТеперь выберите вопрос:", reply_markup=markup)
     elif switcher == 1:
         questions = [
-            types.InlineKeyboardButton(text="Построение структуры компетенции", callback_data="group_2_question_1"),
-            types.InlineKeyboardButton(text="Создание ИПР", callback_data="group_2_question_2"),
-            types.InlineKeyboardButton(text="Как провести онбординг", callback_data="group_2_question_3"),
-            types.InlineKeyboardButton(text="Оптимизация процессов разработки", callback_data="group_2_question_4"),
-            types.InlineKeyboardButton(text="Советы по тайм-менеджменту", callback_data="group_2_question_5"),
+            types.InlineKeyboardButton(text="Построение структуры компетенции", callback_data="qid_11"),
+            types.InlineKeyboardButton(text="Создание ИПР", callback_data="qid_12"),
+            types.InlineKeyboardButton(text="Как провести онбординг", callback_data="qid_13"),
+            types.InlineKeyboardButton(text="Оптимизация процессов разработки", callback_data="qid_14"),
+            types.InlineKeyboardButton(text="Советы по тайм-менеджменту", callback_data="qid_24"),
             types.InlineKeyboardButton(text="В начало", callback_data="start")
         ]
         markup.add(*questions)
@@ -1492,61 +1509,33 @@ def handle_predefined_question_group_2(call):
 @require_onboarding
 @bot.callback_query_handler(func=lambda call: call.data in ["question_1", "question_2", "question_3", "question_4", "question_5", "question_18", "question_19", "question_20", "question_21"])
 def handle_predefined_question(call):
+    """
+    Универсальный обработчик для всех предопределенных вопросов.
+    Извлекает профиль пользователя и отправляет запрос в RAG.
+    """
     chat_id = call.message.chat.id
-    clear_dialog_context(chat_id)
-    role = ""
-    specialization = ""
-    question_id = 777
+    question_id = int(call.data.split('_')[1])
     
-    if call.message.chat.id not in user_data:
-        user_data[call.message.chat.id] = {"role": "Специалист", "specialization": "Аналитик"}
+    bot.send_message(chat_id, "Формирую ответ... ⏳", parse_mode='Markdown')
+    
+    # Получаем актуальный профиль пользователя из БД
+    role, specialization = get_user_profile_from_db(chat_id)
+    
+    if not role or not specialization:
+        bot.send_message(chat_id, "Не удалось получить ваш профиль. Пожалуйста, пройдите онбординг заново через /start.")
+        logger.warning(f"Не найден профиль для пользователя {chat_id} при обработке вопроса {question_id}")
+        return
 
-    role = user_data[call.message.chat.id]['role']
-    specialization = user_data[call.message.chat.id]['specialization']
+    logger.info(f"Пользователь {chat_id} (Роль: {role}, Специализация: {specialization}) задал вопрос с ID: {question_id}")
     
-    
-    if call.data == "question_1":
-        question = "Что я могу ожидать от своего PO/PM?"
-        question_id = 1
-    elif call.data == "question_2":
-        question = "Что я могу ожидать от своего Лида?"
-        question_id = 2
-    elif(call.data == "question_3"):
-        question = "Посмотерть матрицу компетенций"
-        question_id = 3
-    elif call.data == "question_4":
-        question = "Что я могу ожидать от специалиста "
-        question_id = 4
-    elif call.data == "question_5":
-        question = "Что я могу ожидать от своего PO/PM "
-        question_id = 5
-    if call.data == "question_18":
-        question = "Что я могу ожидать от специалиста ?"
-        question_id = 18
-    elif call.data == "question_19":
-        question = "Что я могу ожидать от своего PO/PM "
-        question_id = 19
-    elif(call.data == "question_20"):
-        question = "Что ожидается от меня?"
-        question_id = 20
-    elif(call.data == "question_21"):
-        question = "Рекомендации для стажеров"
-        question_id = 21
-    
+    conn = sqlite3.connect(DATABASE_URL)
+    cursor = conn.cursor()
+    cursor.execute("SELECT question_text FROM Prompts WHERE question_id = ?", (question_id,))
+    question_text = cursor.fetchone()[0]
+    conn.close()
 
-    if (question_id in cache_dict):
-            #mplusk1
-            asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
-            #mplusk2
-    elif (question_id in cache_by_specialization):
-        if(specialization in cache_by_specialization[question_id]):
-            #mplusk1
-            asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
-            #mplusk2
-        else:
-            asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
-    else:
-        asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
+    # Запускаем асинхронную отправку вопроса в RAG
+    asyncio.run(websocket_question_from_user(question_text, call.message, role, specialization, question_id))
 
 @require_onboarding
 @bot.callback_query_handler(func=lambda call: call.data == "question_777")
@@ -1689,23 +1678,12 @@ def process_custom_question(message):
     logger.info(f"Обрабатываем кастомный вопрос от пользователя {message.chat.id}")
     
     # Получаем роль и специализацию из базы данных
-    conn = sqlite3.connect(DATABASE_URL)
-    cursor = conn.cursor()
-    cursor.execute("SELECT Role, Specialization FROM Users WHERE user_id = ?", (message.chat.id,))
-    user_info = cursor.fetchone()
-    conn.close()
+    role, specialization = get_user_profile_from_db(message.chat.id)
     
-    if user_info:
-        role = user_info[0]
-        specialization = user_info[1]
-    else:
-        # Fallback к старой логике
-        if message.chat.id not in user_data:
-            user_data[message.chat.id] = {"role": "Специалист", "specialization": "Аналитик"}
-        role = user_data[message.chat.id]['role']
-        specialization = user_data[message.chat.id]['specialization']
-        if(not specialization):
-            specialization = "Аналитик"
+    if not role or not specialization:
+        bot.send_message(message.chat.id, "Не удалось получить ваш профиль. Пожалуйста, пройдите онбординг заново через /start.")
+        logger.warning(f"Не найден профиль для пользователя {message.chat.id} при обработке кастомного вопроса.")
+        return
 
     question_id = 888  # Используем ID=888 для кастомных вопросов с памятью диалога
     question = message.text
@@ -1966,9 +1944,9 @@ def hadl_print_in_development_2(message):
 def handle_intern_questions_group(call):
     markup = types.InlineKeyboardMarkup(row_width=1)
     questions = [
-        types.InlineKeyboardButton(text="Лучшие практики", callback_data="intern_group_question_1"),
-        types.InlineKeyboardButton(text="Что такое SDLC", callback_data="intern_group_question_2"),
-        types.InlineKeyboardButton(text="Советы по тайм-менеджменту", callback_data="intern_group_question_3"),
+        types.InlineKeyboardButton(text="Лучшие практики", callback_data="qid_22"),
+        types.InlineKeyboardButton(text="Что такое SDLC", callback_data="qid_23"),
+        types.InlineKeyboardButton(text="Советы по тайм-менеджменту", callback_data="qid_24"),
         types.InlineKeyboardButton(text="В начало", callback_data="start")
     ]
     markup.add(*questions)
@@ -1978,145 +1956,6 @@ def handle_intern_questions_group(call):
         text="Выберите интересующий вас вопрос:",
         reply_markup=markup
     )
-
-@require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data.startswith("intern_group_question_"))
-def handle_intern_group_questions(call):
-    chat_id = call.message.chat.id
-    clear_dialog_context(chat_id)
-    role = ""
-    specialization = ""
-    question_id = 777
-    
-    if call.message.chat.id not in user_data:
-        user_data[call.message.chat.id] = {"role": "Стажер", "specialization": "Аналитик"}
-
-    role = user_data[call.message.chat.id]['role']
-    specialization = user_data[call.message.chat.id]['specialization']
-    
-    if call.data == "intern_group_question_1":
-        question = "Лучшие практики для стажеров"
-        question_id = 22
-    elif call.data == "intern_group_question_2":
-        question = "Что такое SDLC"
-        question_id = 23
-    elif call.data == "intern_group_question_3":
-        question = "Советы по тайм-менеджменту для стажеров"
-        question_id = 24
-
-    if (question_id in cache_dict):
-        #mplusk1
-        asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
-        #mplusk2
-    elif (question_id in cache_by_specialization):
-        if(specialization in cache_by_specialization[question_id]):
-            #mplusk1
-            asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
-            #mplusk2
-        else:
-            asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
-    else:
-        asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
-
-# Простой HTTP сервер для API очистки кеша
-class CacheAPIHandler(BaseHTTPRequestHandler):
-    def do_POST(self):
-        if self.path == '/clear-cache':
-            try:
-                result = clear_all_cache()
-                response = {'success': True, 'message': 'Кеш успешно очищен'}
-                self.send_response(200)
-            except Exception as e:
-                response = {'success': False, 'error': str(e)}
-                self.send_response(500)
-            
-            self.send_header('Content-type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.end_headers()
-            self.wfile.write(json.dumps(response, ensure_ascii=False).encode('utf-8'))
-        elif self.path == '/send-message':
-            try:
-                content_length = int(self.headers['Content-Length'])
-                post_data = self.rfile.read(content_length)
-                data = json.loads(post_data.decode('utf-8'))
-                message_text = data.get('message')
-                
-                if not message_text:
-                    response = {'success': False, 'error': 'Текст сообщения не указан'}
-                    self.send_response(400)
-                else:
-                    result = send_message_to_all_users(message_text)
-                    response = result
-                    self.send_response(200 if result['success'] else 500)
-                
-                self.send_header('Content-type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
-                self.end_headers()
-                self.wfile.write(json.dumps(response, ensure_ascii=False).encode('utf-8'))
-            except Exception as e:
-                response = {'success': False, 'error': str(e)}
-                self.send_response(500)
-                self.send_header('Content-type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
-                self.end_headers()
-                self.wfile.write(json.dumps(response, ensure_ascii=False).encode('utf-8'))
-        else:
-            self.send_response(404)
-            self.end_headers()
-    
-    def do_OPTIONS(self):
-        self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-        self.end_headers()
-
-def start_cache_api_server():
-    server = HTTPServer(('localhost', 8007), CacheAPIHandler)
-    logger.info("Cache API сервер запущен на порту 8007")
-    server.serve_forever()
-
-#mplusk1
-async def generate_and_show_suggested_questions(chat_id, user_question, bot_answer, role, specialization):
-    print("Attempting to generate suggested questions...")
-    payload = {
-        "user_question": user_question,
-        "bot_answer": bot_answer,
-        "role": role,
-        "specialization": specialization
-    }
-    try:
-        print(f"Connecting to ws_suggest...")
-        async with websockets.connect("ws://127.0.0.1:8000/ws_suggest") as websocket:
-            await websocket.send(json.dumps(payload))
-            response = await websocket.recv()
-            print(f"Received from ws_suggest: {response}")
-            questions = json.loads(response)
-
-            if isinstance(questions, dict) and "error" in questions:
-                print(f"Ошибка при генерации вопросов: {questions['error']}")
-                return
-
-            if isinstance(questions, list) and questions:
-                print(f"Successfully generated questions: {questions}")
-                suggested_questions_storage[chat_id] = questions
-                
-                markup = types.InlineKeyboardMarkup()
-                buttons = []
-                for i, q in enumerate(questions[:3]):
-                    buttons.append(types.InlineKeyboardButton(text=f"{i+1}", callback_data=f"suggested_question_{i}"))
-                
-                if buttons:
-                    markup.add(*buttons)
-                    questions_text = "\n".join([f"{i+1}. {q}" for i, q in enumerate(questions[:3])])
-                    print(f"Sending questions to user {chat_id}")
-                    bot.send_message(chat_id, f"Выберете следующий вопрос:\n{questions_text}", reply_markup=markup)
-            else:
-                print(f"No questions generated or response was not a list. Response: {questions}")
-
-
-    except Exception as e:
-        print(f"CRITICAL Error in generate_and_show_suggested_questions: {e}")
 
 @require_onboarding
 @bot.callback_query_handler(func=lambda call: call.data.startswith("suggested_question_"))
@@ -2406,6 +2245,78 @@ def handle_clear_history_confirm(call):
             reply_markup=markup,
             parse_mode='Markdown'
         )
+
+def get_user_profile_from_db(chat_id):
+    """
+    Извлекает роль и специализацию пользователя из базы данных.
+    Возвращает (role, specialization) или (None, None) если пользователь не найден.
+    """
+    try:
+        conn = sqlite3.connect(DATABASE_URL)
+        cursor = conn.cursor()
+        cursor.execute("SELECT Role, Specialization FROM Users WHERE user_id = ?", (chat_id,))
+        result = cursor.fetchone()
+        conn.close()
+        if result:
+            return result[0], result[1]
+    except Exception as e:
+        logger.error(f"Ошибка при получении профиля пользователя {chat_id} из БД: {e}")
+    return None, None
+
+
+@require_onboarding
+@bot.callback_query_handler(func=lambda call: call.data.startswith("qid_"))
+def handle_predefined_question_universal(call):
+    """
+    Универсальный обработчик для всех предопределенных вопросов.
+    Извлекает ID вопроса из callback_data, получает профиль пользователя из БД 
+    и отправляет запрос в RAG.
+    """
+    chat_id = call.message.chat.id
+    clear_dialog_context(chat_id)
+    
+    try:
+        question_id = int(call.data.split('_')[1])
+    except (ValueError, IndexError):
+        logger.error(f"Неверный формат callback_data для вопроса: {call.data}")
+        bot.send_message(chat_id, "Произошла ошибка, попробуйте снова.")
+        return
+
+    bot.send_message(chat_id, "Формирую ответ... ⏳", parse_mode='Markdown')
+    
+    role, specialization = get_user_profile_from_db(chat_id)
+    
+    if not role or not specialization:
+        bot.send_message(chat_id, "Не удалось получить ваш профиль. Пожалуйста, пройдите онбординг заново через /start.")
+        logger.warning(f"Не найден профиль для пользователя {chat_id} при обработке вопроса {question_id}")
+        return
+
+    logger.info(f"Пользователь {chat_id} (Роль: {role}, Специализация: {specialization}) задал вопрос с ID: {question_id}")
+    
+    try:
+        conn = sqlite3.connect(DATABASE_URL)
+        cursor = conn.cursor()
+        cursor.execute("SELECT question_text FROM Prompts WHERE question_id = ?", (question_id,))
+        result = cursor.fetchone()
+        conn.close()
+        if not result:
+            logger.error(f"Вопрос с ID {question_id} не найден в таблице Prompts.")
+            bot.send_message(chat_id, "Извините, этот вопрос больше не актуален.")
+            return
+        question_text = result[0]
+    except Exception as e:
+        logger.error(f"Ошибка при получении текста вопроса из БД для ID {question_id}: {e}")
+        bot.send_message(chat_id, "Произошла ошибка при получении текста вопроса.")
+        return
+
+    # Проверка кеша и отправка запроса
+    if (question_id in cache_dict):
+            asyncio.run(handling_cached_requests(question_id, call.message, question_text, specialization))
+    elif (question_id in cache_by_specialization) and (specialization in cache_by_specialization[question_id]):
+            asyncio.run(handling_cached_requests(question_id, call.message, question_text, specialization))
+    else:
+        asyncio.run(websocket_question_from_user(question_text, call.message, role, specialization, question_id))
+
 
 if __name__ == "__main__":
     # Запускаем API сервер в отдельном потоке
