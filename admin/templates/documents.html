@@ -72,9 +72,11 @@
                     <div class="mb-3">
                         <label for="pack_name" class="form-label">Выберите пакет</label>
                         <select class="form-select" id="pack_name" name="pack_name" required>
-                            <option value="pack_1">Пакет 1</option>
-                            <option value="pack_2">Пакет 2</option>
-                            <option value="pack_3">Пакет 3</option>
+                            {% for pname in documents.keys() %}
+                                {% if pname != 'docs_pack_full' %}
+                                    <option value="{{ pname }}">{{ pname }}</option>
+                                {% endif %}
+                            {% endfor %}
                         </select>
                     </div>
                 </form>

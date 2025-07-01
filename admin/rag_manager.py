@@ -4,21 +4,30 @@ from typing import Dict, List
 class RAGDocumentManager:
     def __init__(self, base_path: str = 'src/main_version/docs'):
         self.base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', base_path))
-        self.packs = {
-            "pack_1": os.path.join(self.base_path, "docs_pack_1"),
-            "pack_2": os.path.join(self.base_path, "docs_pack_2"),
-            "pack_3": os.path.join(self.base_path, "docs_pack_3"),
-            "pack_full": os.path.join(self.base_path, "docs_pack_full")
-        }
-        # Создаем директории, если они не существуют
-        for pack_path in self.packs.values():
-            os.makedirs(pack_path, exist_ok=True)
+        # Формируем словарь пакетов динамически: все директории, начинающиеся на
+        # "docs_pack_" внутри base_path. Название пакета берём без префикса.
+        self.packs = {}
+
+        if os.path.isdir(self.base_path):
+            for d in os.listdir(self.base_path):
+                full_path = os.path.join(self.base_path, d)
+                if os.path.isdir(full_path) and d.startswith("docs_pack_"):
+                    pack_name = d  # оставляем оригинальное имя
+                    self.packs[pack_name] = full_path
+
+        # Обеспечиваем наличие сводного пакета с копиями
+        full_pack_path = os.path.join(self.base_path, "docs_pack_full")
+        self.packs.setdefault("docs_pack_full", full_pack_path)
+
+        # Создаём директории, если их нет
+        for path in self.packs.values():
+            os.makedirs(path, exist_ok=True)
 
     def get_all_documents(self) -> Dict[str, List[Dict]]:
         """Получение списка всех документов по всем пакетам"""
         documents = {}
         for pack_name, pack_path in self.packs.items():
-            if pack_name != "pack_full":  # Пропускаем pack_full, так как он содержит копии
+            if pack_name != "docs_pack_full":  # Пропускаем docs_pack_full, так как он содержит копии
                 documents[pack_name] = []
                 if os.path.exists(pack_path):
                     for filename in os.listdir(pack_path):
@@ -35,7 +44,7 @@ class RAGDocumentManager:
 
     def add_document(self, content: str, filename: str, pack_name: str) -> None:
         """Добавление нового документа"""
-        if pack_name not in self.packs or pack_name == "pack_full":
+        if pack_name not in self.packs or pack_name == "docs_pack_full":
             raise ValueError(f"Неверное имя пакета: {pack_name}")
 
         if not filename.endswith('.txt'):
@@ -46,14 +55,14 @@ class RAGDocumentManager:
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(content)
 
-        # Также сохраняем в pack_full
-        full_path = os.path.join(self.packs["pack_full"], filename)
+        # Также сохраняем в docs_pack_full
+        full_path = os.path.join(self.packs["docs_pack_full"], filename)
         with open(full_path, 'w', encoding='utf-8') as f:
             f.write(content)
 
     def delete_document(self, filename: str, pack_name: str) -> None:
         """Удаление документа"""
-        if pack_name not in self.packs or pack_name == "pack_full":
+        if pack_name not in self.packs or pack_name == "docs_pack_full":
             raise ValueError(f"Неверное имя пакета: {pack_name}")
 
         # Удаляем из указанного пакета
@@ -61,8 +70,8 @@ class RAGDocumentManager:
         if os.path.exists(file_path):
             os.remove(file_path)
 
-        # Также удаляем из pack_full
-        full_path = os.path.join(self.packs["pack_full"], filename)
+        # Также удаляем из docs_pack_full
+        full_path = os.path.join(self.packs["docs_pack_full"], filename)
         if os.path.exists(full_path):
             os.remove(full_path)
 
