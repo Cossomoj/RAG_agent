@@ -548,48 +548,31 @@ async def websocket_endpoint(websocket: WebSocket):
     retrieval_chain = None
     should_use_rag = True # Всегда используем RAG с новой логикой
     
+    # --- 1. Всегда используем улучшенный RAG ---
     if should_use_rag:
-        # Используем улучшенный поиск для ВСЕХ типов вопросов
-        print(f"Используем улучшенный векторный поиск для question_id={question_id}")
+        print(f"RAG-search для question_id={question_id}")
         retrieval_chain = await create_enhanced_retrieval_chain(
             role=role,
             specialization=specialization,
             question_id=question_id,
             embedding_retriever=embedding_retriever,
-            prompt_template=prompt_template
+            prompt_template=prompt_template,
         )
 
-    # Убираем очистку от символов форматирования - они нужны для Markdown!
-    
-    elif should_use_rag and retrieval_chain is not None:
-        # Используем RAG для обычных промптов или для специальных промптов при релевантности
-        print(f"Используем RAG для промпта {question_id}")
-        
-        # Для промпта 888 передаем контекст диалога в chain
-        dialogue_context_for_chain = "[]"
-        if question_id == 888 and context and context != "[]":
-            dialogue_context_for_chain = context
-            
-        # Используем стриминг для всех промптов одинаково
-        async for chunk in retrieval_chain.astream({'input': question, 'dialogue_context': dialogue_context_for_chain}):
-            if chunk:
-                # Извлекаем ответ
-                answer = chunk.get("answer", "").strip()
+        # Для свободного ввода передаём историю диалога, иначе пустой список
+        dialogue_ctx = context if question_id == 888 and context and context != "[]" else "[]"
 
-                # Оставляем ответ как есть для сохранения Markdown форматирования
-                    
-                await websocket.send_text(answer)  # Отправляем очищенный текстовый ответ
-
+        async for chunk in retrieval_chain.astream({
+            "input": question,
+            "dialogue_context": dialogue_ctx,
+        }):
+            if chunk and chunk.get("answer"):
+                await websocket.send_text(chunk["answer"])
     else:
-        # Обработка случая, когда не попали ни в одно условие
-        print(f"ВНИМАНИЕ: Не найдена подходящая логика обработки!")
-        print(f"question_id: {question_id}")
-        print(f"count: {count}")
-        print(f"should_use_rag: {should_use_rag}")
-        print(f"retrieval_chain is not None: {retrieval_chain is not None}")
-        
-        await websocket.send_text("Извините, произошла ошибка при обработке запроса. Попробуйте еще раз.")
-            
+        # --- 2. Fallback ------------
+        print("[WARN] should_use_rag==False – fallback stub")
+        await websocket.send_text("К сожалению, сейчас сервис недоступен.")
+
     await websocket.close()
 
 if __name__ == "__main__":
@@ -652,7 +635,7 @@ class DatabaseOperations:
         # Реализация запроса
 
 class RAGDocumentManager:
-    def __init__(self, base_path="app/src/main_version/docs"):
+    def __init__(self, base_path="docs"):
         self.base_path = base_path
         self.packs = {
             "pack_1": os.path.join(base_path, "docs_pack_1"),

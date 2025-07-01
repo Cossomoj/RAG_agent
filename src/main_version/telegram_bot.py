@@ -919,7 +919,7 @@ async def check():
                 context_str = reminder['reminder_text']
                 if(not context_str):
                     context_str = "История сообщений пустая"
-                question_id = 666
+                question_id = 777
                 role = 'Аналитик'   
                 specialization = 'Специалист'
                 count_for_pro_activity = 102
@@ -2196,8 +2196,6 @@ def handle_clear_history(call):
     )
 
 # Обработчик подтверждения очистки истории
-# Убираем тестовый обработчик отсюда - переносим в начало файла
-
 @require_onboarding
 @bot.callback_query_handler(func=lambda call: call.data == "history_clear_confirm")
 def handle_clear_history_confirm(call):
@@ -2318,9 +2316,150 @@ def handle_predefined_question_universal(call):
         asyncio.run(websocket_question_from_user(question_text, call.message, role, specialization, question_id))
 
 
-if __name__ == "__main__":
-    # Запускаем API сервер в отдельном потоке
+# ================================================================
+# Новый блок запуска (должен располагаться **после** определения
+# функции start_cache_api_server, чтобы избежать NameError)
+# ================================================================
+
+if False and __name__ == "__main__":
+    # Запускаем вспомогательный HTTP-сервер кеша (порт 8007) в отдельном демоническом потоке
     api_thread = threading.Thread(target=start_cache_api_server, daemon=True)
     api_thread.start()
-    
+
+    # Запускаем Telegram-бот
     bot.polling(none_stop=False)
+
+# -----------------------------------------------------------------------------
+# HTTP-сервер для работы с кешем (порт 8007)
+# -----------------------------------------------------------------------------
+
+class CacheAPIHandler(BaseHTTPRequestHandler):
+    """Обрабатывает POST /clear-cache для сброса кеша и /send-message для рассылки."""
+
+    def _send_json(self, status: int, payload: dict):
+        self.send_response(status)
+        self.send_header("Content-type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+
+    def do_POST(self):
+        if self.path == "/clear-cache":
+            clear_all_cache()
+            self._send_json(200, {"success": True, "message": "Кеш успешно очищен"})
+        elif self.path == "/send-message":
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+                body = self.rfile.read(length)
+                data = json.loads(body.decode("utf-8"))
+                text = data.get("message", "")
+                if not text:
+                    self._send_json(400, {"success": False, "error": "Пустое сообщение"})
+                    return
+                result = send_message_to_all_users(text)
+                self._send_json(200 if result["success"] else 500, result)
+            except Exception as e:
+                logger.error(f"Ошибка /send-message: {e}")
+                self._send_json(500, {"success": False, "error": str(e)})
+        else:
+            self._send_json(404, {"success": False, "error": "Not found"})
+
+    def do_OPTIONS(self):
+        # CORS pre-flight
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+
+
+def start_cache_api_server():
+    """Запускает вспомогательный HTTP-сервер для управления кешем на 8007."""
+    logger.info("Запускаем Cache-API сервер на http://0.0.0.0:8007 …")
+    HTTPServer(("0.0.0.0", 8007), CacheAPIHandler).serve_forever()
+
+def __run_main():
+    """Запуск вспомогательного HTTP-сервера и Telegram-бота."""
+    api_thread = threading.Thread(target=start_cache_api_server, daemon=True)
+    api_thread.start()
+    bot.polling(none_stop=False)
+
+# -----------------------------------------------------------------------------
+# Перемещённый в самый конец файла блок запуска приложения
+# -----------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    pass  # отключено, будет запущено в конце файла
+
+# -----------------------------------------------------------------------------
+# Функция генерации подсказанных вопросов через вспомогательный WebSocket
+# -----------------------------------------------------------------------------
+
+async def generate_and_show_suggested_questions(chat_id: int,
+                                                user_question: str,
+                                                bot_answer: str,
+                                                role: str,
+                                                specialization: str):
+    """Получает список последующих вопросов от вспомогательного сервиса и
+    показывает пользователю до трёх вариантов.
+
+    Параметры
+    ----------
+    chat_id : int
+        Telegram-ID пользователя
+    user_question : str
+        Последний вопрос пользователя
+    bot_answer : str
+        Полный ответ бота (может быть усечён до 2 000 символов)
+    role, specialization : str
+        Профиль пользователя для лучшего подбора подсказок
+    """
+
+    payload = {
+        "user_question": user_question,
+        "bot_answer": bot_answer,
+        "role": role,
+        "specialization": specialization,
+    }
+
+    try:
+        ws_url = "ws://127.0.0.1:8000/ws_suggest"
+        logger.debug(f"[suggest] connect {ws_url} …; payload size ≈{len(json.dumps(payload))} B")
+
+        async with websockets.connect(ws_url) as websocket:
+            await websocket.send(json.dumps(payload, ensure_ascii=False))
+            raw = await websocket.recv()
+            suggestions = json.loads(raw)
+
+            if isinstance(suggestions, dict) and suggestions.get("error"):
+                logger.warning(f"[suggest] error from service: {suggestions['error']}")
+                return
+
+            if not isinstance(suggestions, list) or not suggestions:
+                logger.info("[suggest] empty list – nothing to show")
+                return
+
+            # Cохраняем полный список, но выводим только первые 3 пункта
+            suggested_questions_storage[chat_id] = suggestions
+
+            buttons = [types.InlineKeyboardButton(text=str(i + 1),
+                                                 callback_data=f"suggested_question_{i}")
+                       for i in range(min(3, len(suggestions)))]
+
+            markup = types.InlineKeyboardMarkup()
+            markup.add(*buttons)
+
+            preview_text = "\n".join([f"{i + 1}. {q}" for i, q in enumerate(suggestions[:3])])
+            bot.send_message(chat_id,
+                             f"💡 Возможно, вас заинтересует:\n{preview_text}",
+                             reply_markup=markup)
+
+    except Exception as exc:
+        logger.error(f"[suggest] failure: {exc}")
+
+# -----------------------------------------------------------------------------
+# Запуск приложения (после определения всех функций)
+# -----------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    __run_main()
