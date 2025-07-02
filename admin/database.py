@@ -352,4 +352,181 @@ class DatabaseOperations:
                 'specializations': [],
                 'roles': [],
                 'period_days': days
-            } 
+            }
+    
+    def get_all_questions(self, page=1, per_page=20, category=None):
+        """Получение списка всех вопросов с пагинацией и фильтрацией"""
+        try:
+            with self.get_db() as conn:
+                cursor = conn.cursor()
+                
+                # Базовый запрос
+                base_query = """
+                SELECT q.*, p.prompt_template, v.display_name as vector_store_display
+                FROM Questions q
+                LEFT JOIN Prompts p ON q.prompt_id = p.question_id
+                LEFT JOIN VectorStores v ON q.vector_store = v.name
+                """
+                
+                # Добавляем фильтр по категории если нужно
+                where_clause = ""
+                params = []
+                if category:
+                    where_clause = "WHERE q.category = ?"
+                    params.append(category)
+                
+                # Считаем общее количество
+                count_query = f"SELECT COUNT(*) FROM Questions q {where_clause}"
+                cursor.execute(count_query, params)
+                total_count = cursor.fetchone()[0]
+                
+                # Получаем вопросы с пагинацией
+                query = f"{base_query} {where_clause} ORDER BY q.order_position, q.id LIMIT ? OFFSET ?"
+                params.extend([per_page, (page - 1) * per_page])
+                cursor.execute(query, params)
+                
+                questions = [dict(row) for row in cursor.fetchall()]
+                
+                return {
+                    'questions': questions,
+                    'total': total_count,
+                    'page': page,
+                    'per_page': per_page,
+                    'total_pages': (total_count + per_page - 1) // per_page
+                }
+                
+        except sqlite3.Error as e:
+            print(f"Ошибка при получении вопросов: {e}")
+            return {
+                'questions': [],
+                'total': 0,
+                'page': 1,
+                'per_page': per_page,
+                'total_pages': 0
+            }
+    
+    def get_question(self, callback_data):
+        """Получение одного вопроса по callback_data"""
+        with self.get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT q.*, p.prompt_template
+                FROM Questions q
+                LEFT JOIN Prompts p ON q.prompt_id = p.question_id
+                WHERE q.callback_data = ?
+            """, (callback_data,))
+            row = cursor.fetchone()
+            if row:
+                return dict(row)
+            return None
+    
+    def add_question(self, callback_data, question_text, question_id, category=None, 
+                    role=None, specialization=None, vector_store='auto', prompt_id=None, 
+                    is_active=True, order_position=None):
+        """Добавление нового вопроса"""
+        try:
+            with self.get_db() as conn:
+                cursor = conn.cursor()
+                
+                # Если order_position не указан, ставим в конец
+                if order_position is None:
+                    cursor.execute("SELECT MAX(order_position) FROM Questions")
+                    max_pos = cursor.fetchone()[0] or 0
+                    order_position = max_pos + 10
+                
+                cursor.execute("""
+                    INSERT INTO Questions 
+                    (callback_data, question_text, question_id, category, role, 
+                     specialization, vector_store, prompt_id, is_active, order_position)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    callback_data, question_text, question_id, category, role,
+                    specialization, vector_store, prompt_id, is_active, order_position
+                ))
+                conn.commit()
+                return cursor.lastrowid
+        except sqlite3.Error as e:
+            print(f"Ошибка при добавлении вопроса: {e}")
+            raise
+    
+    def update_question(self, old_callback_data, **kwargs):
+        """Обновление существующего вопроса"""
+        try:
+            with self.get_db() as conn:
+                cursor = conn.cursor()
+                
+                # Строим запрос на обновление
+                set_parts = []
+                values = []
+                
+                for key, value in kwargs.items():
+                    if key in ['callback_data', 'question_text', 'question_id', 'category', 
+                              'role', 'specialization', 'vector_store', 'prompt_id', 
+                              'is_active', 'order_position']:
+                        set_parts.append(f"{key} = ?")
+                        values.append(value)
+                
+                if not set_parts:
+                    return False
+                
+                values.append(old_callback_data)
+                
+                cursor.execute(f"""
+                    UPDATE Questions 
+                    SET {', '.join(set_parts)}, updated_at = CURRENT_TIMESTAMP
+                    WHERE callback_data = ?
+                """, values)
+                
+                conn.commit()
+                return cursor.rowcount > 0
+                
+        except sqlite3.Error as e:
+            print(f"Ошибка при обновлении вопроса: {e}")
+            raise
+    
+    def delete_question(self, callback_data):
+        """Удаление вопроса"""
+        with self.get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM Questions WHERE callback_data = ?", (callback_data,))
+            conn.commit()
+            if cursor.rowcount == 0:
+                raise ValueError(f"Вопрос с callback_data {callback_data} не найден")
+    
+    def get_all_vector_stores(self):
+        """Получение списка всех векторных хранилищ"""
+        try:
+            with self.get_db() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM VectorStores ORDER BY id")
+                return [dict(row) for row in cursor.fetchall()]
+        except sqlite3.Error as e:
+            print(f"Ошибка при получении векторных хранилищ: {e}")
+            return []
+    
+    def get_question_categories(self):
+        """Получение списка всех категорий вопросов"""
+        try:
+            with self.get_db() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT DISTINCT category, COUNT(*) as count 
+                    FROM Questions 
+                    WHERE category IS NOT NULL 
+                    GROUP BY category 
+                    ORDER BY category
+                """)
+                return [dict(row) for row in cursor.fetchall()]
+        except sqlite3.Error as e:
+            print(f"Ошибка при получении категорий: {e}")
+            return []
+    
+    def reload_questions_cache(self):
+        """Отправляет команду боту на перезагрузку кеша вопросов"""
+        try:
+            import requests
+            response = requests.post('http://127.0.0.1:8007/reload-questions')
+            return response.json()
+        except Exception as e:
+            print(f"Ошибка при перезагрузке кеша вопросов: {e}")
+            return {"success": False, "error": str(e)} 

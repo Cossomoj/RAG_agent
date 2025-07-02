@@ -365,5 +365,127 @@ def send_message():
     except Exception as e:
         return jsonify({'success': False, 'error': f'Ошибка при отправке сообщения: {str(e)}'})
 
+# Маршруты для работы с вопросами
+@app.route('/questions')
+@login_required
+def questions():
+    # Получаем параметры из URL
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    category = request.args.get('category')
+    
+    # Ограничиваем количество записей на странице
+    if per_page > 100:
+        per_page = 100
+    if per_page < 5:
+        per_page = 5
+    
+    questions_data = db.get_all_questions(page=page, per_page=per_page, category=category)
+    categories = db.get_question_categories()
+    vector_stores = db.get_all_vector_stores()
+    prompts = db.get_all_prompts()
+    
+    return render_template('questions.html', 
+                         questions=questions_data['questions'],
+                         total=questions_data['total'],
+                         page=questions_data['page'],
+                         per_page=questions_data['per_page'],
+                         total_pages=questions_data['total_pages'],
+                         categories=categories,
+                         current_category=category,
+                         vector_stores=vector_stores,
+                         prompts=prompts)
+
+@app.route('/questions/add', methods=['POST'])
+@login_required
+def add_question():
+    try:
+        data = request.get_json()
+        
+        # Проверяем обязательные поля
+        if not data.get('callback_data') or not data.get('question_text') or not data.get('question_id'):
+            return jsonify({'success': False, 'error': 'Заполните все обязательные поля'})
+        
+        # Добавляем вопрос
+        db.add_question(
+            callback_data=data['callback_data'],
+            question_text=data['question_text'],
+            question_id=int(data['question_id']),
+            category=data.get('category'),
+            role=data.get('role'),
+            specialization=data.get('specialization'),
+            vector_store=data.get('vector_store', 'auto'),
+            prompt_id=data.get('prompt_id') if data.get('prompt_id') else None,
+            is_active=data.get('is_active', True)
+        )
+        
+        # Перезагружаем кеш вопросов в боте
+        db.reload_questions_cache()
+        
+        return jsonify({'success': True, 'message': 'Вопрос успешно добавлен'})
+    except sqlite3.IntegrityError:
+        return jsonify({'success': False, 'error': 'Вопрос с таким callback_data или question_id уже существует'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/questions/<callback_data>', methods=['GET'])
+@login_required
+def get_question(callback_data):
+    question = db.get_question(callback_data)
+    if question:
+        return jsonify(question)
+    return jsonify({'error': 'Вопрос не найден'}), 404
+
+@app.route('/questions/<callback_data>', methods=['PUT'])
+@login_required
+def update_question(callback_data):
+    try:
+        data = request.get_json()
+        
+        # Фильтруем только допустимые поля для обновления
+        update_data = {}
+        allowed_fields = ['callback_data', 'question_text', 'question_id', 'category', 
+                         'role', 'specialization', 'vector_store', 'prompt_id', 
+                         'is_active', 'order_position']
+        
+        for field in allowed_fields:
+            if field in data:
+                if field == 'question_id' or field == 'prompt_id' or field == 'order_position':
+                    update_data[field] = int(data[field]) if data[field] else None
+                elif field == 'is_active':
+                    update_data[field] = bool(data[field])
+                else:
+                    update_data[field] = data[field]
+        
+        success = db.update_question(callback_data, **update_data)
+        
+        if success:
+            # Перезагружаем кеш вопросов в боте
+            db.reload_questions_cache()
+            return jsonify({'success': True, 'message': 'Вопрос успешно обновлен'})
+        else:
+            return jsonify({'success': False, 'error': 'Вопрос не найден'})
+            
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/questions/<callback_data>', methods=['DELETE'])
+@login_required
+def delete_question(callback_data):
+    try:
+        db.delete_question(callback_data)
+        # Перезагружаем кеш вопросов в боте
+        db.reload_questions_cache()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/questions/reload-cache', methods=['POST'])
+@login_required
+def reload_questions_cache():
+    """Принудительная перезагрузка кеша вопросов в боте"""
+    result = db.reload_questions_cache()
+    return jsonify(result)
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8002) 

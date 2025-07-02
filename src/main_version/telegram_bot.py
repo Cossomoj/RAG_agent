@@ -14,6 +14,7 @@ import threading
 import pytz
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import logging
+from questions_loader import questions_loader
 
 load_dotenv()
 
@@ -1150,71 +1151,25 @@ def handle_role(call):
     # Показываем соответствующие вопросы в зависимости от роли и специализации
     markup = types.InlineKeyboardMarkup(row_width=1)
     
-    if role == "PO/PM":
-        questions = [
-            types.InlineKeyboardButton(text="Что я могу ожидать от специалиста", callback_data="qid_15"),
-            types.InlineKeyboardButton(text="Что я могу ожидать от лида компетенции", callback_data="qid_16"),
-            types.InlineKeyboardButton(text="Что ожидается от меня", callback_data="qid_17"),
-            types.InlineKeyboardButton(text="Лучшие практики", callback_data="qid_22"),
-            types.InlineKeyboardButton(text="Что такое SDLC", callback_data="qid_23"),
-            types.InlineKeyboardButton(text="Советы по тайм-менеджменту", callback_data="qid_24"),
-            types.InlineKeyboardButton(text="Что еще ты умеешь?", callback_data="question_777"),
-            types.InlineKeyboardButton(text="Ввести свой вопрос", callback_data="question_custom"),
-            types.InlineKeyboardButton(text="В начало", callback_data="start")
-        ]
-    elif role == "Лид компетенции":
-        # Общие вопросы для всех лидов
-        questions = [
-            types.InlineKeyboardButton(text="Что я могу ожидать от специалиста ", callback_data="qid_18"),
-            types.InlineKeyboardButton(text="Что я могу ожидать от своего PO/PM ", callback_data="qid_19"),
-            types.InlineKeyboardButton(text="Что ожидается от меня", callback_data="qid_20"),
-        ]
-        # Вопросы из группы "Что ожидается от меня"
-        questions.extend([
-            types.InlineKeyboardButton(text="Поиск кандидатов на работу", callback_data="qid_6"),
-            types.InlineKeyboardButton(text="Проведение собеседований", callback_data="qid_7"),
-            types.InlineKeyboardButton(text="Работа со стажерами/джунами", callback_data="qid_8"),
-            types.InlineKeyboardButton(text="Проведение 1-2-1", callback_data="qid_9"),
-            types.InlineKeyboardButton(text="Проведение встреч компетенции", callback_data="qid_10"),
-        ])
-        # Вопросы из группы "Прочее"
-        questions.extend([
-            types.InlineKeyboardButton(text="Построение структуры компетенции", callback_data="qid_11"),
-            types.InlineKeyboardButton(text="Создание ИПР", callback_data="qid_12"),
-            types.InlineKeyboardButton(text="Как провести онбординг", callback_data="qid_13"),
-            types.InlineKeyboardButton(text="Оптимизация процессов разработки", callback_data="qid_14"),
-            types.InlineKeyboardButton(text="Советы по тайм-менеджменту", callback_data="qid_24"),
-        ])
-        questions.extend([
-            types.InlineKeyboardButton(text="Ввести свой вопрос", callback_data="question_custom"),
-            types.InlineKeyboardButton(text="В начало", callback_data="start")
-        ])
-            
-    elif role == "Стажер":
-        questions = [
-            types.InlineKeyboardButton(text="Что я могу ожидать от PO/PM", callback_data="qid_1"),
-            types.InlineKeyboardButton(text="Что я могу ожидать от своего лида", callback_data="qid_2"),
-            types.InlineKeyboardButton(text="Рекомендации для стажеров", callback_data="qid_21"),
-            types.InlineKeyboardButton(text="Посмотреть матрицу компетенций", callback_data="qid_3"),
-            # Добавляем вопросы из группы "Прочее"
-            types.InlineKeyboardButton(text="Лучшие практики", callback_data="qid_22"),
-            types.InlineKeyboardButton(text="Что такое SDLC", callback_data="qid_23"),
-            types.InlineKeyboardButton(text="Советы по тайм-менеджменту", callback_data="qid_24"),
-            types.InlineKeyboardButton(text="Ввести свой вопрос", callback_data="question_custom"),
-            types.InlineKeyboardButton(text="В начало", callback_data="start")
-        ]
-    else:  # Специалист
-        questions = [
-            types.InlineKeyboardButton(text="Что я могу ожидать от своего PO/PM", callback_data="qid_1"),
-            types.InlineKeyboardButton(text="Что я могу ожидать от своего Лида", callback_data="qid_2"),
-            types.InlineKeyboardButton(text="Посмотреть матрицу компетенций", callback_data="qid_3"),
-            # Добавляем вопросы из группы "Прочее"
-            types.InlineKeyboardButton(text="Лучшие практики", callback_data="qid_22"),
-            types.InlineKeyboardButton(text="Что такое SDLC", callback_data="qid_23"),
-            types.InlineKeyboardButton(text="Советы по тайм-менеджменту", callback_data="qid_24"),
-            types.InlineKeyboardButton(text="Ввести свой вопрос", callback_data="question_custom"),
-            types.InlineKeyboardButton(text="В начало", callback_data="start")
-        ]
+    # Получаем вопросы из БД через questions_loader
+    questions_list = questions_loader.get_questions_by_role(role, specialization)
+    
+    questions = []
+    for q in questions_list:
+        # Создаем кнопку для каждого вопроса
+        questions.append(
+            types.InlineKeyboardButton(
+                text=q['question_text'], 
+                callback_data=q['callback_data']
+            )
+        )
+    
+    # Добавляем системные кнопки, которые есть всегда
+    if role != "PO/PM":  # Для всех, кроме PO/PM
+        questions.append(types.InlineKeyboardButton(text="Что еще ты умеешь?", callback_data="question_777"))
+    
+    questions.append(types.InlineKeyboardButton(text="Ввести свой вопрос", callback_data="question_custom"))
+    questions.append(types.InlineKeyboardButton(text="В начало", callback_data="start"))
     
     markup.add(*questions)
     bot.edit_message_text(
@@ -1741,7 +1696,7 @@ async def handling_cached_requests(question_id, message, question, specializatio
 
 
     #mplusk2
-async def websocket_question_from_user(question, message, role, specialization, question_id, show_suggested_questions=True):
+async def websocket_question_from_user(question, message, role, specialization, question_id, show_suggested_questions=True, vector_store='auto'):
     print(f"websocket_question_from_user: question='{question}', question_id={question_id}")
     wanted_simbols = [".", ":"]
 
@@ -1779,6 +1734,7 @@ async def websocket_question_from_user(question, message, role, specialization, 
             await websocket.send(str(question_id))
             await websocket.send(context_str)
             await websocket.send(str(count_questions_users[chat_id]))
+            await websocket.send(vector_store)  # Отправляем настройку векторного хранилища
             logger.info(f"Данные отправлены, ожидаем ответ от RAG сервиса")
 
             try:
@@ -2263,22 +2219,49 @@ def get_user_profile_from_db(chat_id):
 
 
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data.startswith("qid_"))
+@bot.callback_query_handler(func=lambda call: call.data.startswith("qid_") or questions_loader.get_question_by_callback(call.data) is not None)
 def handle_predefined_question_universal(call):
     """
     Универсальный обработчик для всех предопределенных вопросов.
-    Извлекает ID вопроса из callback_data, получает профиль пользователя из БД 
-    и отправляет запрос в RAG.
+    Обрабатывает как старый формат (qid_), так и новые вопросы из БД.
     """
     chat_id = call.message.chat.id
     clear_dialog_context(chat_id)
     
-    try:
-        question_id = int(call.data.split('_')[1])
-    except (ValueError, IndexError):
-        logger.error(f"Неверный формат callback_data для вопроса: {call.data}")
-        bot.send_message(chat_id, "Произошла ошибка, попробуйте снова.")
-        return
+    # Получаем информацию о вопросе из БД
+    question_info = questions_loader.get_question_by_callback(call.data)
+    
+    if question_info:
+        # Вопрос найден в новой системе
+        question_id = question_info['question_id']
+        question_text = question_info['question_text']
+        vector_store_setting = question_info.get('vector_store', 'auto')
+    else:
+        # Попытка обработать старый формат qid_
+        try:
+            question_id = int(call.data.split('_')[1])
+        except (ValueError, IndexError):
+            logger.error(f"Неверный формат callback_data для вопроса: {call.data}")
+            bot.send_message(chat_id, "Произошла ошибка, попробуйте снова.")
+            return
+        
+        # Получаем текст вопроса из таблицы Prompts
+        try:
+            conn = sqlite3.connect(DATABASE_URL)
+            cursor = conn.cursor()
+            cursor.execute("SELECT question_text FROM Prompts WHERE question_id = ?", (question_id,))
+            result = cursor.fetchone()
+            conn.close()
+            if not result:
+                logger.error(f"Вопрос с ID {question_id} не найден в таблице Prompts.")
+                bot.send_message(chat_id, "Извините, этот вопрос больше не актуален.")
+                return
+            question_text = result[0]
+            vector_store_setting = 'auto'  # Для старых вопросов используем auto
+        except Exception as e:
+            logger.error(f"Ошибка при получении текста вопроса из БД для ID {question_id}: {e}")
+            bot.send_message(chat_id, "Произошла ошибка при получении текста вопроса.")
+            return
 
     bot.send_message(chat_id, "Формирую ответ... ⏳", parse_mode='Markdown')
     
@@ -2291,29 +2274,18 @@ def handle_predefined_question_universal(call):
 
     logger.info(f"Пользователь {chat_id} (Роль: {role}, Специализация: {specialization}) задал вопрос с ID: {question_id}")
     
-    try:
-        conn = sqlite3.connect(DATABASE_URL)
-        cursor = conn.cursor()
-        cursor.execute("SELECT question_text FROM Prompts WHERE question_id = ?", (question_id,))
-        result = cursor.fetchone()
-        conn.close()
-        if not result:
-            logger.error(f"Вопрос с ID {question_id} не найден в таблице Prompts.")
-            bot.send_message(chat_id, "Извините, этот вопрос больше не актуален.")
-            return
-        question_text = result[0]
-    except Exception as e:
-        logger.error(f"Ошибка при получении текста вопроса из БД для ID {question_id}: {e}")
-        bot.send_message(chat_id, "Произошла ошибка при получении текста вопроса.")
-        return
-
+    # Определяем векторное хранилище для вопроса
+    actual_vector_store = questions_loader.get_vector_store_for_question(call.data, specialization)
+    logger.info(f"Используется векторное хранилище: {actual_vector_store}")
+    
     # Проверка кеша и отправка запроса
     if (question_id in cache_dict):
             asyncio.run(handling_cached_requests(question_id, call.message, question_text, specialization))
     elif (question_id in cache_by_specialization) and (specialization in cache_by_specialization[question_id]):
             asyncio.run(handling_cached_requests(question_id, call.message, question_text, specialization))
     else:
-        asyncio.run(websocket_question_from_user(question_text, call.message, role, specialization, question_id))
+        # Передаем информацию о векторном хранилище в RAG
+        asyncio.run(websocket_question_from_user(question_text, call.message, role, specialization, question_id, show_suggested_questions=True, vector_store=actual_vector_store))
 
 
 # ================================================================
@@ -2360,6 +2332,13 @@ class CacheAPIHandler(BaseHTTPRequestHandler):
                 self._send_json(200 if result["success"] else 500, result)
             except Exception as e:
                 logger.error(f"Ошибка /send-message: {e}")
+                self._send_json(500, {"success": False, "error": str(e)})
+        elif self.path == "/reload-questions":
+            try:
+                questions_loader.reload_questions()
+                self._send_json(200, {"success": True, "message": "Кеш вопросов успешно перезагружен"})
+            except Exception as e:
+                logger.error(f"Ошибка /reload-questions: {e}")
                 self._send_json(500, {"success": False, "error": str(e)})
         else:
             self._send_json(404, {"success": False, "error": "Not found"})

@@ -156,10 +156,31 @@ def get_prompt_from_db(question_id):
 
 
 
-def get_best_retriever_for_role_spec(role, specialization):
+def get_best_retriever_for_role_spec(role, specialization, vector_store_preference='auto'):
     """
-    Выбирает лучший retriever на основе специализации
+    Выбирает лучший retriever на основе специализации и настроек вопроса
+    
+    Args:
+        role: Роль пользователя
+        specialization: Специализация пользователя
+        vector_store_preference: Настройка векторного хранилища из БД ('auto', 'by_specialization', 'analyst', 'qa', 'web', 'java', 'python', 'ensemble')
     """
+    # Маппинг названий векторных хранилищ на ретриверы
+    store_mapping = {
+        'analyst': embedding_retriever_bsa,
+        'qa': embedding_retriever_test,
+        'web': embedding_retriever_web,
+        'java': embedding_retriever_java,
+        'python': embedding_retriever_python,
+        'ensemble': ensemble_retriever
+    }
+    
+    # Если указано конкретное хранилище, используем его
+    if vector_store_preference in store_mapping:
+        print(f"Используется явно указанный retriever: {vector_store_preference}")
+        return store_mapping[vector_store_preference]
+    
+    # Если auto или by_specialization, выбираем по специализации
     spec_lower = specialization.lower() if specialization else ""
     
     if 'аналитик' in spec_lower:
@@ -529,6 +550,13 @@ async def websocket_endpoint(websocket: WebSocket):
     context = await websocket.receive_text()
     print(context)
     count = await websocket.receive_text()
+    
+    # Получаем параметр vector_store (если есть)
+    try:
+        vector_store = await websocket.receive_text()
+    except:
+        vector_store = 'auto'  # Значение по умолчанию для обратной совместимости
+    
     question_id = int(question_id)
     count = int(count)
     print(question)
@@ -536,13 +564,15 @@ async def websocket_endpoint(websocket: WebSocket):
     print(specialization)
     print(f"количество {count}")
     print(f"айди {question_id}")
+    print(f"векторное хранилище {vector_store}")
+    
     prompt_template = get_prompt_from_db(question_id)
     if not prompt_template:
         prompt_template = get_prompt_from_db(777)
     
-    # Логика выбора retriever теперь полностью определяется функцией get_best_retriever_for_role_spec
-    print(f"Определяем retriever для роли '{role}' и специализации '{specialization}'...")
-    embedding_retriever = get_best_retriever_for_role_spec(role, specialization)
+    # Логика выбора retriever теперь учитывает параметр vector_store
+    print(f"Определяем retriever для роли '{role}', специализации '{specialization}' и настройки '{vector_store}'...")
+    embedding_retriever = get_best_retriever_for_role_spec(role, specialization, vector_store)
 
     # Создаем retrieval_chain для вопросов, которые его используют
     retrieval_chain = None
