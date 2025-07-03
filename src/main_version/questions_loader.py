@@ -91,7 +91,7 @@ class QuestionsLoader:
                 if q['specialization'] is None or q['specialization'] == specialization:
                     result.append(q)
         
-        return sorted(result, key=lambda x: (x['order_position'], x['id']))
+        return sorted(result, key=lambda x: (x['order_position'] if x['order_position'] is not None else float('inf'), x['id']))
     
     def get_categories_for_role(self, role: str) -> List[str]:
         """Получает список категорий, доступных для роли"""

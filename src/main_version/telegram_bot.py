@@ -1465,32 +1465,61 @@ def handle_predefined_question_group_2(call):
 @bot.callback_query_handler(func=lambda call: call.data in ["question_1", "question_2", "question_3", "question_4", "question_5", "question_18", "question_19", "question_20", "question_21"])
 def handle_predefined_question(call):
     """
-    Универсальный обработчик для всех предопределенных вопросов.
-    Извлекает профиль пользователя и отправляет запрос в RAG.
+    Универсальный обработчик для старых «жестко заданных» вопросов.
+    Теперь также передаёт настройку vector_store и использует prompt_id.
     """
     chat_id = call.message.chat.id
-    question_id = int(call.data.split('_')[1])
-    
-    bot.send_message(chat_id, "Формирую ответ... ⏳", parse_mode='Markdown')
-    
-    # Получаем актуальный профиль пользователя из БД
+    callback_data = call.data
+    question_id = int(callback_data.split('_')[1])
+    logger.info(f"[{chat_id}] handle_predefined_question for {callback_data}")
+
+    # Получаем профиль пользователя
     role, specialization = get_user_profile_from_db(chat_id)
-    
     if not role or not specialization:
         bot.send_message(chat_id, "Не удалось получить ваш профиль. Пожалуйста, пройдите онбординг заново через /start.")
-        logger.warning(f"Не найден профиль для пользователя {chat_id} при обработке вопроса {question_id}")
+        logger.warning(f"[{chat_id}] Профиль не найден при обработке {callback_data}")
         return
 
-    logger.info(f"Пользователь {chat_id} (Роль: {role}, Специализация: {specialization}) задал вопрос с ID: {question_id}")
-    
-    conn = sqlite3.connect(DATABASE_URL)
-    cursor = conn.cursor()
-    cursor.execute("SELECT question_text FROM Prompts WHERE question_id = ?", (question_id,))
-    question_text = cursor.fetchone()[0]
-    conn.close()
+    # Получаем текст вопроса, vector_store и prompt_id
+    try:
+        conn = sqlite3.connect(DATABASE_URL)
+        cursor = conn.cursor()
+        cursor.execute("SELECT question_text, vector_store, prompt_id FROM Questions WHERE question_id = ?", (question_id,))
+        row = cursor.fetchone()
+        conn.close()
+        
+        if not row:
+            bot.send_message(chat_id, "Извините, этот вопрос больше не актуален.")
+            logger.warning(f"[{chat_id}] Вопрос ID={question_id} не найден в Questions.")
+            return
+            
+        question_text, vector_store_setting, prompt_id = row
+        if not vector_store_setting:
+            vector_store_setting = 'auto'
+        
+        # Если prompt_id задан, он имеет приоритет над question_id
+        rag_id = prompt_id if prompt_id is not None else question_id
+        
+    except Exception as e:
+        logger.error(f"[{chat_id}] DB error while fetching question {question_id}: {e}")
+        bot.send_message(chat_id, "Произошла ошибка при обработке запроса. Попробуйте позже.")
+        return
 
-    # Запускаем асинхронную отправку вопроса в RAG
-    asyncio.run(websocket_question_from_user(question_text, call.message, role, specialization, question_id))
+    logger.info(f"[{chat_id}] Handling question. RAG_ID={rag_id}, VS='{vector_store_setting}', Role='{role}', Spec='{specialization}'")
+
+    # Сообщение «Формирую ответ»
+    typing_msg = bot.send_message(chat_id, "Формирую ответ... ⏳", parse_mode='Markdown')
+
+    # Запуск асинхронного запроса в RAG
+    asyncio.run(websocket_question_from_user(
+        question=question_text,
+        message=typing_msg,
+        role=role,
+        specialization=specialization,
+        question_id=rag_id, # ИСПРАВЛЕНО: передаем правильный ID
+        show_suggested_questions=True,
+        vector_store=vector_store_setting
+    ))
 
 @require_onboarding
 @bot.callback_query_handler(func=lambda call: call.data == "question_777")
@@ -2222,71 +2251,55 @@ def get_user_profile_from_db(chat_id):
 @bot.callback_query_handler(func=lambda call: call.data.startswith("qid_") or questions_loader.get_question_by_callback(call.data) is not None)
 def handle_predefined_question_universal(call):
     """
-    Универсальный обработчик для всех предопределенных вопросов.
-    Обрабатывает как старый формат (qid_), так и новые вопросы из БД.
+    Универсальный обработчик для всех кнопок с вопросами.
+    Загружает вопрос из `questions_loader` и обрабатывает его.
     """
     chat_id = call.message.chat.id
-    clear_dialog_context(chat_id)
+    callback_data = call.data
+    logger.info(f"[{chat_id}] Received universal callback: {callback_data}")
     
-    # Получаем информацию о вопросе из БД
-    question_info = questions_loader.get_question_by_callback(call.data)
+    question_info = questions_loader.get_question_by_callback(callback_data)
     
-    if question_info:
-        # Вопрос найден в новой системе
-        question_id = question_info['question_id']
-        question_text = question_info['question_text']
-        vector_store_setting = question_info.get('vector_store', 'auto')
-    else:
-        # Попытка обработать старый формат qid_
-        try:
-            question_id = int(call.data.split('_')[1])
-        except (ValueError, IndexError):
-            logger.error(f"Неверный формат callback_data для вопроса: {call.data}")
-            bot.send_message(chat_id, "Произошла ошибка, попробуйте снова.")
-            return
-        
-        # Получаем текст вопроса из таблицы Prompts
-        try:
-            conn = sqlite3.connect(DATABASE_URL)
-            cursor = conn.cursor()
-            cursor.execute("SELECT question_text FROM Prompts WHERE question_id = ?", (question_id,))
-            result = cursor.fetchone()
-            conn.close()
-            if not result:
-                logger.error(f"Вопрос с ID {question_id} не найден в таблице Prompts.")
-                bot.send_message(chat_id, "Извините, этот вопрос больше не актуален.")
-                return
-            question_text = result[0]
-            vector_store_setting = 'auto'  # Для старых вопросов используем auto
-        except Exception as e:
-            logger.error(f"Ошибка при получении текста вопроса из БД для ID {question_id}: {e}")
-            bot.send_message(chat_id, "Произошла ошибка при получении текста вопроса.")
-            return
-
-    bot.send_message(chat_id, "Формирую ответ... ⏳", parse_mode='Markdown')
-    
-    role, specialization = get_user_profile_from_db(chat_id)
-    
-    if not role or not specialization:
-        bot.send_message(chat_id, "Не удалось получить ваш профиль. Пожалуйста, пройдите онбординг заново через /start.")
-        logger.warning(f"Не найден профиль для пользователя {chat_id} при обработке вопроса {question_id}")
+    if not question_info:
+        logger.warning(f"[{chat_id}] Question with callback '{callback_data}' not found.")
+        bot.answer_callback_query(call.id, "Извините, этот вопрос больше не актуален.")
         return
-
-    logger.info(f"Пользователь {chat_id} (Роль: {role}, Специализация: {specialization}) задал вопрос с ID: {question_id}")
+        
+    question_id = question_info['question_id']
+    # Если у вопроса в БД указан prompt_id, используем его для RAG вместо устаревшего question_id
+    prompt_id = question_info.get('prompt_id')
+    rag_id = prompt_id if prompt_id else question_id
+    question_text = question_info['question_text']
+    vector_store_setting = question_info.get('vector_store', 'auto')
     
-    # Определяем векторное хранилище для вопроса
-    actual_vector_store = questions_loader.get_vector_store_for_question(call.data, specialization)
-    logger.info(f"Используется векторное хранилище: {actual_vector_store}")
+    # ИСПРАВЛЕНО: Распаковываем кортеж, а не используем как словарь
+    role, specialization = get_user_profile_from_db(chat_id)
+    if not role or not specialization:
+        logger.error(f"[{chat_id}] User profile not found, redirecting to onboarding.")
+        redirect_to_onboarding(call.message)
+        return
     
-    # Проверка кеша и отправка запроса
-    if (question_id in cache_dict):
-            asyncio.run(handling_cached_requests(question_id, call.message, question_text, specialization))
-    elif (question_id in cache_by_specialization) and (specialization in cache_by_specialization[question_id]):
-            asyncio.run(handling_cached_requests(question_id, call.message, question_text, specialization))
-    else:
-        # Передаем информацию о векторном хранилище в RAG
-        asyncio.run(websocket_question_from_user(question_text, call.message, role, specialization, question_id, show_suggested_questions=True, vector_store=actual_vector_store))
-
+    logger.info(f"[{chat_id}] Handling question_id={rag_id}, Role='{role}', Spec='{specialization}', VS='{vector_store_setting}'")
+    
+    typing_message = bot.send_message(chat_id, "<i>Печатаю...</i>", parse_mode='HTML')
+    
+    try:
+        asyncio.run(websocket_question_from_user(
+            question=question_text,
+            message=typing_message,
+            role=role,
+            specialization=specialization,
+            question_id=rag_id,
+            show_suggested_questions=True,
+            vector_store=vector_store_setting
+        ))
+    except Exception as e:
+        logger.error(f"[{chat_id}] Error in universal handler for question_id={rag_id}: {e}")
+        bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=typing_message.message_id,
+            text="Произошла ошибка при обработке вашего запроса. Попробуйте позже."
+        )
 
 # ================================================================
 # Новый блок запуска (должен располагаться **после** определения
@@ -2442,3 +2455,76 @@ async def generate_and_show_suggested_questions(chat_id: int,
 
 if __name__ == "__main__":
     __run_main()
+
+class ControlAPIHandler(BaseHTTPRequestHandler):
+    def _send_json(self, status: int, payload: dict):
+        self.send_response(status)
+        self.send_header('Content-type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps(payload).encode('utf-8'))
+
+    def do_POST(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        post_data = self.rfile.read(content_length)
+        
+        if self.path == '/reload-questions':
+            try:
+                logger.info("Получен API-запрос на перезагрузку кеша вопросов...")
+                questions_loader.reload_questions()
+                logger.info("Кеш вопросов успешно обновлен по API-запросу.")
+                self._send_json(200, {'success': True, 'message': 'Кеш вопросов успешно перезагружен'})
+            except Exception as e:
+                logger.error(f"Ошибка при перезагрузке кеша по API: {e}", exc_info=True)
+                self._send_json(500, {'success': False, 'error': str(e)})
+        elif self.path == '/send-message':
+            try:
+                data = json.loads(post_data)
+                message_text = data.get('message')
+                if not message_text:
+                    self._send_json(400, {'success': False, 'error': 'No message provided'})
+                    return
+                
+                # Запускаем отправку в отдельном потоке, чтобы не блокировать ответ
+                threading.Thread(target=send_message_to_all_users, args=(message_text,)).start()
+                
+                self._send_json(200, {'success': True, 'message': 'Отправка сообщений запущена в фоновом режиме'})
+            except json.JSONDecodeError:
+                self._send_json(400, {'success': False, 'error': 'Invalid JSON'})
+            except Exception as e:
+                logger.error(f"Ошибка в API /send-message: {e}", exc_info=True)
+                self._send_json(500, {'success': False, 'error': str(e)})
+        else:
+            self._send_json(404, {'success': False, 'error': 'Endpoint not found'})
+    
+    def do_OPTIONS(self):
+        # CORS pre-flight
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
+
+def start_control_api_server():
+    """Запускает HTTP-сервер для управления ботом"""
+    try:
+        server_address = ('127.0.0.1', 8007)
+        httpd = HTTPServer(server_address, ControlAPIHandler)
+        logger.info(f"Запуск управляющего API-сервера на http://{server_address[0]}:{server_address[1]}")
+        httpd.serve_forever()
+    except Exception as e:
+        logger.error(f"Не удалось запустить управляющий API-сервер: {e}", exc_info=True)
+
+if __name__ == '__main__':
+    logger.info("Запуск AI-ассистента...")
+    
+    # Запускаем управляющий API-сервер в отдельном потоке
+    api_thread = threading.Thread(target=start_control_api_server, daemon=True)
+    api_thread.start()
+    
+    # Запускаем бота
+    logger.info("Запуск бесконечного опроса (polling)...")
+    try:
+        bot.infinity_polling(skip_pending=True)
+    except Exception as e:
+        logger.critical(f"Критическая ошибка в главном цикле бота: {e}", exc_info=True)
+        # В реальной системе здесь может быть логика для перезапуска
