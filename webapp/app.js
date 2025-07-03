@@ -16,7 +16,13 @@ const AppState = {
         specialization: ''
     },
     history: [],
-    questions: []
+    questions: [],
+    allQuestions: [], // Все вопросы без фильтрации
+    questionCategories: [], // Категории вопросов
+    questionFilters: {
+        search: '',
+        category: ''
+    }
 };
 
 // Глобальные переменные для ролей и специализаций
@@ -740,6 +746,60 @@ async function useQuestionDirectly(index) {
     }
 }
 
+// Функции фильтрации вопросов
+function filterQuestions() {
+    const search = AppState.questionFilters.search.toLowerCase();
+    const category = AppState.questionFilters.category;
+    
+    AppState.questions = AppState.allQuestions.filter(question => {
+        const matchesSearch = !search || 
+            question.text.toLowerCase().includes(search) || 
+            question.title.toLowerCase().includes(search);
+            
+        const matchesCategory = !category || question.category === category;
+        
+        return matchesSearch && matchesCategory;
+    });
+    
+    renderQuestions();
+}
+
+function setupQuestionFilters() {
+    const searchInput = document.getElementById('questions-search');
+    const categoryFilter = document.getElementById('category-filter');
+    const clearButton = document.getElementById('clear-filters');
+    
+    if (!searchInput || !categoryFilter || !clearButton) return;
+    
+    // Заполняем категории
+    categoryFilter.innerHTML = '<option value="">Все категории</option>';
+    AppState.questionCategories.forEach(cat => {
+        const option = document.createElement('option');
+        option.value = cat.category;
+        option.textContent = `${cat.category} (${cat.count})`;
+        categoryFilter.appendChild(option);
+    });
+    
+    // Обработчики событий
+    searchInput.addEventListener('input', debounce((e) => {
+        AppState.questionFilters.search = e.target.value;
+        filterQuestions();
+    }, 300));
+    
+    categoryFilter.addEventListener('change', (e) => {
+        AppState.questionFilters.category = e.target.value;
+        filterQuestions();
+    });
+    
+    clearButton.addEventListener('click', () => {
+        searchInput.value = '';
+        categoryFilter.value = '';
+        AppState.questionFilters.search = '';
+        AppState.questionFilters.category = '';
+        filterQuestions();
+    });
+}
+
 // Создание экрана библиотеки вопросов
 function createQuestionsLibraryScreen() {
     const header = document.getElementById('library-header');
@@ -752,8 +812,9 @@ function createQuestionsLibraryScreen() {
     
     questionsList.innerHTML = '<p style="color: var(--tg-theme-hint-color); text-align: center; padding: 20px;">Загрузка вопросов...</p>';
     
-    // Рендерим вопросы
+    // Настраиваем фильтры
     setTimeout(() => {
+        setupQuestionFilters();
         renderQuestions();
     }, 100);
 }
@@ -2291,21 +2352,37 @@ async function loadQuestions() {
         const role = AppState.profile.role || '';
         const specialization = AppState.profile.specialization || '';
         
+        // Загружаем вопросы
         const params = new URLSearchParams();
         if (role) params.append('role', role);
         if (specialization) params.append('specialization', specialization);
         
-        const url = `${CONFIG.API_BASE_URL}/questions${params.toString() ? '?' + params.toString() : ''}`;
-        const response = await fetch(url);
+        const questionsUrl = `${CONFIG.API_BASE_URL}/questions${params.toString() ? '?' + params.toString() : ''}`;
+        const questionsResponse = await fetch(questionsUrl);
         
-        if (response.ok) {
-            AppState.questions = await response.json();
+        if (questionsResponse.ok) {
+            AppState.allQuestions = await questionsResponse.json();
+            AppState.questions = [...AppState.allQuestions]; // Копия для фильтрации
         } else {
             throw new Error('Ошибка загрузки вопросов');
         }
+        
+        // Загружаем категории
+        try {
+            const categoriesResponse = await fetch(`${CONFIG.API_BASE_URL}/questions/categories`);
+            if (categoriesResponse.ok) {
+                AppState.questionCategories = await categoriesResponse.json();
+            }
+        } catch (categoriesError) {
+            console.warn('Ошибка загрузки категорий:', categoriesError);
+            AppState.questionCategories = [];
+        }
+        
     } catch (error) {
         console.error('Ошибка загрузки вопросов:', error);
         AppState.questions = [];
+        AppState.allQuestions = [];
+        AppState.questionCategories = [];
     }
 }
 

@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import sys
 import os
@@ -13,6 +13,15 @@ from dotenv import load_dotenv
 
 # Загружаем переменные окружения из .env файла
 load_dotenv()
+
+# --- Определение пути к БД ---
+# Путь к файлу app.py
+current_script_dir = os.path.dirname(os.path.abspath(__file__))
+# Путь к корню проекта (на 2 уровня выше)
+project_root = os.path.abspath(os.path.join(current_script_dir, '..', '..'))
+# Путь к файлу БД
+DATABASE_PATH = os.path.join(project_root, 'src', 'main_version', 'AI_agent.db')
+# ---
 
 # Добавляем путь к основному проекту
 import os
@@ -49,17 +58,137 @@ else:
 app = Flask(__name__)
 CORS(app)
 
+# --- Статика для отладки ---
+# Определяем путь к папке webapp, где лежит index.html
+webapp_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+
+@app.route('/')
+def serve_index():
+    """Отдает главную страницу мини-приложения (index.html)"""
+    return send_from_directory(webapp_dir, 'index.html')
+
+@app.route('/app.js')
+def serve_js():
+    """Отдает основной скрипт мини-приложения (app.js)"""
+    return send_from_directory(webapp_dir, 'app.js')
+# --- Конец секции статики ---
+
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Конфигурация
-DATABASE_URL = "/home/user1/sqlite_data_rag/AI_agent.db"
+DATABASE_URL = DATABASE_PATH # Используем вычисленный путь
 WEBSOCKET_URL = "ws://213.171.25.85:8000/ws"
 
 # Кеш для ответов (аналогично Telegram боту)
 cache_dict = {}
 cache_by_specialization = {}
+
+# Функции для работы с базой данных Questions
+def get_db_connection():
+    """Получение подключения к базе данных"""
+    try:
+        conn = sqlite3.connect(DATABASE_URL)
+        conn.row_factory = sqlite3.Row
+        return conn
+    except sqlite3.Error as e:
+        logger.error(f"Ошибка подключения к БД: {e}")
+        return None
+
+def get_questions_from_db(role=None, specialization=None, category=None, is_active=True):
+    """Получение вопросов из базы данных с фильтрацией"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return []
+            
+        cursor = conn.cursor()
+        
+        # Базовый запрос
+        query = """
+        SELECT q.*, p.prompt_template, v.display_name as vector_store_display
+        FROM Questions q
+        LEFT JOIN Prompts p ON q.prompt_id = p.question_id
+        LEFT JOIN VectorStores v ON q.vector_store = v.name
+        WHERE q.is_active = ?
+        """
+        params = [is_active]
+        
+        # Добавляем фильтры
+        if role:
+            query += " AND (q.role IS NULL OR q.role = ?)"
+            params.append(role)
+            
+        if specialization:
+            query += " AND (q.specialization IS NULL OR q.specialization = ?)"
+            params.append(specialization)
+            
+        if category:
+            query += " AND q.category = ?"
+            params.append(category)
+            
+        query += " ORDER BY q.order_position, q.id"
+        
+        cursor.execute(query, params)
+        questions = [dict(row) for row in cursor.fetchall()]
+        
+        conn.close()
+        return questions
+        
+    except sqlite3.Error as e:
+        logger.error(f"Ошибка при получении вопросов из БД: {e}")
+        return []
+
+def get_question_by_id(question_id):
+    """Получение вопроса по ID"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return None
+            
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT q.*, p.prompt_template
+            FROM Questions q
+            LEFT JOIN Prompts p ON q.prompt_id = p.question_id
+            WHERE q.question_id = ?
+        """, (question_id,))
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            return dict(row)
+        return None
+        
+    except sqlite3.Error as e:
+        logger.error(f"Ошибка при получении вопроса по ID: {e}")
+        return None
+
+def get_question_categories():
+    """Получение списка всех категорий вопросов"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return []
+            
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT DISTINCT category, COUNT(*) as count 
+            FROM Questions 
+            WHERE category IS NOT NULL AND is_active = 1
+            GROUP BY category 
+            ORDER BY category
+        """)
+        
+        categories = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        return categories
+        
+    except sqlite3.Error as e:
+        logger.error(f"Ошибка при получении категорий: {e}")
+        return []
 
 # Роли и специализации (синхронизированы с телеграм ботом)
 ROLES = [
@@ -1322,43 +1451,83 @@ def ask_library_question():
 
 @app.route('/api/questions', methods=['GET'])
 def get_questions():
-    """Получение готовых вопросов для библиотеки"""
+    """Получение списка вопросов из базы данных с фильтрацией"""
+    role = request.args.get('role')
+    specialization = request.args.get('specialization')
+    category = request.args.get('category')
+    
+    logger.info(f"Запрос вопросов для роли: {role}, специализации: {specialization}, категории: {category}")
+    
     try:
-        role = request.args.get('role', '')
-        specialization = request.args.get('specialization', '')
+        # Получаем вопросы из базы данных
+        questions = get_questions_from_db(role=role, specialization=specialization, category=category)
         
-        if not role:
-            # Возвращаем все вопросы для всех ролей
-            all_questions = []
-            for role_name, questions in QUESTIONS_BY_ROLE.items():
-                if isinstance(questions, dict) and role_name in ["Лид компетенции", "Специалист"]:
-                    # Для лида компетенции и специалиста выбираем подходящую специализацию
-                    if specialization in questions:
-                        all_questions.extend(questions[specialization])
-                    else:
-                        all_questions.extend(questions["default"])
-                elif isinstance(questions, list):
-                    all_questions.extend(questions)
-            return jsonify(all_questions)
+        # Преобразуем в формат, ожидаемый фронтендом
+        formatted_questions = []
+        for q in questions:
+            formatted_question = {
+                'id': q['question_id'],
+                'text': q['question_text'],
+                'title': q['question_text'][:50] + '...' if len(q['question_text']) > 50 else q['question_text'],
+                'category': q['category'] or 'general',
+                'role': q['role'],
+                'specialization': q['specialization'],
+                'vector_store': q['vector_store'],
+                'prompt_id': q['prompt_id'],
+                'callback_data': q['callback_data'],
+                'preview': q['question_text'][:120] + '...' if len(q['question_text']) > 120 else q['question_text']
+            }
+            formatted_questions.append(formatted_question)
         
-        # Получаем вопросы для конкретной роли
-        if role in QUESTIONS_BY_ROLE:
-            questions = QUESTIONS_BY_ROLE[role]
-            
-            if isinstance(questions, dict) and role in ["Лид компетенции", "Специалист"]:
-                # Для лида компетенции и специалиста выбираем подходящую специализацию
-                if specialization in questions:
-                    return jsonify(questions[specialization])
-                else:
-                    return jsonify(questions["default"])
-            
-            return jsonify(questions)
-        
-        return jsonify([])
+        logger.info(f"Найдено {len(formatted_questions)} вопросов")
+        return jsonify(formatted_questions)
         
     except Exception as e:
-        logger.error(f"Ошибка получения вопросов: {e}")
-        return jsonify({"error": "Ошибка получения вопросов"}), 500
+        logger.error(f"Ошибка при получении вопросов: {e}")
+        # Fallback к статичным вопросам если БД недоступна
+        try:
+            role = role or ''
+            specialization = specialization or ''
+            
+            if not role:
+                # Возвращаем все вопросы для всех ролей
+                all_questions = []
+                for role_name, questions_data in QUESTIONS_BY_ROLE.items():
+                    if isinstance(questions_data, dict) and role_name in ["Лид компетенции", "Специалист"]:
+                        if specialization in questions_data:
+                            all_questions.extend(questions_data[specialization])
+                        else:
+                            all_questions.extend(questions_data["default"])
+                    elif isinstance(questions_data, list):
+                        all_questions.extend(questions_data)
+                return jsonify(all_questions)
+            
+            # Получаем вопросы для конкретной роли
+            if role in QUESTIONS_BY_ROLE:
+                questions_data = QUESTIONS_BY_ROLE[role]
+                
+                if isinstance(questions_data, dict) and role in ["Лид компетенции", "Специалист"]:
+                    if specialization in questions_data:
+                        return jsonify(questions_data[specialization])
+                    else:
+                        return jsonify(questions_data["default"])
+                
+                return jsonify(questions_data)
+            
+            return jsonify([])
+        except Exception as fallback_error:
+            logger.error(f"Ошибка fallback получения вопросов: {fallback_error}")
+            return jsonify({"error": "Ошибка получения вопросов"}), 500
+
+@app.route('/api/questions/categories', methods=['GET'])
+def get_categories():
+    """Получение списка категорий вопросов"""
+    try:
+        categories = get_question_categories()
+        return jsonify(categories)
+    except Exception as e:
+        logger.error(f"Ошибка при получении категорий: {e}")
+        return jsonify([])
 
 @app.route('/api/roles', methods=['GET'])
 def get_roles():
@@ -1782,4 +1951,4 @@ def internal_error(error):
 
 if __name__ == '__main__':
     # Для продакшена отключаем debug
-    app.run(debug=False, host='0.0.0.0', port=5000) 
+    app.run(debug=False, host='0.0.0.0', port=5001) 
