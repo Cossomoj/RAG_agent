@@ -14,71 +14,15 @@ from dotenv import load_dotenv
 # Загружаем переменные окружения из .env файла
 load_dotenv()
 
-# --- Определение пути к БД ---
-# Путь к файлу app.py
-current_script_dir = os.path.dirname(os.path.abspath(__file__))
-# Путь к корню проекта (на 2 уровня выше)
-project_root = os.path.abspath(os.path.join(current_script_dir, '..', '..'))
-# Путь к файлу БД
-DATABASE_PATH = os.path.join(project_root, 'src', 'main_version', 'AI_agent.db')
-# ---
-
-# Добавляем путь к основному проекту
-import os
-
-# Попытка определить путь к main_version
-rag_path = os.environ.get('RAG_PATH')
-if rag_path:
-    # Используем переменную окружения если задана
-    project_root_abs = rag_path
-    print(f"[DEBUG] Используем RAG_PATH из переменной окружения: {project_root_abs}")
-else:
-    # Относительный путь от текущего файла
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.join(current_dir, '..', '..', 'src', 'main_version')
-    project_root_abs = os.path.abspath(project_root)
-    print(f"[DEBUG] Используем относительный путь: {project_root_abs}")
-
-# Проверяем существование пути
-if os.path.exists(project_root_abs):
-    sys.path.append(project_root_abs)
-    print(f"[DEBUG] ✅ Путь добавлен в sys.path: {project_root_abs}")
-    print(f"[DEBUG] Содержимое папки: {os.listdir(project_root_abs)}")
-else:
-    print(f"[ERROR] ❌ Путь не существует: {project_root_abs}")
-    # Fallback: попробуем стандартный путь для продакшена
-    fallback_path = '/var/www/html/src/main_version'
-    if os.path.exists(fallback_path):
-        sys.path.append(fallback_path)
-        print(f"[DEBUG] ✅ Используем fallback путь: {fallback_path}")
-    else:
-        print(f"[ERROR] ❌ Fallback путь также не существует: {fallback_path}")
-        print("[WARNING] RAG сервис может не работать корректно!")
-
 app = Flask(__name__)
 CORS(app)
-
-# --- Статика для отладки ---
-# Определяем путь к папке webapp, где лежит index.html
-webapp_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-
-@app.route('/')
-def serve_index():
-    """Отдает главную страницу мини-приложения (index.html)"""
-    return send_from_directory(webapp_dir, 'index.html')
-
-@app.route('/app.js')
-def serve_js():
-    """Отдает основной скрипт мини-приложения (app.js)"""
-    return send_from_directory(webapp_dir, 'app.js')
-# --- Конец секции статики ---
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Конфигурация
-DATABASE_URL = DATABASE_PATH # Используем вычисленный путь
+DATABASE_URL = "/home/user1/sqlite_data_rag/AI_agent.db"
 WEBSOCKET_URL = "ws://213.171.25.85:8000/ws"
 
 # Кеш для ответов (аналогично Telegram боту)

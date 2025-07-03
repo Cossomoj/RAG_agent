@@ -4,7 +4,7 @@ from typing import List, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
-DATABASE_URL = "AI_agent.db"
+DATABASE_URL = "/app/src/main_version/AI_agent.db"
 
 class QuestionsLoader:
     """Класс для загрузки вопросов из базы данных"""
