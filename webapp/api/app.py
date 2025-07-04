@@ -9,10 +9,7 @@ import json
 import requests
 from datetime import datetime
 import logging
-from dotenv import load_dotenv
 
-# Загружаем переменные окружения из .env файла
-load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
@@ -22,8 +19,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Конфигурация
-DATABASE_URL = os.getenv('DATABASE_URL', "/home/user1/sqlite_data_rag/AI_agent.db")
-WEBSOCKET_URL = os.getenv('WEBSOCKET_URL', "ws://213.171.25.85:8000/ws")
+DATABASE_URL = '/home/user1/sqlite_data_rag/AI_agent.db'
+WEBAPP_URL = 'ws://213.171.25.85:8000/ws'
 
 # Кеш для ответов (аналогично Telegram боту)
 cache_dict = {}
