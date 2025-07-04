@@ -3,7 +3,7 @@ let tg = window.Telegram.WebApp;
 
 // Конфигурация
 const CONFIG = {
-    API_BASE_URL: window.location.origin + '/api', // Будет работать с /var/www/html/api
+    API_BASE_URL: 'http://213.171.25.85:5000/api', // Прямой адрес API на VPS
     WEBSOCKET_URL: 'ws://213.171.25.85:8000/ws'
 };
 

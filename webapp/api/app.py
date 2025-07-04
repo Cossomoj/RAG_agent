@@ -12,7 +12,12 @@ import logging
 
 
 app = Flask(__name__)
-CORS(app)
+
+# Расширенная настройка CORS для кросс-доменных запросов
+CORS(app, origins=['*'], 
+     allow_headers=['Content-Type', 'Authorization', 'X-Requested-With'],
+     methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+     supports_credentials=True)
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
