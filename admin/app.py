@@ -30,7 +30,7 @@ app.config['SESSION_USE_SIGNER'] = True
 
 # Конфигурация URL-ов через переменные окружения
 TELEGRAM_BOT_URL = os.getenv('TELEGRAM_BOT_URL', 'http://localhost:8007')
-WEBAPP_URL = os.getenv('WEBAPP_URL', 'http://213.171.25.85:5000')
+WEBAPP_URL = os.getenv('WEBAPP_URL', 'http://213.171.25.85:5001')
 
 # Инициализация базы данных и менеджеров
 db = DatabaseOperations()
