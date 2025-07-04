@@ -5,10 +5,7 @@ import sys
 from datetime import datetime
 import sqlite3
 import requests
-from dotenv import load_dotenv
-
-# Загружаем переменные окружения
-load_dotenv()
+# Переменные окружения не используются - URL-ы настроены напрямую
 
 # Импортируем DatabaseOperations из локального файла
 from database import DatabaseOperations
@@ -28,9 +25,9 @@ app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_PERMANENT'] = False
 app.config['SESSION_USE_SIGNER'] = True
 
-# Конфигурация URL-ов через переменные окружения
-TELEGRAM_BOT_URL = os.getenv('TELEGRAM_BOT_URL', 'http://localhost:8007')
-WEBAPP_URL = os.getenv('WEBAPP_URL', 'http://213.171.25.85:5000')
+# Конфигурация URL-ов для продакшн
+TELEGRAM_BOT_URL = 'http://213.171.25.85:8007'
+WEBAPP_URL = 'http://213.171.25.85:5000'
 
 # Инициализация базы данных и менеджеров
 db = DatabaseOperations()
