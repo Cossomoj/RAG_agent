@@ -27,7 +27,7 @@ app.config['SESSION_USE_SIGNER'] = True
 
 # Конфигурация URL-ов для продакшн
 TELEGRAM_BOT_URL = 'http://localhost:8007'
-WEBAPP_URL = 'http://localhost:5000'
+WEBAPP_URL = 'http://213.171.25.85:5000'
 
 # Инициализация базы данных и менеджеров
 db = DatabaseOperations()
