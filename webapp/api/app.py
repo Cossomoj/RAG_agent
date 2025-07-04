@@ -24,7 +24,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Конфигурация
-DATABASE_URL = 'src/main_version/AI_agent.db'
+DATABASE_URL = '/home/user1/sqlite_data_rag/AI_agent.db'
 WEBSOCKET_URL = 'ws://213.171.25.85:8000/ws'
 
 # Кеш для ответов (аналогично Telegram боту)
