@@ -4,7 +4,7 @@ let tg = window.Telegram.WebApp;
 // Конфигурация
 const CONFIG = {
     API_BASE_URL: 'http://213.171.25.85:5000/api', // Прямой адрес API на VPS
-    WEBSOCKET_URL: 'ws://213.171.25.85:8000/ws'
+    WEBSOCKET_URL: 'ws://localhost:8000/ws'
 };
 
 // Состояние приложения
@@ -31,13 +31,51 @@ let specializations = [];
 
 // Инициализация приложения
 document.addEventListener('DOMContentLoaded', async function() {
-    initViewportFixes();
-    initTelegramWebApp();
-    await loadRolesAndSpecializations();
-    await loadUserProfile();
-    await loadHistory();
-    await loadQuestions();
-    createMainMenu();
+    console.log('🚀 Инициализация мини-приложения...');
+    console.log('🌐 CONFIG:', CONFIG);
+    console.log('📱 Telegram WebApp объект:', window.Telegram?.WebApp);
+    
+    try {
+        console.log('🔧 Инициализируем viewport fixes...');
+        initViewportFixes();
+        
+        console.log('📱 Инициализируем Telegram WebApp...');
+        initTelegramWebApp();
+        
+        console.log('📋 Загружаем роли и специализации...');
+        await loadRolesAndSpecializations();
+        
+        console.log('👤 Загружаем профиль пользователя...');
+        await loadUserProfile();
+        
+        console.log('📚 Загружаем историю...');
+        await loadHistory();
+        
+        console.log('❓ Загружаем вопросы...');
+        await loadQuestions();
+        
+        console.log('🏠 Создаем главное меню...');
+        createMainMenu();
+        
+        console.log('✅ Инициализация завершена успешно!');
+        console.log('📊 Финальное состояние AppState:', {
+            user: AppState.user,
+            profile: AppState.profile,
+            questionsCount: AppState.questions?.length || 0,
+            historyCount: AppState.history?.length || 0
+        });
+        
+    } catch (error) {
+        console.error('❌ КРИТИЧЕСКАЯ ОШИБКА инициализации:', error);
+        console.error('📋 Детали ошибки:', {
+            message: error.message,
+            stack: error.stack,
+            type: error.constructor.name
+        });
+        
+        // Показываем ошибку пользователю
+        showAlert('Ошибка инициализации приложения');
+    }
 });
 
 // Исправления для viewport на разных устройствах
@@ -1221,38 +1259,72 @@ function renderProfile() {
 
 // Сохранение профиля
 async function saveProfile() {
+    console.log('💾 Сохраняем профиль...');
+    
     const roleSelect = document.getElementById('role-select');
     const specializationSelect = document.getElementById('specialization-select');
     
-    if (!roleSelect || !specializationSelect) return;
+    if (!roleSelect || !specializationSelect) {
+        console.error('❌ Элементы select не найдены!');
+        return;
+    }
     
     AppState.profile.role = roleSelect.value;
     AppState.profile.specialization = specializationSelect.value;
     
+    console.log('📝 Данные профиля для сохранения:', AppState.profile);
+    
     if (!AppState.profile.role || !AppState.profile.specialization) {
+        console.warn('⚠️ Не все поля заполнены');
         showAlert('Пожалуйста, заполните все поля профиля');
         return;
     }
     
     try {
         const userId = getUserId();
-        const response = await fetch(`${CONFIG.API_BASE_URL}/profile/${userId}`, {
+        console.log('🔑 User ID для сохранения:', userId);
+        
+        const saveUrl = `${CONFIG.API_BASE_URL}/profile/${userId}`;
+        console.log('🌐 URL для сохранения:', saveUrl);
+        
+        const requestData = {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify(AppState.profile)
-        });
+        };
+        
+        console.log('📤 Отправляем запрос:', requestData);
+        
+        const response = await fetch(saveUrl, requestData);
+        console.log('📊 Статус ответа сохранения:', response.status);
         
         if (response.ok) {
+            const responseData = await response.json();
+            console.log('✅ Профиль сохранен успешно:', responseData);
+            
+            console.log('🔄 Перезагружаем вопросы для новой роли...');
             await loadQuestions(); // Перезагружаем вопросы для новой роли
+            
             showAlert('Профиль сохранен!');
             showScreen('main-menu');
         } else {
-            throw new Error('Ошибка сохранения профиля');
+            const errorText = await response.text();
+            console.error('❌ Ошибка API сохранения профиля:', {
+                status: response.status,
+                statusText: response.statusText,
+                error: errorText
+            });
+            throw new Error(`Ошибка сохранения профиля: ${response.status}`);
         }
     } catch (error) {
-        console.error('Ошибка сохранения профиля:', error);
+        console.error('❌ КРИТИЧЕСКАЯ ОШИБКА сохранения профиля:', error);
+        console.error('📋 Детали ошибки:', {
+            message: error.message,
+            stack: error.stack,
+            type: error.constructor.name
+        });
         showAlert('Ошибка сохранения профиля');
     }
 }
@@ -1690,18 +1762,27 @@ function displayAskedQuestion(question) {
 
 // Отправка вопроса
 async function sendQuestion() {
+    console.log('❓ Отправляем вопрос...');
+    
     const questionInput = document.getElementById('question-input');
     const sendBtn = document.getElementById('send-question');
     
-    if (!questionInput || !sendBtn) return;
+    if (!questionInput || !sendBtn) {
+        console.error('❌ Элементы формы не найдены!');
+        return;
+    }
     
     const question = questionInput.value.trim();
+    console.log('📝 Текст вопроса:', question);
+    
     if (!question) {
+        console.warn('⚠️ Пустой вопрос');
         showAlert('Пожалуйста, введите ваш вопрос');
         return;
     }
     
     const userId = getUserId();
+    console.log('🔑 User ID для отправки:', userId);
     
     // Показываем заданный вопрос
     displayAskedQuestion(question);
@@ -1718,21 +1799,31 @@ async function sendQuestion() {
     if (spinner) spinner.classList.remove('hidden');
     
     try {
-        const response = await fetch(`${CONFIG.API_BASE_URL}/ask`, {
+        const requestPayload = {
+            question: question,
+            user_id: userId,
+            role: AppState.profile.role,
+            specialization: AppState.profile.specialization
+        };
+        
+        console.log('📤 Отправляем данные:', requestPayload);
+        
+        const askUrl = `${CONFIG.API_BASE_URL}/ask`;
+        console.log('🌐 URL для отправки:', askUrl);
+        
+        const response = await fetch(askUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                question: question,
-                user_id: userId,
-                role: AppState.profile.role,
-                specialization: AppState.profile.specialization
-            })
+            body: JSON.stringify(requestPayload)
         });
+        
+        console.log('📊 Статус ответа отправки:', response.status);
         
         if (response.ok) {
             const data = await response.json();
+            console.log('✅ Ответ получен:', data);
             
             // Отображаем ответ и запускаем генерацию связанных вопросов
             await displayAnswer(question, data.answer);
@@ -1755,14 +1846,26 @@ async function sendQuestion() {
             
             // Очищаем поле ввода
             questionInput.value = '';
+            console.log('✅ Вопрос обработан успешно');
             
             // Предыдущие вопросы будут показаны в displayAnswer
             
         } else {
-            throw new Error('Ошибка получения ответа');
+            const errorText = await response.text();
+            console.error('❌ Ошибка API отправки вопроса:', {
+                status: response.status,
+                statusText: response.statusText,
+                error: errorText
+            });
+            throw new Error(`Ошибка получения ответа: ${response.status}`);
         }
     } catch (error) {
-        console.error('Ошибка отправки вопроса:', error);
+        console.error('❌ КРИТИЧЕСКАЯ ОШИБКА отправки вопроса:', error);
+        console.error('📋 Детали ошибки:', {
+            message: error.message,
+            stack: error.stack,
+            type: error.constructor.name
+        });
         showAlert('Ошибка отправки вопроса. Попробуйте снова.');
     } finally {
         // Скрываем полноэкранный лоадер
@@ -2314,20 +2417,47 @@ async function loadUserProfile() {
 
 // Загрузка ролей и специализаций
 async function loadRolesAndSpecializations() {
+    console.log('🔄 Загружаем роли и специализации...');
+    console.log('📍 API_BASE_URL:', CONFIG.API_BASE_URL);
+    
     try {
+        console.log('🌐 Отправляем запросы к API...');
         const [rolesResponse, specsResponse] = await Promise.all([
             fetch(`${CONFIG.API_BASE_URL}/roles`),
             fetch(`${CONFIG.API_BASE_URL}/specializations`)
         ]);
         
+        console.log('📊 Статусы ответов:', {
+            roles: rolesResponse.status,
+            specializations: specsResponse.status
+        });
+        
         if (rolesResponse.ok && specsResponse.ok) {
             roles = await rolesResponse.json();
             specializations = await specsResponse.json();
+            
+            console.log('✅ Роли загружены:', roles);
+            console.log('✅ Специализации загружены:', specializations);
         } else {
+            const rolesError = rolesResponse.ok ? null : await rolesResponse.text();
+            const specsError = specsResponse.ok ? null : await specsResponse.text();
+            
+            console.error('❌ Ошибки API:', {
+                rolesStatus: rolesResponse.status,
+                rolesError: rolesError,
+                specsStatus: specsResponse.status,
+                specsError: specsError
+            });
+            
             throw new Error('Ошибка загрузки данных');
         }
     } catch (error) {
-        console.error('Ошибка загрузки ролей и специализаций:', error);
+        console.error('❌ Ошибка загрузки ролей и специализаций:', error);
+        console.error('📋 Детали ошибки:', {
+            message: error.message,
+            stack: error.stack,
+            type: error.constructor.name
+        });
         
         // Fallback данные
         roles = [
@@ -2344,13 +2474,20 @@ async function loadRolesAndSpecializations() {
             { "value": "Java", "label": "Java" },
             { "value": "Python", "label": "Python" }
         ];
+        
+        console.log('🔄 Используем fallback данные');
     }
 }
 
 async function loadQuestions() {
+    console.log('📚 Загружаем вопросы...');
+    console.log('👤 Текущий профиль:', AppState.profile);
+    
     try {
         const role = AppState.profile.role || '';
         const specialization = AppState.profile.specialization || '';
+        
+        console.log('🎯 Параметры запроса:', { role, specialization });
         
         // Загружаем вопросы
         const params = new URLSearchParams();
@@ -2358,32 +2495,71 @@ async function loadQuestions() {
         if (specialization) params.append('specialization', specialization);
         
         const questionsUrl = `${CONFIG.API_BASE_URL}/questions${params.toString() ? '?' + params.toString() : ''}`;
+        console.log('🌐 URL запроса вопросов:', questionsUrl);
+        
         const questionsResponse = await fetch(questionsUrl);
+        console.log('📊 Статус ответа вопросов:', questionsResponse.status);
         
         if (questionsResponse.ok) {
             AppState.allQuestions = await questionsResponse.json();
             AppState.questions = [...AppState.allQuestions]; // Копия для фильтрации
+            
+            console.log('✅ Вопросы загружены:', {
+                count: AppState.allQuestions.length,
+                questions: AppState.allQuestions
+            });
         } else {
-            throw new Error('Ошибка загрузки вопросов');
+            const errorText = await questionsResponse.text();
+            console.error('❌ Ошибка API вопросов:', {
+                status: questionsResponse.status,
+                statusText: questionsResponse.statusText,
+                error: errorText
+            });
+            throw new Error(`Ошибка загрузки вопросов: ${questionsResponse.status}`);
         }
         
         // Загружаем категории
+        console.log('📂 Загружаем категории...');
         try {
             const categoriesResponse = await fetch(`${CONFIG.API_BASE_URL}/questions/categories`);
+            console.log('📊 Статус ответа категорий:', categoriesResponse.status);
+            
             if (categoriesResponse.ok) {
                 AppState.questionCategories = await categoriesResponse.json();
+                console.log('✅ Категории загружены:', AppState.questionCategories);
+            } else {
+                const catErrorText = await categoriesResponse.text();
+                console.warn('⚠️ Ошибка загрузки категорий:', {
+                    status: categoriesResponse.status,
+                    error: catErrorText
+                });
+                AppState.questionCategories = [];
             }
         } catch (categoriesError) {
-            console.warn('Ошибка загрузки категорий:', categoriesError);
+            console.warn('⚠️ Исключение при загрузке категорий:', categoriesError);
             AppState.questionCategories = [];
         }
         
     } catch (error) {
-        console.error('Ошибка загрузки вопросов:', error);
+        console.error('❌ КРИТИЧЕСКАЯ ОШИБКА загрузки вопросов:', error);
+        console.error('📋 Детали ошибки:', {
+            message: error.message,
+            stack: error.stack,
+            type: error.constructor.name
+        });
+        
         AppState.questions = [];
         AppState.allQuestions = [];
         AppState.questionCategories = [];
+        
+        console.log('🔄 Устанавливаем пустые массивы для вопросов');
     }
+    
+    console.log('📊 Финальное состояние вопросов:', {
+        allQuestions: AppState.allQuestions.length,
+        filteredQuestions: AppState.questions.length,
+        categories: AppState.questionCategories.length
+    });
 }
 
 // Загрузка истории
