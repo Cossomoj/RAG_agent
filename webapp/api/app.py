@@ -1905,4 +1905,4 @@ def internal_error(error):
 
 if __name__ == '__main__':
     # Для продакшена отключаем debug
-    app.run(debug=False, host='0.0.0.0', port=5001) 
+    app.run(debug=False, host='0.0.0.0', port=5000) 
