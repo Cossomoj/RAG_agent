@@ -5,6 +5,10 @@ import sys
 from datetime import datetime
 import sqlite3
 import requests
+from dotenv import load_dotenv
+
+# Загружаем переменные окружения
+load_dotenv()
 
 # Импортируем DatabaseOperations из локального файла
 from database import DatabaseOperations
@@ -23,6 +27,10 @@ app.secret_key = 'your-secret-key-here'  # Замените на реальны�
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_PERMANENT'] = False
 app.config['SESSION_USE_SIGNER'] = True
+
+# Конфигурация URL-ов через переменные окружения
+TELEGRAM_BOT_URL = os.getenv('TELEGRAM_BOT_URL', 'http://localhost:8007')
+WEBAPP_URL = os.getenv('WEBAPP_URL', 'http://localhost:5000')
 
 # Инициализация базы данных и менеджеров
 db = DatabaseOperations()
@@ -263,9 +271,11 @@ def clear_cache():
     results = {'bot': None, 'webapp': None}
     errors = []
     
+    print(f"[ADMIN] Очистка кешей: TELEGRAM_BOT_URL={TELEGRAM_BOT_URL}, WEBAPP_URL={WEBAPP_URL}")
+    
     # 1. Очищаем кеш телеграм-бота
     try:
-        response = requests.post('http://localhost:8007/clear-cache', timeout=10)
+        response = requests.post(f'{TELEGRAM_BOT_URL}/clear-cache', timeout=10)
         if response.status_code == 200:
             data = response.json()
             if data.get('success'):
@@ -288,7 +298,7 @@ def clear_cache():
     
     # 2. Очищаем кеш веб-приложения
     try:
-        response = requests.post('http://213.171.25.85:5000/api/clear-cache', timeout=10)
+        response = requests.post(f'{WEBAPP_URL}/api/clear-cache', timeout=10)
         if response.status_code == 200:
             data = response.json()
             if data.get('success'):
@@ -345,7 +355,7 @@ def send_message():
         
         # Делаем HTTP запрос к API бота
         response = requests.post(
-            'http://localhost:8007/send-message',
+            f'{TELEGRAM_BOT_URL}/send-message',
             json={'message': message},
             timeout=30  # Увеличиваем таймаут, так как отправка может занять время
         )

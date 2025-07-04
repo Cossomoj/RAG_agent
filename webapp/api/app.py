@@ -22,8 +22,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Конфигурация
-DATABASE_URL = "/home/user1/sqlite_data_rag/AI_agent.db"
-WEBSOCKET_URL = "ws://213.171.25.85:8000/ws"
+DATABASE_URL = os.getenv('DATABASE_URL', "/home/user1/sqlite_data_rag/AI_agent.db")
+WEBSOCKET_URL = os.getenv('WEBSOCKET_URL', "ws://213.171.25.85:8000/ws")
 
 # Кеш для ответов (аналогично Telegram боту)
 cache_dict = {}
@@ -1164,7 +1164,7 @@ def get_dialog_context(user_id, max_messages=12):
         logger.error(f"Ошибка получения контекста диалога: {e}")
         return "[]"
 
-async def send_websocket_question(question, user_id, role="", specialization="", question_id=None):
+async def send_websocket_question(question, user_id, role="", specialization="", question_id=None, vector_store='auto'):
     """Отправка вопроса через WebSocket к RAG-агенту"""
     try:
         async with websockets.connect(WEBSOCKET_URL) as websocket:
@@ -1181,13 +1181,14 @@ async def send_websocket_question(question, user_id, role="", specialization="",
             logger.info(f"Отправляем вопрос: '{question}' с question_id: {question_id}, role: '{role}', specialization: '{specialization}'")
             logger.info(f"WebSocket URL: {WEBSOCKET_URL}")
             
-            # Отправляем данные в том же порядке, что ожидает RAG-сервис
+            # Отправляем данные в том же порядке, что ожидает RAG-сервис (КАК В ТЕЛЕГРАМ БОТЕ)
             await websocket.send(question)          # 1. question
             await websocket.send(role)              # 2. role  
             await websocket.send(specialization)    # 3. specialization
             await websocket.send(str(question_id))  # 4. question_id
-            await websocket.send(context)           # 5. context (теперь с реальным контекстом для id=888)
+            await websocket.send(context)           # 5. context
             await websocket.send("1")               # 6. count (1 для первого вопроса)
+            await websocket.send(vector_store)      # 7. vector_store (ДОБАВЛЕН НЕДОСТАЮЩИЙ ПАРАМЕТР)
             
             # Получаем потоковый ответ (ТОЧНО как в телеграм боте)
             full_answer = ""
@@ -1291,15 +1292,16 @@ def ask_question():
         role = data.get('role', '')
         specialization = data.get('specialization', '')
         question_id = data.get('question_id', None)  # Добавляем поддержку question_id
+        vector_store = data.get('vector_store', 'auto')  # Добавляем поддержку vector_store
         
         if not question:
             return jsonify({"error": "Вопрос не может быть пустым"}), 400
         
-        # Отправляем вопрос через WebSocket с учетом question_id
+        # Отправляем вопрос через WebSocket с учетом question_id и vector_store
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         result = loop.run_until_complete(
-            send_websocket_question(question, user_id, role, specialization, question_id)
+            send_websocket_question(question, user_id, role, specialization, question_id, vector_store)
         )
         loop.close()
         
@@ -1322,6 +1324,7 @@ def ask_library_question():
         role = data.get('role', '')
         specialization = data.get('specialization', '')
         question_id = data.get('question_id', None)
+        vector_store = data.get('vector_store', 'auto')  # Добавляем поддержку vector_store
         
         if not question:
             return jsonify({"error": "Вопрос не может быть пустым"}), 400
@@ -1330,6 +1333,13 @@ def ask_library_question():
             return jsonify({"error": "Для библиотечных вопросов обязателен question_id"}), 400
         
         question_id_int = int(question_id)
+        
+        # Получаем настройки vector_store из базы данных, если не указан явно
+        if vector_store == 'auto':
+            question_info = get_question_by_id(question_id_int)
+            if question_info and question_info.get('vector_store'):
+                vector_store = question_info['vector_store']
+                logger.info(f"Используем vector_store из БД: {vector_store} для question_id={question_id_int}")
         
         # Проверяем кеш сначала (аналогично Telegram боту)
         loop = asyncio.new_event_loop()
@@ -1345,9 +1355,9 @@ def ask_library_question():
             return jsonify(cached_result)
         
         # Если в кеше нет, отправляем запрос к RAG сервису
-        logger.info(f"Кеш не найден, отправляем запрос к RAG сервису для question_id={question_id_int}")
+        logger.info(f"Кеш не найден, отправляем запрос к RAG сервису для question_id={question_id_int} с vector_store={vector_store}")
         result = loop.run_until_complete(
-            send_websocket_question(question, user_id, role, specialization, question_id)
+            send_websocket_question(question, user_id, role, specialization, question_id, vector_store)
         )
         loop.close()
         
