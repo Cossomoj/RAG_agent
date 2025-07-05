@@ -123,7 +123,7 @@ def create_retrieval_chain_from_folder(role, specialization, question_id, embedd
 
     llm = GigaChat(
         credentials=api_key,
-        model='GigaChat-2',
+        model='GigaChat-2-Max',
         verify_ssl_certs=False,
         profanity_check=False
     )
@@ -209,7 +209,7 @@ async def generate_semantic_search_queries(question, role, specialization):
     # Создаем LLM для генерации альтернативных запросов
     llm = GigaChat(
         credentials=api_key,
-        model='GigaChat-2',
+        model='GigaChat-2-Max',
         verify_ssl_certs=False,
         profanity_check=False
     )
@@ -311,9 +311,10 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
     """
     Создает улучшенную retrieval chain с семантическим векторным поиском и поддержкой стриминга
     """
-    # Заполнение шаблона промпта
+    # ИСПРАВЛЕНО: Сначала заполняем только $role и $specialization
+    # {input} и {context} будут заполнены позже с реальными данными
     template = string.Template(prompt_template)
-    filled_prompt = template.substitute(
+    base_prompt = template.substitute(
         role=role,
         specialization=specialization
     )
@@ -321,16 +322,16 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
     # Создание LLM
     llm = GigaChat(
         credentials=api_key,
-        model='GigaChat-2',
+        model='GigaChat-2-Max',
         verify_ssl_certs=False,
         profanity_check=False
     )
     
     # Создаем объект, который поддерживает метод astream
     class EnhancedRetrievalChain:
-        def __init__(self, llm, filled_prompt, role, specialization, embedding_retriever):
+        def __init__(self, llm, base_prompt, role, specialization, embedding_retriever):
             self.llm = llm
-            self.base_prompt = filled_prompt
+            self.base_prompt = base_prompt
             self.role = role
             self.specialization = specialization
             self.embedding_retriever = embedding_retriever
@@ -348,12 +349,38 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
             # 2. Формируем контекст из документов
             context_text = "\n\n".join([doc.page_content for doc in docs])
             
-            # 3. Формируем финальный промпт
-            dialogue_history_prompt_part = ""
-            if dialogue_context and dialogue_context != '[]':
-                dialogue_history_prompt_part = f"\\n\\nКонтекст предыдущих сообщений:\\n{dialogue_context}"
+            # 3. ИСПРАВЛЕНО: Правильно заполняем {input} и {context} в промпте
+            # Проверяем, есть ли {input} и {context} в промпте
+            if '{input}' in self.base_prompt and '{context}' in self.base_prompt:
+                print(f"✅ Используем новую логику: заполняем {{input}} и {{context}}")
+                # Заполняем переменные {input} и {context}
+                final_prompt = self.base_prompt.replace('{input}', question).replace('{context}', context_text)
+                
+                # Добавляем контекст диалога если есть
+                if dialogue_context and dialogue_context != '[]':
+                    dialogue_history_prompt_part = f"\\n\\nКонтекст предыдущих сообщений:\\n{dialogue_context}"
+                    final_prompt = final_prompt + dialogue_history_prompt_part
+                    
+            elif '{context}' in self.base_prompt:
+                print(f"✅ Используем новую логику: заполняем только {{context}}")
+                # Только {context} (старые промпты)
+                filled_prompt = self.base_prompt.replace('{context}', context_text)
+                
+                # Добавляем контекст диалога и вопрос
+                dialogue_history_prompt_part = ""
+                if dialogue_context and dialogue_context != '[]':
+                    dialogue_history_prompt_part = f"\\n\\nКонтекст предыдущих сообщений:\\n{dialogue_context}"
+                
+                final_prompt = f"{filled_prompt}{dialogue_history_prompt_part}\\n\\nВопрос: {question}\\n\\nОтвет:"
+                
+            else:
+                print(f"⚠️  Используем fallback логику: промпт без переменных")
+                # Fallback: старая логика для промптов без переменных
+                dialogue_history_prompt_part = ""
+                if dialogue_context and dialogue_context != '[]':
+                    dialogue_history_prompt_part = f"\\n\\nКонтекст предыдущих сообщений:\\n{dialogue_context}"
 
-            final_prompt = f"{self.base_prompt}{dialogue_history_prompt_part}\\n\\nКонтекст из документов:\\n{context_text}\\n\\nВопрос: {question}\\n\\nОтвет:"
+                final_prompt = f"{self.base_prompt}{dialogue_history_prompt_part}\\n\\nКонтекст из документов:\\n{context_text}\\n\\nВопрос: {question}\\n\\nОтвет:"
             
             # Отладочная информация
             # print(f"\\n--- FINAL PROMPT ---\\n{final_prompt}\\n--- END FINAL PROMPT ---\\n")
@@ -367,7 +394,7 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
                 print(f"ОШИБКА в стриминге LLM: {e}")
                 yield {"answer": f"Произошла ошибка при генерации ответа: {e}"}
 
-    return EnhancedRetrievalChain(llm, filled_prompt, role, specialization, embedding_retriever)
+    return EnhancedRetrievalChain(llm, base_prompt, role, specialization, embedding_retriever)
 
 async def create_enhanced_retrieval_chain_for_suggestions(role, specialization, user_question, bot_answer, embedding_retriever, prompt_template):
     """
@@ -385,7 +412,7 @@ async def create_enhanced_retrieval_chain_for_suggestions(role, specialization, 
     # Создание LLM
     llm = GigaChat(
         credentials=api_key,
-        model='GigaChat-2',
+        model='GigaChat-2-Max',
         verify_ssl_certs=False,
         profanity_check=False
     )
@@ -505,7 +532,7 @@ async def websocket_suggest_endpoint(websocket: WebSocket):
 
         llm = GigaChat(
             credentials=api_key,
-            model='GigaChat-2',
+            model='GigaChat-2-Max',
             verify_ssl_certs=False,
             profanity_check=False
         )
