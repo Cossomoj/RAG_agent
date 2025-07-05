@@ -1968,6 +1968,7 @@ function convertMarkdownToHtml(text) {
         const isUnorderedList = lines.every(line => 
             line.trim() === '' || 
             /^\s*[-*]\s/.test(line) || 
+            /^\s*--\s/.test(line) || 
             /^<h[1-6]/.test(line) ||
             /^<strong>/.test(line)
         );
@@ -1989,18 +1990,18 @@ function convertMarkdownToHtml(text) {
             return nonListLines + (nonListLines ? '\n' : '') + `<ol class="markdown-list">\n${listItems}\n</ol>`;
         }
         
-        if (isUnorderedList && lines.some(line => /^\s*[-*]\s/.test(line))) {
+        if (isUnorderedList && lines.some(line => /^\s*[-*--]\s/.test(line))) {
             // Обрабатываем маркированный список
             const listItems = lines
-                .filter(line => /^\s*[-*]\s/.test(line))
+                .filter(line => /^\s*[-*--]\s/.test(line))
                 .map(line => {
-                    const content = line.replace(/^\s*[-*]\s/, '').trim();
+                    const content = line.replace(/^\s*[-*--]\s/, '').trim();
                     return `<li>${content}</li>`;
                 })
                 .join('\n');
             
             const nonListLines = lines
-                .filter(line => !/^\s*[-*]\s/.test(line) && line.trim() !== '')
+                .filter(line => !/^\s*[-*--]\s/.test(line) && line.trim() !== '')
                 .join('\n');
             
             return nonListLines + (nonListLines ? '\n' : '') + `<ul class="markdown-list">\n${listItems}\n</ul>`;
@@ -2929,6 +2930,12 @@ function postProcessAnswer(text) {
     
     // Добавляем пробел после тире
     processed = processed.replace(/^([-*])([^\s])/gm, '$1 $2');
+    
+    // ИСПРАВЛЕНИЕ: Убираем лишние символы -- в начале строк (заменяем на -)
+    processed = processed.replace(/^--\s*/gm, '- ');
+    
+    // Убираем символы -- в середине текста (заменяем на обычный текст)
+    processed = processed.replace(/\s--\s/g, ' ');
     
     // 5. Убираем лишние пустые строки (более 2 подряд)
     processed = processed.replace(/\n{3,}/g, '\n\n');
