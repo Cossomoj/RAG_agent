@@ -2931,11 +2931,18 @@ function postProcessAnswer(text) {
     // Добавляем пробел после тире
     processed = processed.replace(/^([-*])([^\s])/gm, '$1 $2');
     
-    // ИСПРАВЛЕНИЕ: Убираем лишние символы -- в начале строк (заменяем на -)
-    processed = processed.replace(/^--\s*/gm, '- ');
+    // ИСПРАВЛЕНИЕ: Убираем лишние символы -- 
+    // Убираем строки содержащие только --
+    processed = processed.replace(/^--\s*$/gm, '');
+    
+    // Заменяем -- в начале строк на маркеры списков -
+    processed = processed.replace(/^--\s+/gm, '- ');
     
     // Убираем символы -- в середине текста (заменяем на обычный текст)
     processed = processed.replace(/\s--\s/g, ' ');
+    
+    // Убираем -- как разделители между абзацами
+    processed = processed.replace(/\n--\n/g, '\n\n');
     
     // 5. Убираем лишние пустые строки (более 2 подряд)
     processed = processed.replace(/\n{3,}/g, '\n\n');
