@@ -232,42 +232,79 @@ async def handle_cached_request(question_id, question, user_id, role, specializa
         return None
 
 def get_question_id_from_text(question_text):
-    """Получает question_id на основе текста вопроса из телеграм бота"""
-    # ТОЧНОЕ соответствие с телеграм ботом
-    question_mapping = {
-        # Основные вопросы из телеграм бота
-        "Что я могу ожидать от своего PO/PM?": "1",  # question_1
-        "Что я могу ожидать от своего Лида?": "2",   # question_2  
-        "Посмотерть матрицу компетенций": "3",       # question_3 (с опечаткой как в боте)
-        "Что я могу ожидать от специалиста ": "4",   # question_4 (с пробелом как в боте)
-        "Что я могу ожидать от своего PO/PM ": "5",  # question_5 (с пробелом как в боте)
-        "Что я могу ожидать от специалиста ?": "18", # question_18 (с пробелом и ? как в боте)
-        "Что ожидается от меня?": "20",              # question_20
-        "Рекомендации для стажеров": "21",           # question_21
-        
-        # Дополнительные вопросы для стажеров (группа intern_questions_group)
-        "Лучшие практики для стажеров": "22",        # intern_group_question_1
-        "Что такое SDLC": "23",                      # intern_group_question_2
-        "Советы по тайм-менеджменту для стажеров": "24", # intern_group_question_3
-        
-        # Специальные вопросы
-        "Что еще ты умеешь?": "777",                 # question_777
-        
-        # Альтернативные варианты для веб-приложения (без опечаток)
-        "Что я могу ожидать от своего PO/PM": "1",
-        "Что я могу ожидать от своего Лида": "2", 
-        "Посмотреть матрицу компетенций": "3",
-        "Что я могу ожидать от специалиста": "4",
-        "Что я могу ожидать от лида компетенции": "2",
-        "Что ожидается от меня": "20",
-        
-        # Новые вопросы PO/PM из библиотеки
-        "Лучшие практики": "30",
-        "Что такое SDLC": "31", 
-        "Советы по тайм-менеджменту": "32"
-    }
+    """Получает question_id на основе текста вопроса с гибким поиском"""
+    if not question_text:
+        return "888"
     
-    return question_mapping.get(question_text, "888")  # 888 для свободного ввода
+    # Нормализуем вопрос (убираем знаки препинания, приводим к нижнему регистру)
+    normalized_question = question_text.lower().strip()
+    normalized_question = ''.join(c for c in normalized_question if c.isalnum() or c.isspace() or ord(c) >= 1040)
+    normalized_question = ' '.join(normalized_question.split())  # Нормализуем пробелы
+    
+    # Расширенный маппинг с учетом различных вариаций
+    question_patterns = [
+        # PO/PM вопросы (question_id=1)
+        (['что я могу ожидать от своего po pm', 'что я могу ожидать от po pm', 'что ожидать от po pm', 
+          'что я могу ожидать от своего пo пm', 'ожидания от po pm'], "1"),
+        
+        # Лид компетенции (question_id=2)  
+        (['что я могу ожидать от своего лида', 'что я могу ожидать от лида', 'что ожидать от лида',
+          'что я могу ожидать от лида компетенции', 'ожидания от лида'], "2"),
+        
+        # Матрица компетенций (question_id=3)
+        (['посмотреть матрицу компетенций', 'посмотерть матрицу компетенций', 'матрица компетенций',
+          'матрица компетенции', 'компетенции матрица'], "3"),
+        
+        # Специалист (question_id=4)
+        (['что я могу ожидать от специалиста', 'что ожидать от специалиста', 'ожидания от специалиста'], "4"),
+        
+        # PO/PM с пробелом (question_id=5)
+        (['что я могу ожидать от своего po pm ', 'ожидания po pm'], "5"),
+        
+        # Специалист с пробелом (question_id=18)
+        (['что я могу ожидать от специалиста ', 'что я могу ожидать от специалиста?'], "18"),
+        
+        # Что ожидается от меня (question_id=20)
+        (['что ожидается от меня', 'что от меня ожидается', 'мои обязанности', 'что я должен делать'], "20"),
+        
+        # Стажеры (question_id=21)
+        (['рекомендации для стажеров', 'советы для стажеров', 'помощь стажерам'], "21"),
+        
+        # Лучшие практики (question_id=22)
+        (['лучшие практики для стажеров', 'лучшие практики', 'best practices'], "22"),
+        
+        # SDLC (question_id=23)
+        (['что такое sdlc', 'sdlc это', 'жизненный цикл разработки'], "23"),
+        
+        # Тайм-менеджмент (question_id=24)
+        (['советы по тайм менеджменту', 'тайм менеджмент', 'управление временем', 
+          'советы по тайм менеджменту для стажеров'], "24"),
+        
+        # Что умеешь (question_id=777)
+        (['что еще ты умеешь', 'что ты умеешь', 'что ты можешь', 'твои возможности'], "777"),
+    ]
+    
+    # Ищем точные совпадения
+    for patterns, question_id in question_patterns:
+        for pattern in patterns:
+            if normalized_question == pattern:
+                logger.info(f"Точное совпадение: '{question_text}' -> question_id={question_id}")
+                return question_id
+    
+    # Ищем частичные совпадения (содержит ключевые слова)
+    for patterns, question_id in question_patterns:
+        for pattern in patterns:
+            # Проверяем, содержит ли вопрос все ключевые слова из паттерна
+            pattern_words = set(pattern.split())
+            question_words = set(normalized_question.split())
+            
+            # Если больше 70% слов паттерна присутствуют в вопросе
+            if len(pattern_words.intersection(question_words)) / len(pattern_words) >= 0.7:
+                logger.info(f"Частичное совпадение: '{question_text}' -> question_id={question_id} (паттерн: '{pattern}')")
+                return question_id
+    
+    logger.info(f"Не найдено совпадений для: '{question_text}' -> question_id=888 (свободный ввод)")
+    return "888"  # 888 для свободного ввода
 
 def get_dialog_context(user_id, max_messages=12):
     """Получает контекст диалога из последних сообщений пользователя (как в телеграм боте)"""
@@ -431,26 +468,83 @@ async def send_websocket_question(question, user_id, role="", specialization="",
 
 @app.route('/api/ask', methods=['POST'])
 def ask_question():
-    """Обработка вопроса пользователя"""
+    """Обработка вопроса пользователя с автоматическим определением question_id"""
     try:
         data = request.get_json()
         question = data.get('question', '').strip()
         user_id = data.get('user_id', 'guest')
         role = data.get('role', '')
         specialization = data.get('specialization', '')
-        question_id = data.get('question_id', None)  # Добавляем поддержку question_id
-        vector_store = data.get('vector_store', 'auto')  # Добавляем поддержку vector_store
+        question_id = data.get('question_id', None)
+        vector_store = data.get('vector_store', 'auto')
         
         if not question:
             return jsonify({"error": "Вопрос не может быть пустым"}), 400
         
-        # Отправляем вопрос через WebSocket с учетом question_id и vector_store
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        result = loop.run_until_complete(
-            send_websocket_question(question, user_id, role, specialization, question_id, vector_store)
-        )
-        loop.close()
+        # Если question_id не передан, пытаемся определить его автоматически
+        if not question_id:
+            question_id = get_question_id_from_text(question)
+            logger.info(f"Автоматически определен question_id={question_id} для вопроса: {question[:50]}...")
+        
+        # Если question_id определен и это известный вопрос, используем библиотечную логику с кешированием
+        if question_id and question_id != "888":
+            logger.info(f"Перенаправляем на ask_library для question_id={question_id}")
+            
+            # Проверяем кеш сначала
+            question_id_int = int(question_id)
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            cached_result = loop.run_until_complete(
+                handle_cached_request(question_id_int, question, user_id, role, specialization)
+            )
+            
+            if cached_result:
+                logger.info(f"Возвращаем кешированный ответ для question_id={question_id_int}")
+                loop.close()
+                save_to_history(user_id, question, cached_result.get('answer', ''), role, specialization)
+                return jsonify(cached_result)
+            
+            # Если в кеше нет, отправляем запрос к RAG сервису
+            result = loop.run_until_complete(
+                send_websocket_question(question, user_id, role, specialization, question_id, vector_store)
+            )
+            loop.close()
+            
+            # Генерируем предложенные вопросы для библиотечных вопросов
+            try:
+                if result.get('answer'):
+                    suggestion_payload = {
+                        'user_question': question,
+                        'bot_answer': result['answer'][:2000],
+                        'role': role,
+                        'specialization': specialization
+                    }
+                    
+                    suggestion_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(suggestion_loop)
+                    
+                    try:
+                        suggested_questions = suggestion_loop.run_until_complete(
+                            generate_suggested_questions_async(suggestion_payload)
+                        )
+                        result['suggested_questions'] = suggested_questions[:3]
+                    except Exception as e:
+                        logger.warning(f"Не удалось сгенерировать связанные вопросы: {e}")
+                        result['suggested_questions'] = []
+                    finally:
+                        suggestion_loop.close()
+            except Exception as e:
+                logger.warning(f"Ошибка генерации связанных вопросов: {e}")
+                result['suggested_questions'] = []
+        else:
+            # Для свободного ввода используем обычную логику
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            result = loop.run_until_complete(
+                send_websocket_question(question, user_id, role, specialization, "888", vector_store)  # 888 для свободного ввода
+            )
+            loop.close()
         
         # Сохраняем в историю
         save_to_history(user_id, question, result.get('answer', ''), role, specialization)

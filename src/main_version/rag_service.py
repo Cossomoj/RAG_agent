@@ -81,23 +81,23 @@ embedding = HuggingFaceEmbeddings(
 
 # Создание векторного хранилища для Аналитика
 vector_store_bsa = FAISS.from_documents(split_docs_bsa, embedding=embedding)
-embedding_retriever_bsa = vector_store_bsa.as_retriever(search_kwargs={"k": 5})
+embedding_retriever_bsa = vector_store_bsa.as_retriever(search_kwargs={"k": 15})
 
 # Создание векторного хранилища для Тестировщика
 vector_store_test = FAISS.from_documents(split_docs_test, embedding=embedding)
-embedding_retriever_test = vector_store_test.as_retriever(search_kwargs={"k": 5})
+embedding_retriever_test = vector_store_test.as_retriever(search_kwargs={"k": 15})
 
 # Создание векторного хранилища для Фронтенд разработчика
 vector_store_web = FAISS.from_documents(split_docs_web, embedding=embedding)
-embedding_retriever_web = vector_store_web.as_retriever(search_kwargs={"k": 5})
+embedding_retriever_web = vector_store_web.as_retriever(search_kwargs={"k": 15})
 
 # Создание векторного хранилища для Java разработчика
 vector_store_java = FAISS.from_documents(split_docs_java, embedding=embedding)
-embedding_retriever_java = vector_store_java.as_retriever(search_kwargs={"k": 5})
+embedding_retriever_java = vector_store_java.as_retriever(search_kwargs={"k": 15})
 
 # Создание векторного хранилища для Python разработчика
 vector_store_python = FAISS.from_documents(split_docs_python, embedding=embedding)
-embedding_retriever_python = vector_store_python.as_retriever(search_kwargs={"k": 5})
+embedding_retriever_python = vector_store_python.as_retriever(search_kwargs={"k": 15})
 
 # Создание ансамбля ретриверов для поиска по всем базам
 ensemble_retriever = EnsembleRetriever(
