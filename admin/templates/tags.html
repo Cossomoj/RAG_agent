@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+
+{% block title %}Управление тегами{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="h2">Управление тегами</h1>
+            <p class="text-muted">Создание, редактирование и удаление тегов для вопросов</p>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary" onclick="showAddTagModal()">
+                <i class="bi bi-plus-circle"></i> Добавить тег
+            </button>
+        </div>
+    </div>
+
+    <!-- Таблица тегов -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Название</th>
+                            <th>Цвет</th>
+                            <th>Описание</th>
+                            <th>Вопросов</th>
+                            <th>Дата создания</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tag in tags %}
+                        <tr>
+                            <td><small>{{ tag.id }}</small></td>
+                            <td>
+                                <span class="badge" style="background-color: {{ tag.color }}; color: white;">
+                                    {{ tag.name }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="color-preview" style="width: 20px; height: 20px; background-color: {{ tag.color }}; border-radius: 3px; margin-right: 8px;"></div>
+                                    <code>{{ tag.color }}</code>
+                                </div>
+                            </td>
+                            <td>{{ tag.description or '-' }}</td>
+                            <td>
+                                <span class="badge bg-secondary">{{ tag.question_count }}</span>
+                            </td>
+                            <td>
+                                <small class="text-muted">{{ tag.created_at }}</small>
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" onclick="editTag({{ tag.id }})">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteTag({{ tag.id }}, '{{ tag.name }}')" 
+                                        {% if tag.question_count > 0 %}title="Нельзя удалить тег с привязанными вопросами"{% endif %}>
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно для добавления/редактирования тега -->
+<div class="modal fade" id="tagModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTitle">Добавить тег</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="tagForm">
+                    <input type="hidden" id="tagId" name="tag_id">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Название тега <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="tagName" required>
+                        <div class="form-text">Уникальное название тега</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Цвет</label>
+                        <div class="input-group">
+                            <input type="color" class="form-control form-control-color" id="tagColor" value="#6c757d">
+                            <input type="text" class="form-control" id="tagColorText" value="#6c757d">
+                        </div>
+                        <div class="form-text">Цвет для отображения тега</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Описание</label>
+                        <textarea class="form-control" id="tagDescription" rows="3"></textarea>
+                        <div class="form-text">Описание назначения тега</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Предварительный просмотр</label>
+                        <div class="p-3 bg-light rounded">
+                            <span class="badge preview-badge" id="tagPreview" style="background-color: #6c757d; color: white;">
+                                Название тега
+                            </span>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="saveTag()">Сохранить</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Дожидаемся полной загрузки DOM
+document.addEventListener('DOMContentLoaded', function() {
+    // Инициализируем модальное окно
+    window.tagModal = new bootstrap.Modal(document.getElementById('tagModal'));
+    
+    // Синхронизируем цвет между input[type=color] и text
+    const colorInput = document.getElementById('tagColor');
+    const colorTextInput = document.getElementById('tagColorText');
+    const tagNameInput = document.getElementById('tagName');
+    const tagPreview = document.getElementById('tagPreview');
+    
+    function updatePreview() {
+        const name = tagNameInput.value || 'Название тега';
+        const color = colorInput.value;
+        tagPreview.textContent = name;
+        tagPreview.style.backgroundColor = color;
+        tagPreview.style.color = isLightColor(color) ? '#000' : '#fff';
+    }
+    
+    function isLightColor(color) {
+        const hex = color.replace('#', '');
+        const r = parseInt(hex.substr(0, 2), 16);
+        const g = parseInt(hex.substr(2, 2), 16);
+        const b = parseInt(hex.substr(4, 2), 16);
+        const brightness = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+        return brightness > 155;
+    }
+    
+    colorInput.addEventListener('input', function() {
+        colorTextInput.value = this.value;
+        updatePreview();
+    });
+    
+    colorTextInput.addEventListener('input', function() {
+        if (/^#[0-9A-F]{6}$/i.test(this.value)) {
+            colorInput.value = this.value;
+            updatePreview();
+        }
+    });
+    
+    tagNameInput.addEventListener('input', updatePreview);
+    
+    // Инициализируем предварительный просмотр
+    updatePreview();
+});
+
+function showAddTagModal() {
+    document.getElementById('modalTitle').textContent = 'Добавить тег';
+    document.getElementById('tagForm').reset();
+    document.getElementById('tagId').value = '';
+    document.getElementById('tagColor').value = '#6c757d';
+    document.getElementById('tagColorText').value = '#6c757d';
+    
+    // Обновляем предварительный просмотр
+    const tagPreview = document.getElementById('tagPreview');
+    tagPreview.textContent = 'Название тега';
+    tagPreview.style.backgroundColor = '#6c757d';
+    tagPreview.style.color = 'white';
+    
+    window.tagModal.show();
+}
+
+function editTag(tagId) {
+    fetch(`/tags/${tagId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                alert('Ошибка: ' + data.error);
+                return;
+            }
+            
+            document.getElementById('modalTitle').textContent = 'Редактировать тег';
+            document.getElementById('tagId').value = data.id;
+            document.getElementById('tagName').value = data.name;
+            document.getElementById('tagColor').value = data.color;
+            document.getElementById('tagColorText').value = data.color;
+            document.getElementById('tagDescription').value = data.description || '';
+            
+            // Обновляем предварительный просмотр
+            const tagPreview = document.getElementById('tagPreview');
+            tagPreview.textContent = data.name;
+            tagPreview.style.backgroundColor = data.color;
+            tagPreview.style.color = isLightColor(data.color) ? '#000' : '#fff';
+            
+            window.tagModal.show();
+        })
+        .catch(error => {
+            alert('Ошибка при загрузке тега: ' + error);
+        });
+}
+
+function saveTag() {
+    const tagId = document.getElementById('tagId').value;
+    const isEdit = !!tagId;
+    
+    const data = {
+        name: document.getElementById('tagName').value,
+        color: document.getElementById('tagColor').value,
+        description: document.getElementById('tagDescription').value || null
+    };
+    
+    if (!data.name.trim()) {
+        alert('Введите название тега');
+        return;
+    }
+    
+    const url = isEdit ? `/tags/${tagId}` : '/tags/add';
+    const method = isEdit ? 'PUT' : 'POST';
+    
+    fetch(url, {
+        method: method,
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            window.tagModal.hide();
+            location.reload();
+        } else {
+            alert('Ошибка: ' + result.error);
+        }
+    })
+    .catch(error => {
+        alert('Ошибка при сохранении: ' + error);
+    });
+}
+
+function deleteTag(tagId, tagName) {
+    if (!confirm(`Вы уверены, что хотите удалить тег "${tagName}"?`)) {
+        return;
+    }
+    
+    fetch(`/tags/${tagId}`, {
+        method: 'DELETE'
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            location.reload();
+        } else {
+            alert('Ошибка при удалении: ' + result.error);
+        }
+    })
+    .catch(error => {
+        alert('Ошибка при удалении: ' + error);
+    });
+}
+
+function isLightColor(color) {
+    const hex = color.replace('#', '');
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    const brightness = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+    return brightness > 155;
+}
+</script>
+{% endblock %} 

@@ -354,8 +354,8 @@ class DatabaseOperations:
                 'period_days': days
             }
     
-    def get_all_questions(self, page=1, per_page=20, category=None):
-        """Получение списка всех вопросов с пагинацией и фильтрацией"""
+    def get_all_questions(self, page=1, per_page=20, tag_id=None):
+        """Получение списка всех вопросов с пагинацией и фильтрацией по тегу"""
         try:
             with self.get_db() as conn:
                 cursor = conn.cursor()
@@ -368,15 +368,19 @@ class DatabaseOperations:
                 LEFT JOIN VectorStores v ON q.vector_store = v.name
                 """
                 
-                # Добавляем фильтр по категории если нужно
+                # Добавляем фильтр по тегу если нужно
                 where_clause = ""
                 params = []
-                if category:
-                    where_clause = "WHERE q.category = ?"
-                    params.append(category)
+                if tag_id:
+                    base_query += " JOIN QuestionTags qt ON q.question_id = qt.question_id"
+                    where_clause = "WHERE qt.tag_id = ?"
+                    params.append(tag_id)
                 
                 # Считаем общее количество
-                count_query = f"SELECT COUNT(*) FROM Questions q {where_clause}"
+                count_query = f"SELECT COUNT(DISTINCT q.question_id) FROM Questions q"
+                if tag_id:
+                    count_query += " JOIN QuestionTags qt ON q.question_id = qt.question_id"
+                count_query += f" {where_clause}"
                 cursor.execute(count_query, params)
                 total_count = cursor.fetchone()[0]
                 
@@ -386,6 +390,10 @@ class DatabaseOperations:
                 cursor.execute(query, params)
                 
                 questions = [dict(row) for row in cursor.fetchall()]
+                
+                # Добавляем теги для каждого вопроса
+                for question in questions:
+                    question['tags'] = self.get_question_tags(question['question_id'])
                 
                 return {
                     'questions': questions,
@@ -417,10 +425,13 @@ class DatabaseOperations:
             """, (callback_data,))
             row = cursor.fetchone()
             if row:
-                return dict(row)
+                question = dict(row)
+                # Добавляем теги
+                question['tags'] = self.get_question_tags(question['question_id'])
+                return question
             return None
     
-    def add_question(self, callback_data, question_text, question_id, category=None, 
+    def add_question(self, callback_data, question_text, question_id, tags=None, 
                     role=None, specialization=None, vector_store='auto', prompt_id=None, 
                     is_active=True, order_position=None):
         """Добавление нового вопроса"""
@@ -436,13 +447,18 @@ class DatabaseOperations:
                 
                 cursor.execute("""
                     INSERT INTO Questions 
-                    (callback_data, question_text, question_id, category, role, 
+                    (callback_data, question_text, question_id, role, 
                      specialization, vector_store, prompt_id, is_active, order_position)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    callback_data, question_text, question_id, category, role,
+                    callback_data, question_text, question_id, role,
                     specialization, vector_store, prompt_id, is_active, order_position
                 ))
+                
+                # Устанавливаем теги если они переданы
+                if tags:
+                    self.set_question_tags(question_id, tags)
+                
                 conn.commit()
                 return cursor.lastrowid
         except sqlite3.Error as e:
@@ -455,30 +471,40 @@ class DatabaseOperations:
             with self.get_db() as conn:
                 cursor = conn.cursor()
                 
+                # Извлекаем теги из kwargs
+                tags = kwargs.pop('tags', None)
+                
                 # Строим запрос на обновление
                 set_parts = []
                 values = []
                 
                 for key, value in kwargs.items():
-                    if key in ['callback_data', 'question_text', 'question_id', 'category', 
+                    if key in ['callback_data', 'question_text', 'question_id', 
                               'role', 'specialization', 'vector_store', 'prompt_id', 
                               'is_active', 'order_position']:
                         set_parts.append(f"{key} = ?")
                         values.append(value)
                 
-                if not set_parts:
-                    return False
+                if set_parts:
+                    values.append(old_callback_data)
+                    
+                    cursor.execute(f"""
+                        UPDATE Questions 
+                        SET {', '.join(set_parts)}, updated_at = CURRENT_TIMESTAMP
+                        WHERE callback_data = ?
+                    """, values)
                 
-                values.append(old_callback_data)
-                
-                cursor.execute(f"""
-                    UPDATE Questions 
-                    SET {', '.join(set_parts)}, updated_at = CURRENT_TIMESTAMP
-                    WHERE callback_data = ?
-                """, values)
+                # Обновляем теги если они переданы
+                if tags is not None:
+                    # Получаем question_id
+                    cursor.execute("SELECT question_id FROM Questions WHERE callback_data = ?", (old_callback_data,))
+                    row = cursor.fetchone()
+                    if row:
+                        question_id = row[0]
+                        self.set_question_tags(question_id, tags)
                 
                 conn.commit()
-                return cursor.rowcount > 0
+                return True
                 
         except sqlite3.Error as e:
             print(f"Ошибка при обновлении вопроса: {e}")
@@ -529,4 +555,154 @@ class DatabaseOperations:
             return response.json()
         except Exception as e:
             print(f"Ошибка при перезагрузке кеша вопросов: {e}")
-            return {"success": False, "error": str(e)} 
+            return {"success": False, "error": str(e)}
+
+    # Методы для работы с тегами
+    def get_all_tags(self):
+        """Получение списка всех тегов"""
+        try:
+            with self.get_db() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT t.*, COUNT(qt.question_id) as question_count 
+                    FROM Tags t
+                    LEFT JOIN QuestionTags qt ON t.id = qt.tag_id
+                    GROUP BY t.id
+                    ORDER BY t.name
+                """)
+                return [dict(row) for row in cursor.fetchall()]
+        except sqlite3.Error as e:
+            print(f"Ошибка при получении тегов: {e}")
+            return []
+
+    def add_tag(self, name, color=None, description=None):
+        """Добавление нового тега"""
+        try:
+            with self.get_db() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO Tags (name, color, description)
+                    VALUES (?, ?, ?)
+                """, (name, color, description))
+                conn.commit()
+                return cursor.lastrowid
+        except sqlite3.Error as e:
+            print(f"Ошибка при добавлении тега: {e}")
+            raise
+
+    def update_tag(self, tag_id, name=None, color=None, description=None):
+        """Обновление существующего тега"""
+        try:
+            with self.get_db() as conn:
+                cursor = conn.cursor()
+                
+                # Строим запрос на обновление
+                set_parts = []
+                values = []
+                
+                if name is not None:
+                    set_parts.append("name = ?")
+                    values.append(name)
+                if color is not None:
+                    set_parts.append("color = ?")
+                    values.append(color)
+                if description is not None:
+                    set_parts.append("description = ?")
+                    values.append(description)
+                
+                if not set_parts:
+                    return False
+                
+                values.append(tag_id)
+                
+                cursor.execute(f"""
+                    UPDATE Tags 
+                    SET {', '.join(set_parts)}, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                """, values)
+                
+                conn.commit()
+                return cursor.rowcount > 0
+                
+        except sqlite3.Error as e:
+            print(f"Ошибка при обновлении тега: {e}")
+            raise
+
+    def delete_tag(self, tag_id):
+        """Удаление тега"""
+        try:
+            with self.get_db() as conn:
+                cursor = conn.cursor()
+                
+                # Сначала удаляем связи с вопросами
+                cursor.execute("DELETE FROM QuestionTags WHERE tag_id = ?", (tag_id,))
+                
+                # Затем удаляем сам тег
+                cursor.execute("DELETE FROM Tags WHERE id = ?", (tag_id,))
+                
+                conn.commit()
+                if cursor.rowcount == 0:
+                    raise ValueError(f"Тег с ID {tag_id} не найден")
+                    
+        except sqlite3.Error as e:
+            print(f"Ошибка при удалении тега: {e}")
+            raise
+
+    def get_question_tags(self, question_id):
+        """Получение тегов для конкретного вопроса"""
+        try:
+            with self.get_db() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT t.* 
+                    FROM Tags t
+                    JOIN QuestionTags qt ON t.id = qt.tag_id
+                    WHERE qt.question_id = ?
+                    ORDER BY t.name
+                """, (question_id,))
+                return [dict(row) for row in cursor.fetchall()]
+        except sqlite3.Error as e:
+            print(f"Ошибка при получении тегов вопроса: {e}")
+            return []
+
+    def set_question_tags(self, question_id, tag_ids):
+        """Установка тегов для вопроса"""
+        try:
+            with self.get_db() as conn:
+                cursor = conn.cursor()
+                
+                # Удаляем все существующие связи
+                cursor.execute("DELETE FROM QuestionTags WHERE question_id = ?", (question_id,))
+                
+                # Добавляем новые связи
+                for tag_id in tag_ids:
+                    cursor.execute("""
+                        INSERT INTO QuestionTags (question_id, tag_id)
+                        VALUES (?, ?)
+                    """, (question_id, tag_id))
+                
+                conn.commit()
+                return True
+                
+        except sqlite3.Error as e:
+            print(f"Ошибка при установке тегов вопроса: {e}")
+            raise
+
+    def get_questions_by_tag(self, tag_id):
+        """Получение вопросов по тегу"""
+        try:
+            with self.get_db() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT q.*, p.prompt_template, v.display_name as vector_store_display
+                    FROM Questions q
+                    LEFT JOIN Prompts p ON q.prompt_id = p.question_id
+                    LEFT JOIN VectorStores v ON q.vector_store = v.name
+                    JOIN QuestionTags qt ON q.question_id = qt.question_id
+                    WHERE qt.tag_id = ? AND q.is_active = 1
+                    ORDER BY q.order_position, q.id
+                """, (tag_id,))
+                return [dict(row) for row in cursor.fetchall()]
+        except sqlite3.Error as e:
+            print(f"Ошибка при получении вопросов по тегу: {e}")
+            return [] 

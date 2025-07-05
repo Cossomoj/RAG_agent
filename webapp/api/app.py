@@ -42,7 +42,7 @@ def get_db_connection():
         logger.error(f"Ошибка подключения к БД: {e}")
         return None
 
-def get_questions_from_db(role=None, specialization=None, category=None, is_active=True):
+def get_questions_from_db(role=None, specialization=None, tag_id=None, is_active=True):
     """Получение вопросов из базы данных с фильтрацией"""
     try:
         conn = get_db_connection()
@@ -57,8 +57,13 @@ def get_questions_from_db(role=None, specialization=None, category=None, is_acti
         FROM Questions q
         LEFT JOIN Prompts p ON q.prompt_id = p.question_id
         LEFT JOIN VectorStores v ON q.vector_store = v.name
-        WHERE q.is_active = ?
         """
+        
+        # Если фильтруем по тегу, добавляем JOIN
+        if tag_id:
+            query += " JOIN QuestionTags qt ON q.question_id = qt.question_id"
+        
+        query += " WHERE q.is_active = ?"
         params = [is_active]
         
         # Добавляем фильтры
@@ -70,14 +75,26 @@ def get_questions_from_db(role=None, specialization=None, category=None, is_acti
             query += " AND (q.specialization IS NULL OR q.specialization = ?)"
             params.append(specialization)
             
-        if category:
-            query += " AND q.category = ?"
-            params.append(category)
+        if tag_id:
+            query += " AND qt.tag_id = ?"
+            params.append(tag_id)
             
         query += " ORDER BY q.order_position, q.id"
         
         cursor.execute(query, params)
         questions = [dict(row) for row in cursor.fetchall()]
+        
+        # Добавляем теги для каждого вопроса
+        for question in questions:
+            cursor.execute("""
+                SELECT t.* 
+                FROM Tags t
+                JOIN QuestionTags qt ON t.id = qt.tag_id
+                WHERE qt.question_id = ?
+                ORDER BY t.name
+            """, (question['question_id'],))
+            tags = [dict(tag) for tag in cursor.fetchall()]
+            question['tags'] = tags
         
         conn.close()
         return questions
@@ -112,8 +129,8 @@ def get_question_by_id(question_id):
         logger.error(f"Ошибка при получении вопроса по ID: {e}")
         return None
 
-def get_question_categories():
-    """Получение списка всех категорий вопросов"""
+def get_question_tags():
+    """Получение списка всех тегов вопросов"""
     try:
         conn = get_db_connection()
         if not conn:
@@ -121,19 +138,20 @@ def get_question_categories():
             
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT DISTINCT category, COUNT(*) as count 
-            FROM Questions 
-            WHERE category IS NOT NULL AND is_active = 1
-            GROUP BY category 
-            ORDER BY category
+            SELECT t.*, COUNT(qt.question_id) as question_count 
+            FROM Tags t
+            LEFT JOIN QuestionTags qt ON t.id = qt.tag_id
+            LEFT JOIN Questions q ON qt.question_id = q.question_id AND q.is_active = 1
+            GROUP BY t.id
+            ORDER BY t.name
         """)
         
-        categories = [dict(row) for row in cursor.fetchall()]
+        tags = [dict(row) for row in cursor.fetchall()]
         conn.close()
-        return categories
+        return tags
         
     except sqlite3.Error as e:
-        logger.error(f"Ошибка при получении категорий: {e}")
+        logger.error(f"Ошибка при получении тегов: {e}")
         return []
 
 # Роли и специализации (синхронизированы с телеграм ботом)
@@ -622,26 +640,32 @@ def get_questions():
     """Получение списка вопросов из базы данных с фильтрацией"""
     role = request.args.get('role')
     specialization = request.args.get('specialization')
-    category = request.args.get('category')
+    tag_id = request.args.get('tag_id', type=int)
     
-    logger.info(f"Запрос вопросов для роли: {role}, специализации: {specialization}, категории: {category}")
+    logger.info(f"Запрос вопросов для роли: {role}, специализации: {specialization}, тега: {tag_id}")
     
     try:
         # Получаем вопросы из базы данных
-        questions = get_questions_from_db(role=role, specialization=specialization, category=category)
+        questions = get_questions_from_db(role=role, specialization=specialization, tag_id=tag_id)
         
         # Преобразуем в формат, ожидаемый фронтендом
         formatted_questions = []
         for q in questions:
+            # Используем первый тег как основную категорию для обратной совместимости
+            primary_category = 'general'
+            if q.get('tags') and len(q['tags']) > 0:
+                primary_category = q['tags'][0]['name']
+            
             formatted_question = {
                 'id': q['question_id'],
                 'text': q['question_text'],
                 'title': q['question_text'][:50] + '...' if len(q['question_text']) > 50 else q['question_text'],
-                'category': q['category'] or 'general',
+                'category': primary_category,
+                'tags': q.get('tags', []),
                 'role': q['role'],
                 'specialization': q['specialization'],
                 'vector_store': q['vector_store'],
-                'prompt_id': q['prompt_id'],  # ИСПРАВЛЕНО: Добавляем prompt_id для фронтенда
+                'prompt_id': q['prompt_id'],
                 'callback_data': q['callback_data'],
                 'preview': q['question_text'][:120] + '...' if len(q['question_text']) > 120 else q['question_text']
             }
@@ -687,14 +711,14 @@ def get_questions():
             logger.error(f"Ошибка fallback получения вопросов: {fallback_error}")
             return jsonify({"error": "Ошибка получения вопросов"}), 500
 
-@app.route('/api/questions/categories', methods=['GET'])
-def get_categories():
-    """Получение списка категорий вопросов"""
+@app.route('/api/questions/tags', methods=['GET'])
+def get_tags():
+    """Получение списка тегов вопросов"""
     try:
-        categories = get_question_categories()
-        return jsonify(categories)
+        tags = get_question_tags()
+        return jsonify(tags)
     except Exception as e:
-        logger.error(f"Ошибка при получении категорий: {e}")
+        logger.error(f"Ошибка при получении тегов: {e}")
         return jsonify([])
 
 @app.route('/api/roles', methods=['GET'])

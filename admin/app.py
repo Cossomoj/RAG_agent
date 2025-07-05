@@ -379,7 +379,7 @@ def questions():
     # Получаем параметры из URL
     page = request.args.get('page', 1, type=int)
     per_page = request.args.get('per_page', 20, type=int)
-    category = request.args.get('category')
+    tag_id = request.args.get('tag', type=int)
     
     # Ограничиваем количество записей на странице
     if per_page > 100:
@@ -387,8 +387,9 @@ def questions():
     if per_page < 5:
         per_page = 5
     
-    questions_data = db.get_all_questions(page=page, per_page=per_page, category=category)
-    categories = db.get_question_categories()
+    questions_data = db.get_all_questions(page=page, per_page=per_page, tag_id=tag_id)
+    tags = db.get_all_tags()
+    all_tags = db.get_all_tags()  # Для селектора тегов в модальном окне
     vector_stores = db.get_all_vector_stores()
     prompts = db.get_all_prompts()
     
@@ -398,8 +399,9 @@ def questions():
                          page=questions_data['page'],
                          per_page=questions_data['per_page'],
                          total_pages=questions_data['total_pages'],
-                         categories=categories,
-                         current_category=category,
+                         tags=tags,
+                         all_tags=all_tags,
+                         current_tag=tag_id,
                          vector_stores=vector_stores,
                          prompts=prompts)
 
@@ -418,7 +420,7 @@ def add_question():
             callback_data=data['callback_data'],
             question_text=data['question_text'],
             question_id=int(data['question_id']),
-            category=data.get('category'),
+            tags=data.get('tags', []),
             role=data.get('role'),
             specialization=data.get('specialization'),
             vector_store=data.get('vector_store', 'auto'),
@@ -451,7 +453,7 @@ def update_question(callback_data):
         
         # Фильтруем только допустимые поля для обновления
         update_data = {}
-        allowed_fields = ['callback_data', 'question_text', 'question_id', 'category', 
+        allowed_fields = ['callback_data', 'question_text', 'question_id', 
                          'role', 'specialization', 'vector_store', 'prompt_id', 
                          'is_active', 'order_position']
         
@@ -463,6 +465,10 @@ def update_question(callback_data):
                     update_data[field] = bool(data[field])
                 else:
                     update_data[field] = data[field]
+        
+        # Добавляем теги если они переданы
+        if 'tags' in data:
+            update_data['tags'] = data['tags']
         
         success = db.update_question(callback_data, **update_data)
         
@@ -493,6 +499,93 @@ def reload_questions_cache():
     """Принудительная перезагрузка кеша вопросов в боте"""
     result = db.reload_questions_cache()
     return jsonify(result)
+
+# Маршруты для работы с тегами
+@app.route('/tags')
+@login_required
+def tags():
+    """Страница управления тегами"""
+    tags = db.get_all_tags()
+    return render_template('tags.html', tags=tags)
+
+@app.route('/tags/add', methods=['POST'])
+@login_required
+def add_tag():
+    """Добавление нового тега"""
+    try:
+        data = request.get_json()
+        
+        # Проверяем обязательные поля
+        if not data.get('name'):
+            return jsonify({'success': False, 'error': 'Введите название тега'})
+        
+        # Добавляем тег
+        tag_id = db.add_tag(
+            name=data['name'].strip(),
+            color=data.get('color', '#6c757d'),
+            description=data.get('description')
+        )
+        
+        return jsonify({'success': True, 'message': 'Тег успешно добавлен', 'tag_id': tag_id})
+        
+    except sqlite3.IntegrityError:
+        return jsonify({'success': False, 'error': 'Тег с таким названием уже существует'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/tags/<int:tag_id>')
+@login_required
+def get_tag(tag_id):
+    """Получение данных тега"""
+    try:
+        tags = db.get_all_tags()
+        tag = next((t for t in tags if t['id'] == tag_id), None)
+        
+        if not tag:
+            return jsonify({'error': 'Тег не найден'}), 404
+        
+        return jsonify(tag)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/tags/<int:tag_id>', methods=['PUT'])
+@login_required
+def update_tag(tag_id):
+    """Обновление тега"""
+    try:
+        data = request.get_json()
+        
+        # Проверяем обязательные поля
+        if not data.get('name'):
+            return jsonify({'success': False, 'error': 'Введите название тега'})
+        
+        success = db.update_tag(
+            tag_id=tag_id,
+            name=data['name'].strip(),
+            color=data.get('color'),
+            description=data.get('description')
+        )
+        
+        if success:
+            return jsonify({'success': True, 'message': 'Тег успешно обновлен'})
+        else:
+            return jsonify({'success': False, 'error': 'Тег не найден'})
+            
+    except sqlite3.IntegrityError:
+        return jsonify({'success': False, 'error': 'Тег с таким названием уже существует'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/tags/<int:tag_id>', methods=['DELETE'])
+@login_required
+def delete_tag(tag_id):
+    """Удаление тега"""
+    try:
+        db.delete_tag(tag_id)
+        return jsonify({'success': True, 'message': 'Тег успешно удален'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8002) 

@@ -24,12 +24,12 @@
         <div class="card-body">
             <form method="get" action="{{ url_for('questions') }}" class="row g-3">
                 <div class="col-md-4">
-                    <label class="form-label">Категория</label>
-                    <select name="category" class="form-select" onchange="this.form.submit()">
-                        <option value="">Все категории</option>
-                        {% for cat in categories %}
-                            <option value="{{ cat.category }}" {% if current_category == cat.category %}selected{% endif %}>
-                                {{ cat.category }} ({{ cat.count }})
+                    <label class="form-label">Тег</label>
+                    <select name="tag" class="form-select" onchange="this.form.submit()">
+                        <option value="">Все теги</option>
+                        {% for tag in tags %}
+                            <option value="{{ tag.id }}" {% if current_tag == tag.id|string %}selected{% endif %}>
+                                {{ tag.name }} ({{ tag.question_count }})
                             </option>
                         {% endfor %}
                     </select>
@@ -56,7 +56,7 @@
                         <tr>
                             <th>ID</th>
                             <th>Текст вопроса</th>
-                            <th>Категория</th>
+                            <th>Теги</th>
                             <th>Роль</th>
                             <th>Специализация</th>
                             <th>Векторное хранилище</th>
@@ -74,8 +74,10 @@
                                 <small class="text-muted">callback: {{ question.callback_data }}</small>
                             </td>
                             <td>
-                                {% if question.category %}
-                                    <span class="badge bg-secondary">{{ question.category }}</span>
+                                {% if question.tags %}
+                                    {% for tag in question.tags %}
+                                        <span class="badge me-1" style="background-color: {{ tag.color }}; color: white;">{{ tag.name }}</span>
+                                    {% endfor %}
                                 {% else %}
                                     <span class="text-muted">-</span>
                                 {% endif %}
@@ -126,7 +128,7 @@
             <nav aria-label="Навигация по страницам">
                 <ul class="pagination justify-content-center">
                     <li class="page-item {% if page == 1 %}disabled{% endif %}">
-                        <a class="page-link" href="?page={{ page - 1 }}&per_page={{ per_page }}{% if current_category %}&category={{ current_category }}{% endif %}">
+                        <a class="page-link" href="?page={{ page - 1 }}&per_page={{ per_page }}{% if current_tag %}&tag={{ current_tag }}{% endif %}">
                             Предыдущая
                         </a>
                     </li>
@@ -134,7 +136,7 @@
                     {% for p in range(1, total_pages + 1) %}
                         {% if p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
                             <li class="page-item {% if p == page %}active{% endif %}">
-                                <a class="page-link" href="?page={{ p }}&per_page={{ per_page }}{% if current_category %}&category={{ current_category }}{% endif %}">
+                                <a class="page-link" href="?page={{ p }}&per_page={{ per_page }}{% if current_tag %}&tag={{ current_tag }}{% endif %}">
                                     {{ p }}
                                 </a>
                             </li>
@@ -144,7 +146,7 @@
                     {% endfor %}
                     
                     <li class="page-item {% if page == total_pages %}disabled{% endif %}">
-                        <a class="page-link" href="?page={{ page + 1 }}&per_page={{ per_page }}{% if current_category %}&category={{ current_category }}{% endif %}">
+                        <a class="page-link" href="?page={{ page + 1 }}&per_page={{ per_page }}{% if current_tag %}&tag={{ current_tag }}{% endif %}">
                             Следующая
                         </a>
                     </li>
@@ -187,13 +189,24 @@
 
                     <div class="row mb-3">
                         <div class="col-md-4">
-                            <label class="form-label">Категория</label>
-                            <input type="text" class="form-control" id="category" list="categoryList">
-                            <datalist id="categoryList">
-                                {% for cat in categories %}
-                                    <option value="{{ cat.category }}">
-                                {% endfor %}
-                            </datalist>
+                            <label class="form-label">Теги</label>
+                            <div id="tagsContainer">
+                                <div class="mb-2">
+                                    <small class="text-muted">Выберите теги для вопроса:</small>
+                                </div>
+                                <div class="tags-checkboxes" style="max-height: 200px; overflow-y: auto;">
+                                    {% for tag in all_tags %}
+                                        <div class="form-check">
+                                            <input class="form-check-input tag-checkbox" type="checkbox" 
+                                                   id="tag_{{ tag.id }}" value="{{ tag.id }}">
+                                            <label class="form-check-label" for="tag_{{ tag.id }}">
+                                                <span class="badge me-1" style="background-color: {{ tag.color }}; color: white;">{{ tag.name }}</span>
+                                                {% if tag.description %}<small class="text-muted">{{ tag.description }}</small>{% endif %}
+                                            </label>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Роль</label>
@@ -295,13 +308,27 @@ function editQuestion(callbackData) {
             document.getElementById('callbackData').value = data.callback_data;
             document.getElementById('questionId').value = data.question_id;
             document.getElementById('questionText').value = data.question_text;
-            document.getElementById('category').value = data.category || '';
             document.getElementById('role').value = data.role || '';
             document.getElementById('specialization').value = data.specialization || '';
             document.getElementById('vectorStore').value = data.vector_store || 'auto';
             document.getElementById('promptId').value = data.prompt_id || '';
             document.getElementById('orderPosition').value = data.order_position || '';
             document.getElementById('isActive').checked = data.is_active;
+            
+            // Очищаем все чекбоксы тегов
+            document.querySelectorAll('.tag-checkbox').forEach(checkbox => {
+                checkbox.checked = false;
+            });
+            
+            // Отмечаем теги, которые привязаны к вопросу
+            if (data.tags && data.tags.length > 0) {
+                data.tags.forEach(tag => {
+                    const checkbox = document.getElementById(`tag_${tag.id}`);
+                    if (checkbox) {
+                        checkbox.checked = true;
+                    }
+                });
+            }
             
             window.questionModal.show();
         })
@@ -314,17 +341,23 @@ function saveQuestion() {
     const originalCallbackData = document.getElementById('originalCallbackData').value;
     const isEdit = !!originalCallbackData;
     
+    // Собираем выбранные теги
+    const selectedTags = [];
+    document.querySelectorAll('.tag-checkbox:checked').forEach(checkbox => {
+        selectedTags.push(parseInt(checkbox.value));
+    });
+    
     const data = {
         callback_data: document.getElementById('callbackData').value,
         question_id: document.getElementById('questionId').value,
         question_text: document.getElementById('questionText').value,
-        category: document.getElementById('category').value || null,
         role: document.getElementById('role').value || null,
         specialization: document.getElementById('specialization').value || null,
         vector_store: document.getElementById('vectorStore').value,
         prompt_id: document.getElementById('promptId').value || null,
         order_position: document.getElementById('orderPosition').value || null,
-        is_active: document.getElementById('isActive').checked
+        is_active: document.getElementById('isActive').checked,
+        tags: selectedTags
     };
     
     const url = isEdit ? `/questions/${encodeURIComponent(originalCallbackData)}` : '/questions/add';

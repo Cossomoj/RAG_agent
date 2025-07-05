@@ -47,15 +47,28 @@ class QuestionsLoader:
             for q in questions:
                 question_dict = dict(q)
                 callback_data = question_dict['callback_data']
-                category = question_dict['category']
+                question_id = question_dict['question_id']
+                
+                # Загружаем теги для вопроса
+                cursor.execute("""
+                    SELECT t.* 
+                    FROM Tags t
+                    JOIN QuestionTags qt ON t.id = qt.tag_id
+                    WHERE qt.question_id = ?
+                    ORDER BY t.name
+                """, (question_id,))
+                tags = [dict(tag) for tag in cursor.fetchall()]
+                question_dict['tags'] = tags
                 
                 # Кеш по callback_data
                 self._questions_cache[callback_data] = question_dict
                 
-                # Кеш по категориям
-                if category not in self._categories_cache:
-                    self._categories_cache[category] = []
-                self._categories_cache[category].append(question_dict)
+                # Кеш по тегам (для обратной совместимости используем первый тег как категорию)
+                for tag in tags:
+                    tag_name = tag['name']
+                    if tag_name not in self._categories_cache:
+                        self._categories_cache[tag_name] = []
+                    self._categories_cache[tag_name].append(question_dict)
             
             # Загружаем векторные хранилища
             cursor.execute("SELECT * FROM VectorStores")
@@ -99,10 +112,34 @@ class QuestionsLoader:
         
         for q in self._questions_cache.values():
             if q['role'] is None or q['role'] == role:
-                if q['category']:
-                    categories.add(q['category'])
+                # Используем теги как категории
+                for tag in q.get('tags', []):
+                    categories.add(tag['name'])
         
         return sorted(list(categories))
+
+    def get_tags_for_role(self, role: str) -> List[Dict]:
+        """Получает список тегов, доступных для роли"""
+        tags = {}
+        
+        for q in self._questions_cache.values():
+            if q['role'] is None or q['role'] == role:
+                for tag in q.get('tags', []):
+                    tags[tag['id']] = tag
+        
+        return sorted(list(tags.values()), key=lambda x: x['name'])
+
+    def get_questions_by_tag(self, tag_name: str) -> List[Dict]:
+        """Получает список вопросов по тегу"""
+        result = []
+        
+        for q in self._questions_cache.values():
+            for tag in q.get('tags', []):
+                if tag['name'] == tag_name:
+                    result.append(q)
+                    break
+        
+        return sorted(result, key=lambda x: (x['order_position'] if x['order_position'] is not None else float('inf'), x['id']))
     
     def get_vector_store_for_question(self, callback_data: str, user_specialization: str) -> str:
         """Определяет векторное хранилище для вопроса"""
