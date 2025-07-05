@@ -491,8 +491,28 @@ def ask_question():
         if question_id and question_id != "888":
             logger.info(f"Перенаправляем на ask_library для question_id={question_id}")
             
-            # Проверяем кеш сначала
+            # ИСПРАВЛЕНО: Определяем правильный vector_store для универсальных вопросов
             question_id_int = int(question_id)
+            question_info = get_question_by_id(question_id_int)
+            
+            if question_info:
+                question_text = question_info.get('question_text', '')
+                
+                # Список универсальных вопросов
+                universal_questions = [
+                    "матрица компетенций", "компетенц", "развиваться", "обратная связь",
+                    "лучшие практики", "sdlc", "тайм-менеджмент", "agile", "взаимодействовать"
+                ]
+                
+                is_universal = any(keyword in question_text.lower() for keyword in universal_questions)
+                
+                if is_universal:
+                    vector_store = "by_specialization"
+                    logger.info(f"Универсальный вопрос при ручном вводе '{question_text}' - используем by_specialization для {specialization}")
+                elif vector_store == 'auto' and question_info.get('vector_store'):
+                    vector_store = question_info['vector_store']
+            
+            # Проверяем кеш сначала
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             
@@ -507,6 +527,7 @@ def ask_question():
                 return jsonify(cached_result)
             
             # Если в кеше нет, отправляем запрос к RAG сервису
+            logger.info(f"Ручной ввод: отправляем в RAG с question_id={question_id} и vector_store={vector_store}")
             result = loop.run_until_complete(
                 send_websocket_question(question, user_id, role, specialization, question_id, vector_store)
             )
@@ -576,12 +597,31 @@ def ask_library_question():
         
         question_id_int = int(question_id)
         
-        # Получаем настройки vector_store из базы данных, если не указан явно
-        if vector_store == 'auto':
-            question_info = get_question_by_id(question_id_int)
-            if question_info and question_info.get('vector_store'):
+        # ИСПРАВЛЕНО: Определяем vector_store для универсальных вопросов
+        question_info = get_question_by_id(question_id_int)
+        if question_info:
+            question_text = question_info.get('question_text', '')
+            
+            # Список универсальных вопросов, которые должны адаптироваться под специализацию пользователя
+            universal_questions = [
+                "матрица компетенций", "компетенц", "развиваться", "обратная связь",
+                "лучшие практики", "sdlc", "тайм-менеджмент", "agile", "взаимодействовать"
+            ]
+            
+            is_universal = any(keyword in question_text.lower() for keyword in universal_questions)
+            
+            if is_universal:
+                # Для универсальных вопросов используем специализацию пользователя
+                vector_store = "by_specialization"
+                logger.info(f"Универсальный вопрос '{question_text}' - используем by_specialization для {specialization}")
+            elif vector_store == 'auto' and question_info.get('vector_store'):
+                # Для специфических вопросов используем настройку из базы
                 vector_store = question_info['vector_store']
-                logger.info(f"Используем vector_store из БД: {vector_store} для question_id={question_id_int}")
+                logger.info(f"Специфический вопрос - используем vector_store из БД: {vector_store} для question_id={question_id_int}")
+        
+        # Fallback если ничего не определилось
+        if vector_store == 'auto':
+            vector_store = 'by_specialization'
         
         # Проверяем кеш сначала (аналогично Telegram боту)
         loop = asyncio.new_event_loop()
