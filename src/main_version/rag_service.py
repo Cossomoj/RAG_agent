@@ -352,7 +352,6 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
             # 3. ИСПРАВЛЕНО: Правильно заполняем {input} и {context} в промпте
             # Проверяем, есть ли {input} и {context} в промпте
             if '{input}' in self.base_prompt and '{context}' in self.base_prompt:
-                print(f"✅ Используем новую логику: заполняем {{input}} и {{context}}")
                 # Заполняем переменные {input} и {context}
                 final_prompt = self.base_prompt.replace('{input}', question).replace('{context}', context_text)
                 
@@ -362,7 +361,6 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
                     final_prompt = final_prompt + dialogue_history_prompt_part
                     
             elif '{context}' in self.base_prompt:
-                print(f"✅ Используем новую логику: заполняем только {{context}}")
                 # Только {context} (старые промпты)
                 filled_prompt = self.base_prompt.replace('{context}', context_text)
                 
@@ -374,7 +372,6 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
                 final_prompt = f"{filled_prompt}{dialogue_history_prompt_part}\\n\\nВопрос: {question}\\n\\nОтвет:"
                 
             else:
-                print(f"⚠️  Используем fallback логику: промпт без переменных")
                 # Fallback: старая логика для промптов без переменных
                 dialogue_history_prompt_part = ""
                 if dialogue_context and dialogue_context != '[]':
