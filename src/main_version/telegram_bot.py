@@ -916,7 +916,6 @@ async def check():
                 cursor.execute("DELETE FROM Reminder WHERE id_rem=?", (reminder['id_rem'],))
                 conn.commit()
                 chat_id = reminder['user_id']
-                wanted_simbols = [".", ":"]
                 context_str = reminder['reminder_text']
                 if(not context_str):
                     context_str = "История сообщений пустая"
@@ -939,10 +938,6 @@ async def check():
                             while True:
                                 answer_part = await websocket.recv()  # Получаем ответ частями
                                 if answer_part:
-                                    for char in answer_part:
-                                        if (char in wanted_simbols):
-                                            answer_part += "\n"
-                                    
                                     full_answer += answer_part
                                 else:
                                     print("Получено пустое сообщение от WebSocket.")
@@ -1020,8 +1015,7 @@ async def check_for_daily_msg():
 
                 # Отправляем сообщение каждому пользователю
                 for user in users_results:
-                    chat_id = user['user_id']
-                    wanted_simbols = [".", ":"]
+                                    chat_id = user['user_id']
                     
                     logger.info(f"Обработка пользователя {chat_id}")
                     
@@ -1057,9 +1051,6 @@ async def check_for_daily_msg():
                                 while True:
                                     answer_part = await websocket.recv()
                                     if answer_part:
-                                        for char in answer_part:
-                                            if (char in wanted_simbols):
-                                                answer_part += "\n"
                                         full_answer += answer_part
                                     else:
                                         logger.warning(f"Получено пустое сообщение от WebSocket для пользователя {chat_id}")
@@ -1727,7 +1718,6 @@ async def handling_cached_requests(question_id, message, question, specializatio
     #mplusk2
 async def websocket_question_from_user(question, message, role, specialization, question_id, show_suggested_questions=True, vector_store='auto'):
     print(f"websocket_question_from_user: question='{question}', question_id={question_id}")
-    wanted_simbols = [".", ":"]
 
     chat_id = message.chat.id
     print(f"websocket_question_from_user: chat_id={chat_id}")
@@ -1784,10 +1774,6 @@ async def websocket_question_from_user(question, message, role, specialization, 
                         break
                     if answer_part:
                         empty_message_count = 0  # Сбрасываем счетчик пустых сообщений
-                        for char in answer_part:
-                            if (char in wanted_simbols):
-                                answer_part += "\n"
-
                         full_answer += answer_part
                         if time.time() - last_send_time >= 1:
                             try:
