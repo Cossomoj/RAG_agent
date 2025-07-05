@@ -241,58 +241,59 @@ def get_question_id_from_text(question_text):
     normalized_question = ''.join(c for c in normalized_question if c.isalnum() or c.isspace() or ord(c) >= 1040)
     normalized_question = ' '.join(normalized_question.split())  # Нормализуем пробелы
     
+    # ИСПРАВЛЕНО: Используем prompt_id вместо question_id (как в телеграм боте)
     # Расширенный маппинг с учетом различных вариаций
     question_patterns = [
-        # PO/PM вопросы (question_id=1)
+        # PO/PM вопросы (prompt_id=1)
         (['что я могу ожидать от своего po pm', 'что я могу ожидать от po pm', 'что ожидать от po pm', 
           'что я могу ожидать от своего пo пm', 'ожидания от po pm'], "1"),
         
-        # Лид компетенции (question_id=2)  
+        # Лид компетенции (prompt_id=2)  
         (['что я могу ожидать от своего лида', 'что я могу ожидать от лида', 'что ожидать от лида',
           'что я могу ожидать от лида компетенции', 'ожидания от лида'], "2"),
         
-        # Матрица компетенций (question_id=3)
+        # Матрица компетенций (prompt_id=3) - ИСПРАВЛЕНО
         (['посмотреть матрицу компетенций', 'посмотерть матрицу компетенций', 'матрица компетенций',
-          'матрица компетенции', 'компетенции матрица'], "3"),
+          'матрица компетенции', 'компетенции матрица', 'получить матрицу компетенций'], "3"),
         
-        # Специалист (question_id=4)
+        # Специалист (prompt_id=4)
         (['что я могу ожидать от специалиста', 'что ожидать от специалиста', 'ожидания от специалиста'], "4"),
         
-        # PO/PM с пробелом (question_id=5)
+        # PO/PM с пробелом (prompt_id=5)
         (['что я могу ожидать от своего po pm ', 'ожидания po pm'], "5"),
         
-        # Специалист с пробелом (question_id=18)
+        # Специалист с пробелом (prompt_id=18)
         (['что я могу ожидать от специалиста ', 'что я могу ожидать от специалиста?'], "18"),
         
-        # Что ожидается от меня (question_id=20)
+        # Что ожидается от меня (prompt_id=20)
         (['что ожидается от меня', 'что от меня ожидается', 'мои обязанности', 'что я должен делать'], "20"),
         
-        # Стажеры (question_id=21)
+        # Стажеры (prompt_id=21)
         (['рекомендации для стажеров', 'советы для стажеров', 'помощь стажерам'], "21"),
         
-        # Лучшие практики (question_id=22)
+        # Лучшие практики (prompt_id=22)
         (['лучшие практики для стажеров', 'лучшие практики', 'best practices'], "22"),
         
-        # SDLC (question_id=23)
+        # SDLC (prompt_id=23)
         (['что такое sdlc', 'sdlc это', 'жизненный цикл разработки'], "23"),
         
-        # Тайм-менеджмент (question_id=24)
+        # Тайм-менеджмент (prompt_id=24)
         (['советы по тайм менеджменту', 'тайм менеджмент', 'управление временем', 
           'советы по тайм менеджменту для стажеров'], "24"),
         
-        # Что умеешь (question_id=777)
+        # Что умеешь (prompt_id=777)
         (['что еще ты умеешь', 'что ты умеешь', 'что ты можешь', 'твои возможности'], "777"),
     ]
     
     # Ищем точные совпадения
-    for patterns, question_id in question_patterns:
+    for patterns, prompt_id in question_patterns:
         for pattern in patterns:
             if normalized_question == pattern:
-                logger.info(f"Точное совпадение: '{question_text}' -> question_id={question_id}")
-                return question_id
+                logger.info(f"Точное совпадение: '{question_text}' -> prompt_id={prompt_id}")
+                return prompt_id
     
     # Ищем частичные совпадения (содержит ключевые слова)
-    for patterns, question_id in question_patterns:
+    for patterns, prompt_id in question_patterns:
         for pattern in patterns:
             # Проверяем, содержит ли вопрос все ключевые слова из паттерна
             pattern_words = set(pattern.split())
@@ -300,10 +301,10 @@ def get_question_id_from_text(question_text):
             
             # Если больше 70% слов паттерна присутствуют в вопросе
             if len(pattern_words.intersection(question_words)) / len(pattern_words) >= 0.7:
-                logger.info(f"Частичное совпадение: '{question_text}' -> question_id={question_id} (паттерн: '{pattern}')")
-                return question_id
+                logger.info(f"Частичное совпадение: '{question_text}' -> prompt_id={prompt_id} (паттерн: '{pattern}')")
+                return prompt_id
     
-    logger.info(f"Не найдено совпадений для: '{question_text}' -> question_id=888 (свободный ввод)")
+    logger.info(f"Не найдено совпадений для: '{question_text}' -> prompt_id=888 (свободный ввод)")
     return "888"  # 888 для свободного ввода
 
 def get_dialog_context(user_id, max_messages=12):
@@ -668,7 +669,7 @@ def get_questions():
                 'role': q['role'],
                 'specialization': q['specialization'],
                 'vector_store': q['vector_store'],
-                'prompt_id': q['prompt_id'],
+                'prompt_id': q['prompt_id'],  # ИСПРАВЛЕНО: Добавляем prompt_id для фронтенда
                 'callback_data': q['callback_data'],
                 'preview': q['question_text'][:120] + '...' if len(q['question_text']) > 120 else q['question_text']
             }

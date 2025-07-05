@@ -733,6 +733,9 @@ async function useQuestionDirectly(index) {
     try {
         const userId = getUserId();
         
+        // ИСПРАВЛЕНО: Используем prompt_id вместо id для question_id (как в телеграм боте)
+        const questionId = question.prompt_id || question.id;
+        
         // Используем специальный endpoint для библиотечных вопросов с кешированием
         const response = await fetch(`${CONFIG.API_BASE_URL}/ask_library`, {
             method: 'POST',
@@ -741,7 +744,7 @@ async function useQuestionDirectly(index) {
             },
             body: JSON.stringify({
                 question: question.text,
-                question_id: question.id,
+                question_id: questionId,
                 user_id: userId,
                 role: AppState.profile.role,
                 specialization: AppState.profile.specialization
@@ -1755,6 +1758,7 @@ async function detectQuestionId(questionText) {
         .replace(/[^\w\s\u0400-\u04FF]/g, '') // Убираем знаки препинания, оставляем буквы и цифры
         .replace(/\s+/g, ' '); // Нормализуем пробелы
     
+    // ИСПРАВЛЕНО: Используем prompt_id вместо question_id (как в телеграм боте)
     // Маппинг вопросов с учетом возможных вариаций
     const questionMapping = {
         // Основные вопросы (точно как в телеграм боте)
@@ -1768,6 +1772,7 @@ async function detectQuestionId(questionText) {
         'что я могу ожидать от лида компетенции': 2,
         'посмотреть матрицу компетенций': 3,
         'посмотерть матрицу компетенций': 3, // с опечаткой как в боте
+        'получить матрицу компетенций': 3,   // ИСПРАВЛЕНО: Добавлен вариант из базы
         'матрица компетенций': 3,
         'матрица компетенции': 3,
         'что я могу ожидать от специалиста': 4,
@@ -1790,19 +1795,19 @@ async function detectQuestionId(questionText) {
     
     // Ищем точное совпадение
     if (questionMapping[normalizedQuestion]) {
-        console.log(`🎯 Определен question_id=${questionMapping[normalizedQuestion]} для вопроса: "${questionText}"`);
+        console.log(`🎯 Определен prompt_id=${questionMapping[normalizedQuestion]} для вопроса: "${questionText}"`);
         return questionMapping[normalizedQuestion];
     }
     
     // Ищем частичные совпадения для более гибкого поиска
     for (const [key, value] of Object.entries(questionMapping)) {
         if (normalizedQuestion.includes(key) || key.includes(normalizedQuestion)) {
-            console.log(`🎯 Определен question_id=${value} по частичному совпадению для вопроса: "${questionText}"`);
+            console.log(`🎯 Определен prompt_id=${value} по частичному совпадению для вопроса: "${questionText}"`);
             return value;
         }
     }
     
-    console.log(`❓ Question_id не определен для вопроса: "${questionText}", используем свободный ввод`);
+    console.log(`❓ Prompt_id не определен для вопроса: "${questionText}", используем свободный ввод`);
     return null; // Для свободного ввода
 }
 
