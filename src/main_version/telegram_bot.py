@@ -1015,7 +1015,7 @@ async def check_for_daily_msg():
 
                 # Отправляем сообщение каждому пользователю
                 for user in users_results:
-                                    chat_id = user['user_id']
+                    chat_id = user['user_id']
                     
                     logger.info(f"Обработка пользователя {chat_id}")
                     
