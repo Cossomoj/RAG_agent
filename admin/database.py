@@ -368,12 +368,12 @@ class DatabaseOperations:
                 LEFT JOIN VectorStores v ON q.vector_store = v.name
                 """
                 
-                # Добавляем фильтр по категории если нужно
-                where_clause = ""
-                params = []
-                if category:
-                    where_clause = "WHERE q.category = ?"
-                    params.append(category)
+                        # Добавляем фильтр по тегу если нужно
+        where_clause = ""
+        params = []
+        if category:
+            where_clause = "WHERE q.category = ?"
+            params.append(category)
                 
                 # Считаем общее количество
                 count_query = f"SELECT COUNT(*) FROM Questions q {where_clause}"
@@ -505,7 +505,7 @@ class DatabaseOperations:
             return []
     
     def get_question_categories(self):
-        """Получение списка всех категорий вопросов"""
+        """Получение списка всех тегов вопросов"""
         try:
             with self.get_db() as conn:
                 cursor = conn.cursor()
@@ -518,7 +518,7 @@ class DatabaseOperations:
                 """)
                 return [dict(row) for row in cursor.fetchall()]
         except sqlite3.Error as e:
-            print(f"Ошибка при получении категорий: {e}")
+            print(f"Ошибка при получении тегов: {e}")
             return []
     
     def reload_questions_cache(self):
