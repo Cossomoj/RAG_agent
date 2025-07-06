@@ -650,7 +650,8 @@ function getCategoryIcon(category) {
 // Отображение вопросов
 function renderQuestions() {
     const questionsList = document.getElementById('questions-list');
-    const questions = AppState.questions || [];
+    // ИСПРАВЛЕНО: показываем все вопросы, так как фильтрация отключена
+    const questions = AppState.allQuestions || [];
     
     if (!questionsList) return;
     
@@ -692,17 +693,15 @@ function renderQuestions() {
             transition: transform 0.2s ease;
         `;
         
-        const preview = question.preview || question.text.substring(0, 120) + '...';
-        
+        // ИСПРАВЛЕНО: показываем только название вопроса без дублирования
         div.innerHTML = `
-            <div class="question-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
-                <div class="question-meta" style="display: flex; align-items: center;">
-                    <div class="question-icon" style="margin-right: 8px; font-size: 20px;">${getCategoryIcon(question.category)}</div>
-                    <div class="question-title" style="font-weight: 600; color: var(--tg-theme-text-color); font-size: 16px;">${question.title || 'Вопрос'}</div>
+            <div class="question-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <div class="question-meta" style="display: flex; align-items: center; flex: 1;">
+                    <div class="question-icon" style="margin-right: 12px; font-size: 20px;">${getCategoryIcon(question.category)}</div>
+                    <div class="question-title" style="font-weight: 600; color: var(--tg-theme-text-color); font-size: 16px; line-height: 1.4;">${question.title || question.text}</div>
                 </div>
-                <div class="question-category" style="background: var(--tg-theme-button-color); color: var(--tg-theme-button-text-color); padding: 4px 6px; border-radius: 6px; font-size: 10px; font-weight: 500; white-space: nowrap;">${getCategoryName(question.category)}</div>
+                <div class="question-category" style="background: var(--tg-theme-button-color); color: var(--tg-theme-button-text-color); padding: 6px 8px; border-radius: 8px; font-size: 11px; font-weight: 500; white-space: nowrap; margin-left: 12px;">${getCategoryName(question.category)}</div>
             </div>
-            <div class="question-preview" style="color: var(--tg-theme-text-color); font-size: 14px; line-height: 1.4;">${preview}</div>
         `;
         
         div.addEventListener('mousedown', () => {
@@ -798,58 +797,13 @@ async function useQuestionDirectly(index) {
     }
 }
 
-// Функции фильтрации вопросов
-function filterQuestions() {
-    const search = AppState.questionFilters.search.toLowerCase();
-    const category = AppState.questionFilters.category;
-    
-    AppState.questions = AppState.allQuestions.filter(question => {
-        const matchesSearch = !search || 
-            question.text.toLowerCase().includes(search) || 
-            question.title.toLowerCase().includes(search);
-            
-        const matchesCategory = !category || question.category === category;
-        
-        return matchesSearch && matchesCategory;
-    });
-    
-    renderQuestions();
-}
+// Функции фильтрации вопросов - УДАЛЕНО, так как фильтрация отключена
+// function filterQuestions() - удалена
 
 function setupQuestionFilters() {
-    const searchInput = document.getElementById('questions-search');
-    const categoryFilter = document.getElementById('category-filter');
-    const clearButton = document.getElementById('clear-filters');
-    
-    if (!searchInput || !categoryFilter || !clearButton) return;
-    
-    // Заполняем категории
-    categoryFilter.innerHTML = '<option value="">Все категории</option>';
-    AppState.questionCategories.forEach(cat => {
-        const option = document.createElement('option');
-        option.value = cat.category;
-        option.textContent = `${cat.category} (${cat.count})`;
-        categoryFilter.appendChild(option);
-    });
-    
-    // Обработчики событий
-    searchInput.addEventListener('input', debounce((e) => {
-        AppState.questionFilters.search = e.target.value;
-        filterQuestions();
-    }, 300));
-    
-    categoryFilter.addEventListener('change', (e) => {
-        AppState.questionFilters.category = e.target.value;
-        filterQuestions();
-    });
-    
-    clearButton.addEventListener('click', () => {
-        searchInput.value = '';
-        categoryFilter.value = '';
-        AppState.questionFilters.search = '';
-        AppState.questionFilters.category = '';
-        filterQuestions();
-    });
+    // ИСПРАВЛЕНО: убираем фильтры и поиск, так как блок удален из HTML
+    // Функция оставлена для совместимости, но больше ничего не делает
+    console.log('Фильтры и поиск отключены в библиотеке вопросов');
 }
 
 // Создание экрана библиотеки вопросов
@@ -864,9 +818,8 @@ function createQuestionsLibraryScreen() {
     
     questionsList.innerHTML = '<p style="color: var(--tg-theme-hint-color); text-align: center; padding: 20px;">Загрузка вопросов...</p>';
     
-    // Настраиваем фильтры
+    // ИСПРАВЛЕНО: убираем настройку фильтров, сразу показываем вопросы
     setTimeout(() => {
-        setupQuestionFilters();
         renderQuestions();
     }, 100);
 }
