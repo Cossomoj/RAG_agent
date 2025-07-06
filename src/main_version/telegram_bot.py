@@ -1213,17 +1213,27 @@ def handle_role_specialization(call):
         "specsql_python": "Python"
     }
     specialization = specialization_mapping.get(data)
-    cursor.execute("UPDATE Users SET role = ? WHERE user_id = ?", (specialization, user_id))
+    
+    # ИСПРАВЛЕНО: обновляем Specialization, а не role
+    cursor.execute("UPDATE Users SET Specialization = ? WHERE user_id = ?", (specialization, user_id))
     conn.commit()
+    
+    # ДОБАВЛЕНО: синхронизируем user_data с БД
+    cursor.execute("SELECT Role, Specialization FROM Users WHERE user_id = ?", (user_id,))
+    user_db_data = cursor.fetchone()
+    if user_db_data:
+        if user_id not in user_data:
+            user_data[user_id] = {}
+        user_data[user_id]["role"] = user_db_data[0]
+        user_data[user_id]["specialization"] = user_db_data[1]
+    
     bot.answer_callback_query(call.id, f"Специализация '{specialization}' успешно сохранена!")
-    cursor.execute("SELECT user_id, role FROM Users WHERE user_id = ?", (user_id,))
-    users= cursor.fetchone()
+    cursor.execute("SELECT user_id, Role, Specialization FROM Users WHERE user_id = ?", (user_id,))
+    users = cursor.fetchone()
 
     if users:
-        # user_data — это кортеж, например: (123456789, "Аналитик")
-        print(f"User ID: {users[0]}, Role: {users[1]}")
+        print(f"User ID: {users[0]}, Role: {users[1]}, Specialization: {users[2]}")
     conn.close()
-
 
     # Возврат в меню
     handle_start(call)
@@ -1242,22 +1252,32 @@ def choose_role(call):
         "role_employee": "Специалист"
     }
     selected_role = role_mapping.get(call.data)
+    
+    # ИСПРАВЛЕНО: сохраняем роль в БД
+    conn = sqlite3.connect(DATABASE_URL)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE Users SET Role = ? WHERE user_id = ?", (selected_role, chat_id))
+    conn.commit()
+    
+    # ИСПРАВЛЕНО: синхронизируем user_data с БД
     user_data[call.message.chat.id] = {"role": selected_role, "specialization": None}
-    if(user_data[call.message.chat.id]["role"] == "PO/PM"):
+    if selected_role == "PO/PM":
+        cursor.execute("UPDATE Users SET Specialization = ? WHERE user_id = ?", ("PO/PM", chat_id))
+        conn.commit()
         user_data[call.message.chat.id]["specialization"] = "PO/PM"
 
     bot.clear_step_handler_by_chat_id(call.message.chat.id)
 
     if selected_role in ["Лид компетенций", "Специалист"]:
         markup = types.InlineKeyboardMarkup(row_width=1)
+        # ИСПРАВЛЕНО: используем правильные callback данные spec_for_db_
         specializations = [
-            types.InlineKeyboardButton(text="Аналитик", callback_data="spec_analyst"),
-            types.InlineKeyboardButton(text="Тестировщик", callback_data="spec_tester"),
-            types.InlineKeyboardButton(text="WEB", callback_data="spec_web"),
-            types.InlineKeyboardButton(text="Java", callback_data="spec_java"),
-            types.InlineKeyboardButton(text="Python", callback_data="spec_python"),
+            types.InlineKeyboardButton(text="Аналитик", callback_data="spec_for_db_analyst"),
+            types.InlineKeyboardButton(text="Тестировщик", callback_data="spec_for_db_tester"),
+            types.InlineKeyboardButton(text="WEB", callback_data="spec_for_db_web"),
+            types.InlineKeyboardButton(text="Java", callback_data="spec_for_db_java"),
+            types.InlineKeyboardButton(text="Python", callback_data="spec_for_db_python"),
             types.InlineKeyboardButton(text="В начало", callback_data="start"),
-
         ]
         markup.add(*specializations)
         
@@ -1271,7 +1291,6 @@ def choose_role(call):
             types.InlineKeyboardButton(text="Что еще ты умеешь?", callback_data="question_777"),
             types.InlineKeyboardButton(text="Ввести свой вопрос", callback_data="question_custom"),
             types.InlineKeyboardButton(text="В начало", callback_data="start")
-
         ]
         markup.add(*quesions)
         bot.edit_message_text(chat_id = call.message.chat.id, message_id=call.message.message_id, text=(
@@ -1281,6 +1300,8 @@ def choose_role(call):
         "•'Регулярные сообщения' - для настройки регулярных сообщений\n"
         "•'Мои уведомления' - для просмотра существующих уведомлений"
     ), reply_markup=markup)
+    
+    conn.close()
 
 # Обработчик предопределенных вопросов
 @require_onboarding
