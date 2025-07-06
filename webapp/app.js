@@ -35,6 +35,17 @@ document.addEventListener('DOMContentLoaded', async function() {
     console.log('🌐 CONFIG:', CONFIG);
     console.log('📱 Telegram WebApp объект:', window.Telegram?.WebApp);
     
+    // ОТЛАДКА: Проверяем данные пользователя
+    console.log('🔍 ОТЛАДКА: Данные пользователя Telegram:');
+    console.log('- tg.initDataUnsafe:', tg?.initDataUnsafe);
+    console.log('- tg.initDataUnsafe.user:', tg?.initDataUnsafe?.user);
+    if (tg?.initDataUnsafe?.user) {
+        console.log('- User ID:', tg.initDataUnsafe.user.id);
+        console.log('- Username:', tg.initDataUnsafe.user.username);
+        console.log('- First name:', tg.initDataUnsafe.user.first_name);
+        console.log('- Last name:', tg.initDataUnsafe.user.last_name);
+    }
+    
     try {
         console.log('🔧 Инициализируем viewport fixes...');
         initViewportFixes();
