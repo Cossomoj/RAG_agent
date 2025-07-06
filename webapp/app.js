@@ -1241,23 +1241,79 @@ function renderProfile() {
     }
     
     // Добавляем обработчики изменений
-    roleSelect.addEventListener('change', function() {
+    roleSelect.addEventListener('change', async function() {
+        console.log('🔄 Изменение роли:', this.value);
         AppState.profile.role = this.value;
         updateSpecializations();
         updateProfileInfo();
+        
+        // Автоматически сохраняем изменения
+        if (AppState.profile.role && AppState.profile.specialization) {
+            console.log('💾 Автосохранение профиля после изменения роли...');
+            await autoSaveProfile();
+        }
     });
     
     specializationSelect.addEventListener('change', async function() {
+        console.log('🔄 Изменение специализации:', this.value);
         AppState.profile.specialization = this.value;
         updateProfileInfo();
-        // Перезагружаем вопросы при изменении специализации
+        
+        // Автоматически сохраняем изменения и перезагружаем вопросы
         if (AppState.profile.role && AppState.profile.specialization) {
+            console.log('💾 Автосохранение профиля после изменения специализации...');
+            await autoSaveProfile();
+            
+            console.log('📚 Перезагружаем вопросы для новой специализации...');
             await loadQuestions();
         }
     });
     
     // Обновляем информацию о профиле
     updateProfileInfo();
+}
+
+// Автоматическое сохранение профиля (без показа уведомлений)
+async function autoSaveProfile() {
+    console.log('🔄 Автосохранение профиля...');
+    
+    try {
+        const userId = getUserId();
+        
+        if (!userId || userId === 'guest') {
+            console.warn('⚠️ Не удалось автосохранить: User ID не определен');
+            return false;
+        }
+        
+        if (!AppState.profile.role || !AppState.profile.specialization) {
+            console.warn('⚠️ Не удалось автосохранить: профиль неполный');
+            return false;
+        }
+        
+        const saveUrl = `${CONFIG.API_BASE_URL}/profile/${userId}`;
+        const response = await fetch(saveUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(AppState.profile)
+        });
+        
+        if (response.ok) {
+            console.log('✅ Профиль автоматически сохранен в БД');
+            return true;
+        } else {
+            const errorText = await response.text();
+            console.error('❌ Ошибка автосохранения профиля:', {
+                status: response.status,
+                error: errorText
+            });
+            return false;
+        }
+    } catch (error) {
+        console.error('❌ Исключение при автосохранении профиля:', error);
+        return false;
+    }
 }
 
 // Сохранение профиля
@@ -2417,16 +2473,59 @@ async function displayPreviousQuestions() {
 
 // Загрузка профиля пользователя
 async function loadUserProfile() {
+    console.log('👤 Загружаем профиль пользователя...');
+    
     try {
         const userId = getUserId();
-        const response = await fetch(`${CONFIG.API_BASE_URL}/profile/${userId}`);
+        console.log('🔑 User ID для загрузки профиля:', userId);
+        
+        if (!userId || userId === 'guest') {
+            console.warn('⚠️ User ID не определен или является guest, используем пустой профиль');
+            AppState.profile = { role: '', specialization: '' };
+            return;
+        }
+        
+        const profileUrl = `${CONFIG.API_BASE_URL}/profile/${userId}`;
+        console.log('🌐 URL для загрузки профиля:', profileUrl);
+        
+        const response = await fetch(profileUrl);
+        console.log('📊 Статус ответа профиля:', response.status);
         
         if (response.ok) {
             const profile = await response.json();
+            console.log('✅ Профиль загружен из БД:', profile);
+            
             AppState.profile = profile;
+            
+            // Проверяем, что профиль корректно установлен
+            console.log('📋 Финальное состояние AppState.profile:', AppState.profile);
+            
+            // Если профиль пустой, показываем предупреждение
+            if (!profile.role || !profile.specialization) {
+                console.warn('⚠️ Профиль пользователя не настроен в БД');
+                console.warn('📝 Рекомендуется пройти онбординг в Telegram боте или настроить профиль в мини-приложении');
+            }
+        } else {
+            const errorText = await response.text();
+            console.error('❌ Ошибка API загрузки профиля:', {
+                status: response.status,
+                statusText: response.statusText,
+                error: errorText
+            });
+            
+            // Устанавливаем пустой профиль при ошибке
+            AppState.profile = { role: '', specialization: '' };
         }
     } catch (error) {
-        console.error('Ошибка загрузки профиля:', error);
+        console.error('❌ КРИТИЧЕСКАЯ ОШИБКА загрузки профиля:', error);
+        console.error('📋 Детали ошибки:', {
+            message: error.message,
+            stack: error.stack,
+            type: error.constructor.name
+        });
+        
+        // Устанавливаем пустой профиль при ошибке
+        AppState.profile = { role: '', specialization: '' };
     }
 }
 
