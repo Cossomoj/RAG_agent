@@ -69,11 +69,47 @@ split_docs_java = create_docs_from_txt(folder_path_java)
 
 split_docs_python = create_docs_from_txt(folder_path_python)
 
-# Инициализация модели для эмбеддингов
-model_name = "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
+# Инициализация модели для эмбеддингов E5
+model_name = "intfloat/multilingual-e5-base"
 model_kwargs = {'device': 'cpu'}
-encode_kwargs = {'normalize_embeddings': False}
-embedding = HuggingFaceEmbeddings(
+encode_kwargs = {'normalize_embeddings': True}  # E5 требует нормализации
+
+def add_e5_prefix_to_query(text):
+    """Добавляет префикс 'query: ' к тексту для модели E5"""
+    if not text.startswith("query: "):
+        return f"query: {text}"
+    return text
+
+def add_e5_prefix_to_documents(documents):
+    """Добавляет префикс 'passage: ' к документам для модели E5"""
+    processed_docs = []
+    for doc in documents:
+        if hasattr(doc, 'page_content'):
+            # Для объектов Document
+            if not doc.page_content.startswith("passage: "):
+                doc.page_content = f"passage: {doc.page_content}"
+            processed_docs.append(doc)
+        else:
+            # Для обычных строк
+            if not doc.startswith("passage: "):
+                processed_docs.append(f"passage: {doc}")
+            else:
+                processed_docs.append(doc)
+    return processed_docs
+
+# Создаем кастомный класс эмбедингов для E5
+class E5HuggingFaceEmbeddings(HuggingFaceEmbeddings):
+    def embed_query(self, text: str) -> list[float]:
+        """Эмбединг для запроса с префиксом 'query:'"""
+        prefixed_text = add_e5_prefix_to_query(text)
+        return super().embed_query(prefixed_text)
+    
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        """Эмбединг для документов с префиксом 'passage:'"""
+        prefixed_texts = [f"passage: {text}" if not text.startswith("passage: ") else text for text in texts]
+        return super().embed_documents(prefixed_texts)
+
+embedding = E5HuggingFaceEmbeddings(
     model_name=model_name,
     model_kwargs=model_kwargs,
     encode_kwargs=encode_kwargs

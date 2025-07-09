@@ -1768,13 +1768,13 @@ async def websocket_question_from_user(question, message, role, specialization, 
         logger.info(f"Подключаемся к RAG сервису: {WEBSOCKET_URL}")
         async with websockets.connect(WEBSOCKET_URL) as websocket:
             logger.info(f"Отправляем данные в RAG сервис: question_id={question_id}")
-            await websocket.send(question) # Отправляем вопрос
-            await websocket.send(role)
-            await websocket.send(specialization)
-            await websocket.send(str(question_id))
-            await websocket.send(context_str)
-            await websocket.send(str(count_questions_users[chat_id]))
-            await websocket.send(vector_store)  # Отправляем настройку векторного хранилища
+            await websocket.send(question) # Отправляем текст вопроса пользователя через WebSocket
+            await websocket.send(role) # Отправляем роль пользователя (например, "разработчик", "аналитик")
+            await websocket.send(specialization) # Отправляем специализацию пользователя (например, "Python", "Java")
+            await websocket.send(str(question_id)) # Отправляем уникальный ID вопроса, преобразованный в строку
+            await websocket.send(context_str) # Отправляем контекст беседы (история предыдущих сообщений)
+            await websocket.send(str(count_questions_users[chat_id])) # Отправляем количество вопросов пользователя, преобразованное в строку
+            await websocket.send(vector_store)  # Отправляем название векторного хранилища для поиска релевантных документов
             logger.info(f"Данные отправлены, ожидаем ответ от RAG сервиса")
 
             try:
