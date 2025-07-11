@@ -639,11 +639,11 @@ def ask_library_question():
             suggested_questions = []
             if result.get('answer'):
                 # Создаем payload для генерации связанных вопросов
-                                    suggestion_payload = {
-                        'user_question': question,
-                        'bot_answer': result['answer'][:4000],  # Обрезаем как в боте
-                        'specialization': specialization
-                    }
+                suggestion_payload = {
+                    'user_question': question,
+                    'bot_answer': result['answer'][:4000],  # Обрезаем как в боте
+                    'specialization': specialization
+                }
                 
                 # Отправляем запрос на генерацию связанных вопросов
                 suggestion_loop = asyncio.new_event_loop()
@@ -762,42 +762,130 @@ def get_profile(user_id):
 
 @app.route('/api/profile/<user_id>', methods=['POST'])
 def save_profile(user_id):
-    """Сохранение профиля пользователя (убрана роль)"""
+    """Сохранение профиля пользователя"""
     try:
         data = request.get_json()
-        specialization = data.get('specialization', '')
+        logger.info(f"Получен запрос на сохранение профиля для user_id: {user_id}")
+        logger.info(f"Данные: {data}")
         
+        if not data:
+            return jsonify({'error': 'Отсутствуют данные для сохранения'}), 400
+            
+        # Получаем данные из запроса
+        specialization = data.get('specialization')
+        reminder_enabled = data.get('reminder_enabled', True)  # По умолчанию включено
+        
+        if not specialization:
+            return jsonify({'error': 'Специализация обязательна'}), 400
+            
         conn = get_db_connection()
         if not conn:
-            return jsonify({"error": "Ошибка подключения к БД"}), 500
+            return jsonify({'error': 'Ошибка подключения к базе данных'}), 500
             
         cursor = conn.cursor()
         
-        # Проверяем, существует ли пользователь
-        cursor.execute("SELECT user_id FROM Users WHERE user_id = ?", (user_id,))
-        user_exists = cursor.fetchone()
-        
-        if user_exists:
-            # Обновляем существующего пользователя
-            cursor.execute(
-                "UPDATE Users SET Specialization = ? WHERE user_id = ?",
-                (specialization, user_id)
-            )
-        else:
-            # Создаем нового пользователя
-            cursor.execute(
-                "INSERT INTO Users (user_id, Specialization, is_onboarding) VALUES (?, ?, ?)",
-                (user_id, specialization, True)
-            )
+        # Обновляем или создаем запись пользователя
+        cursor.execute("""
+            INSERT OR REPLACE INTO Users (user_id, Specialization, reminder, updated_at)
+            VALUES (?, ?, ?, ?)
+        """, (user_id, specialization, reminder_enabled, datetime.now()))
         
         conn.commit()
         conn.close()
         
-        return jsonify({"success": True})
+        logger.info(f"Профиль пользователя {user_id} успешно сохранен")
+        return jsonify({
+            'success': True,
+            'message': 'Профиль успешно сохранен',
+            'profile': {
+                'specialization': specialization,
+                'reminder_enabled': reminder_enabled
+            }
+        })
         
     except Exception as e:
-        logger.error(f"Ошибка сохранения профиля: {e}")
-        return jsonify({"error": "Ошибка сохранения профиля"}), 500
+        logger.error(f"Ошибка при сохранении профиля: {e}")
+        return jsonify({'error': 'Ошибка сервера'}), 500
+
+@app.route('/api/profile/<user_id>/reminder', methods=['GET'])
+def get_reminder_settings(user_id):
+    """Получение настроек регулярных сообщений"""
+    try:
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({'error': 'Ошибка подключения к базе данных'}), 500
+            
+        cursor = conn.cursor()
+        cursor.execute("SELECT reminder FROM Users WHERE user_id = ?", (user_id,))
+        result = cursor.fetchone()
+        conn.close()
+        
+        if result:
+            reminder_enabled = bool(result[0])
+        else:
+            reminder_enabled = True  # По умолчанию включено
+            
+        return jsonify({
+            'reminder_enabled': reminder_enabled,
+            'schedule': {
+                'day': 'Пятница',
+                'time': '19:00',
+                'timezone': 'Москва (UTC+3)'
+            },
+            'description': 'Регулярные сообщения - это еженедельные персональные отчеты от ИИ-агента с анализом вашей активности и развития компетенций.'
+        })
+        
+    except Exception as e:
+        logger.error(f"Ошибка при получении настроек напоминаний: {e}")
+        return jsonify({'error': 'Ошибка сервера'}), 500
+
+@app.route('/api/profile/<user_id>/reminder', methods=['POST'])
+def update_reminder_settings(user_id):
+    """Обновление настроек регулярных сообщений"""
+    try:
+        data = request.get_json()
+        logger.info(f"Получен запрос на обновление настроек напоминаний для user_id: {user_id}")
+        logger.info(f"Данные: {data}")
+        
+        if not data:
+            return jsonify({'error': 'Отсутствуют данные для обновления'}), 400
+            
+        reminder_enabled = data.get('reminder_enabled', True)
+        
+        conn = get_db_connection()
+        if not conn:
+            return jsonify({'error': 'Ошибка подключения к базе данных'}), 500
+            
+        cursor = conn.cursor()
+        
+        # Проверяем существование пользователя
+        cursor.execute("SELECT user_id FROM Users WHERE user_id = ?", (user_id,))
+        if not cursor.fetchone():
+            # Создаем пользователя если его нет
+            cursor.execute("""
+                INSERT INTO Users (user_id, reminder, Specialization, updated_at)
+                VALUES (?, ?, ?, ?)
+            """, (user_id, reminder_enabled, 'Не указана', datetime.now()))
+        else:
+            # Обновляем существующего пользователя
+            cursor.execute("""
+                UPDATE Users SET reminder = ?, updated_at = ?
+                WHERE user_id = ?
+            """, (reminder_enabled, datetime.now(), user_id))
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"Настройки напоминаний для пользователя {user_id} обновлены: {reminder_enabled}")
+        return jsonify({
+            'success': True,
+            'message': f"Регулярные сообщения {'включены' if reminder_enabled else 'отключены'}",
+            'reminder_enabled': reminder_enabled
+        })
+        
+    except Exception as e:
+        logger.error(f"Ошибка при обновлении настроек напоминаний: {e}")
+        return jsonify({'error': 'Ошибка сервера'}), 500
 
 @app.route('/api/history/<user_id>', methods=['GET'])
 def get_history(user_id):

@@ -262,7 +262,60 @@ def statistics():
 @app.route('/system')
 @login_required
 def system():
-    return render_template('system.html')
+    # Получаем текущие настройки расписания
+    schedule = db.get_reminder_schedule()
+    return render_template('system.html', schedule=schedule)
+
+@app.route('/system/reminder-schedule', methods=['GET'])
+@login_required
+def get_reminder_schedule():
+    """Получение настроек расписания регулярных сообщений"""
+    try:
+        schedule = db.get_reminder_schedule()
+        return jsonify({'success': True, 'schedule': schedule})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/system/reminder-schedule', methods=['POST'])
+@login_required
+def update_reminder_schedule():
+    """Обновление настроек расписания регулярных сообщений"""
+    try:
+        data = request.get_json()
+        
+        day = data.get('day')
+        time = data.get('time')
+        timezone = data.get('timezone', 'Europe/Moscow')
+        
+        if day is None or not time:
+            return jsonify({'success': False, 'error': 'Не указаны обязательные параметры (день и время)'}), 400
+        
+        # Валидация дня недели
+        try:
+            day = int(day)
+            if not (0 <= day <= 6):
+                return jsonify({'success': False, 'error': 'День недели должен быть от 0 (понедельник) до 6 (воскресенье)'}), 400
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Некорректный формат дня недели'}), 400
+        
+        # Валидация времени
+        import re
+        if not re.match(r'^([01]?[0-9]|2[0-3]):[0-5][0-9]$', time):
+            return jsonify({'success': False, 'error': 'Некорректный формат времени (используйте HH:MM)'}), 400
+        
+        success = db.update_reminder_schedule(day, time, timezone)
+        
+        if success:
+            return jsonify({
+                'success': True, 
+                'message': 'Настройки расписания успешно обновлены',
+                'schedule': db.get_reminder_schedule()
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Не удалось обновить настройки'}), 500
+            
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/system/clear-cache', methods=['POST'])
 @login_required

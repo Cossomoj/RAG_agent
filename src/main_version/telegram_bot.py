@@ -984,22 +984,89 @@ def run_async_task():
 # Запуск планировщика в отдельном потоке
 threading.Thread(target=run_async_task, daemon=True).start()
 
+def get_reminder_schedule_from_db():
+    """Получение настроек расписания регулярных сообщений из базы данных"""
+    try:
+        conn = sqlite3.connect(DATABASE_URL)
+        cursor = conn.cursor()
+        
+        # Создаем таблицу системных настроек если её нет
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS SystemSettings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                setting_key TEXT UNIQUE NOT NULL,
+                setting_value TEXT NOT NULL,
+                description TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        
+        # Добавляем настройки по умолчанию если их нет
+        default_settings = [
+            ('reminder_schedule_day', '4', 'День недели для отправки регулярных сообщений (0=понедельник, 4=пятница)'),
+            ('reminder_schedule_time', '19:00', 'Время отправки регулярных сообщений (в формате HH:MM)'),
+            ('reminder_timezone', 'Europe/Moscow', 'Часовой пояс для расписания')
+        ]
+        
+        for key, value, description in default_settings:
+            cursor.execute("""
+                INSERT OR IGNORE INTO SystemSettings (setting_key, setting_value, description)
+                VALUES (?, ?, ?)
+            """, (key, value, description))
+        
+        # Получаем настройки
+        cursor.execute("SELECT setting_key, setting_value FROM SystemSettings WHERE setting_key IN (?, ?, ?)", 
+                      ('reminder_schedule_day', 'reminder_schedule_time', 'reminder_timezone'))
+        
+        settings = {}
+        for row in cursor.fetchall():
+            settings[row[0]] = row[1]
+        
+        conn.commit()
+        conn.close()
+        
+        # Формируем результат
+        schedule = {
+            'day': int(settings.get('reminder_schedule_day', '4')),
+            'time': settings.get('reminder_schedule_time', '19:00'),
+            'timezone': settings.get('reminder_timezone', 'Europe/Moscow')
+        }
+        
+        logger.info(f"Загружены настройки расписания из БД: {schedule}")
+        return schedule
+        
+    except Exception as e:
+        logger.error(f"Ошибка при получении настроек расписания из БД: {e}")
+        # Возвращаем настройки по умолчанию
+        return {
+            'day': 4,  # Пятница
+            'time': '19:00',
+            'timezone': 'Europe/Moscow'
+        }
+
 # Асинхронная функция для проверки и отправки напоминаний
 async def check_for_daily_msg():
     logger.info("Запуск функции check_for_daily_msg")
     while True:
         try:
-            # Получаем текущую дату и время в московском часовом поясе
-            now = datetime.now(moscow_tz)
-            current_day = now.weekday()  # 0 - понедельник, 4 - пятница
+            # Получаем настройки расписания из базы данных
+            schedule = get_reminder_schedule_from_db()
+            
+            # Получаем текущую дату и время в указанном часовом поясе
+            timezone = pytz.timezone(schedule['timezone'])
+            now = datetime.now(timezone)
+            current_day = now.weekday()  # 0 - понедельник, 6 - воскресенье
             current_time = now.strftime("%H:%M")
             
             # Логируем текущее состояние для отладки
-            logger.debug(f"Текущий день недели: {current_day}, время: {current_time}")
+            logger.debug(f"Настройки расписания: {schedule}")
+            logger.debug(f"Текущий день недели: {current_day}, время: {current_time} ({schedule['timezone']})")
             
-            # Проверяем, пятница ли сейчас (4) и время 19:00
-            if current_day == 4 and current_time == "19:00":
-                logger.info("Наступило время для отправки еженедельных сообщений")
+            # Проверяем соответствие настроенному расписанию
+            if current_day == schedule['day'] and current_time == schedule['time']:
+                days_names = ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье']
+                logger.info(f"Наступило время для отправки регулярных сообщений: {days_names[schedule['day']]} в {schedule['time']} ({schedule['timezone']})")
                 conn = sqlite3.connect(DATABASE_URL)
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
@@ -1068,7 +1135,7 @@ async def check_for_daily_msg():
                                 try:
                                     # Отправляем сообщение
                                     bot.send_message(chat_id=chat_id, text=full_answer, reply_markup=markup)
-                                    logger.info(f"Еженедельное сообщение успешно отправлено пользователю {chat_id}")
+                                    logger.info(f"Регулярное сообщение успешно отправлено пользователю {chat_id}")
                                 except telebot.apihelper.ApiException as e:
                                     if "Forbidden: bot was blocked by the user" in str(e):
                                         logger.warning(f"Пользователь {chat_id} заблокировал бота")
@@ -1079,7 +1146,7 @@ async def check_for_daily_msg():
                 
                 # После отправки всем пользователям ждем до следующего дня, 
                 # чтобы не отправить сообщения дважды (спим 23 часа)
-                logger.info("Все еженедельные сообщения отправлены, ожидание до следующей проверки (23 часа)")
+                logger.info("Все регулярные сообщения отправлены, ожидание до следующей проверки (23 часа)")
                 await asyncio.sleep(23 * 60 * 60)  # 23 часа
                 
             # Проверяем время каждую минуту

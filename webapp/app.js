@@ -1227,6 +1227,7 @@ function updateProfileInfo() {
 // Отображение профиля (убрана роль)
 function renderProfile() {
     const specializationSelect = document.getElementById('specialization-select');
+    const reminderToggle = document.getElementById('reminder-toggle');
     
     if (!specializationSelect) return;
     
@@ -1236,6 +1237,30 @@ function renderProfile() {
     // Устанавливаем значения из профиля
     if (AppState.profile.specialization) {
         specializationSelect.value = AppState.profile.specialization;
+    }
+    
+    // Устанавливаем состояние переключателя напоминаний
+    if (reminderToggle) {
+        reminderToggle.checked = AppState.profile.reminder_enabled !== false; // По умолчанию true
+        
+        // Добавляем обработчик изменения
+        reminderToggle.addEventListener('change', async (e) => {
+            try {
+                const reminderEnabled = e.target.checked;
+                await updateReminderSettings(reminderEnabled);
+                AppState.profile.reminder_enabled = reminderEnabled;
+                
+                // Показываем уведомление
+                showAlert(reminderEnabled ? 
+                    'Регулярные сообщения включены ✅' : 
+                    'Регулярные сообщения отключены ❌');
+            } catch (error) {
+                console.error('Ошибка при изменении настроек напоминаний:', error);
+                // Возвращаем состояние переключателя обратно
+                e.target.checked = !e.target.checked;
+                showAlert('Ошибка при сохранении настроек');
+            }
+        });
     }
     
     specializationSelect.addEventListener('change', async function() {
@@ -1305,6 +1330,7 @@ async function saveProfile() {
     console.log('💾 Сохраняем профиль...');
     
     const specializationSelect = document.getElementById('specialization-select');
+    const reminderToggle = document.getElementById('reminder-toggle');
     
     if (!specializationSelect) {
         console.error('❌ Элемент select для специализации не найден!');
@@ -1312,6 +1338,9 @@ async function saveProfile() {
     }
     
     AppState.profile.specialization = specializationSelect.value;
+    if (reminderToggle) {
+        AppState.profile.reminder_enabled = reminderToggle.checked;
+    }
     
     console.log('📝 Данные профиля для сохранения:', AppState.profile);
     
@@ -1406,6 +1435,31 @@ function createProfileScreen() {
                     <div class="select-icon" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--tg-theme-hint-color);">▼</div>
                 </div>
                 <p class="field-description" style="color: var(--tg-theme-hint-color); font-size: 12px; margin-top: 4px;">Укажите вашу техническую специализацию</p>
+            </div>
+
+            <!-- Регулярные сообщения -->
+            <div class="form-section" style="margin-bottom: 24px;">
+                <div class="settings-item" style="display: flex; align-items: flex-start; justify-content: space-between; padding: 16px; background: var(--tg-theme-secondary-bg-color); border-radius: 12px; border: 1px solid var(--tg-theme-section-separator-color);">
+                    <div class="settings-info" style="flex: 1; margin-right: 16px;">
+                        <h4 style="color: var(--tg-theme-text-color); margin: 0 0 8px 0; font-size: 16px; font-weight: 600;">
+                            📅 Регулярные сообщения
+                        </h4>
+                        <p style="color: var(--tg-theme-hint-color); margin: 0 0 12px 0; font-size: 14px; line-height: 1.4;">
+                            Получайте еженедельные персональные отчеты от ИИ-агента с анализом вашей активности и развития компетенций.
+                        </p>
+                        <div class="schedule-info" style="display: flex; align-items: center; gap: 8px; color: var(--tg-theme-hint-color); font-size: 12px;">
+                            <span>🕐 Пятница, 19:00</span>
+                            <span>🌍 Москва (UTC+3)</span>
+                        </div>
+                    </div>
+                    <div class="toggle-switch" style="flex-shrink: 0;">
+                        <label class="switch" style="position: relative; display: inline-block; width: 50px; height: 24px;">
+                            <input type="checkbox" id="reminder-toggle" style="opacity: 0; width: 0; height: 0;">
+                            <span class="slider" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--tg-theme-section-separator-color); border-radius: 24px; transition: .4s; box-shadow: inset 0 0 0 1px var(--tg-theme-section-separator-color);"></span>
+                            <span class="slider-thumb" style="position: absolute; content: ''; height: 20px; width: 20px; left: 2px; top: 2px; background-color: white; border-radius: 50%; transition: .4s; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></span>
+                        </label>
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -2495,7 +2549,10 @@ async function loadUserProfile() {
             const profile = await response.json();
             console.log('✅ Профиль загружен из БД:', profile);
             
-            AppState.profile = profile;
+            AppState.profile = {
+                ...profile,
+                reminder_enabled: profile.reminder_enabled !== false // По умолчанию true
+            };
             
             // Проверяем, что профиль корректно установлен
             console.log('📋 Финальное состояние AppState.profile:', AppState.profile);
@@ -2514,8 +2571,14 @@ async function loadUserProfile() {
             });
             
             // Устанавливаем пустой профиль при ошибке
-            AppState.profile = { specialization: '' };
+            AppState.profile = { 
+                specialization: '',
+                reminder_enabled: true
+            };
         }
+        
+        // Загружаем настройки напоминаний отдельно
+        await loadReminderSettings();
     } catch (error) {
         console.error('❌ КРИТИЧЕСКАЯ ОШИБКА загрузки профиля:', error);
         console.error('📋 Детали ошибки:', {
@@ -2525,7 +2588,10 @@ async function loadUserProfile() {
         });
         
         // Устанавливаем пустой профиль при ошибке
-        AppState.profile = { specialization: '' };
+        AppState.profile = { 
+            specialization: '',
+            reminder_enabled: true
+        };
     }
 }
 
@@ -3040,4 +3106,57 @@ function postProcessAnswer(text) {
     
     console.log('✅ Постобработка завершена');
     return processed.trim();
-} 
+}
+
+// Функции для работы с настройками регулярных сообщений
+async function loadReminderSettings() {
+    try {
+        const userId = getUserId();
+        if (!userId || userId === 'guest') {
+            console.warn('⚠️ Не удалось загрузить настройки напоминаний: User ID не определен');
+            return;
+        }
+        
+        const response = await fetch(`${CONFIG.API_BASE_URL}/profile/${userId}/reminder`);
+        if (response.ok) {
+            const data = await response.json();
+            AppState.profile.reminder_enabled = data.reminder_enabled;
+            console.log('✅ Настройки напоминаний загружены:', data);
+        } else {
+            console.warn('⚠️ Ошибка загрузки настроек напоминаний:', response.status);
+        }
+    } catch (error) {
+        console.error('❌ Ошибка при загрузке настроек напоминаний:', error);
+    }
+}
+
+async function updateReminderSettings(reminderEnabled) {
+    try {
+        const userId = getUserId();
+        if (!userId || userId === 'guest') {
+            throw new Error('User ID не определен');
+        }
+        
+        const response = await fetch(`${CONFIG.API_BASE_URL}/profile/${userId}/reminder`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                reminder_enabled: reminderEnabled
+            })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            console.log('✅ Настройки напоминаний обновлены:', data);
+            return data;
+        } else {
+            const errorText = await response.text();
+            throw new Error(`Ошибка API: ${response.status} - ${errorText}`);
+        }
+    } catch (error) {
+        console.error('❌ Ошибка при обновлении настроек напоминаний:', error);
+        throw error;
+    }
+}

@@ -523,3 +523,147 @@ class DatabaseOperations:
         except Exception as e:
             print(f"Ошибка при перезагрузке кеша вопросов: {e}")
             return {"success": False, "error": str(e)} 
+
+    def init_system_settings(self):
+        """Инициализация таблицы системных настроек"""
+        try:
+            with self.get_db() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS SystemSettings (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        setting_key TEXT UNIQUE NOT NULL,
+                        setting_value TEXT NOT NULL,
+                        description TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                
+                # Добавляем настройки по умолчанию если их нет
+                default_settings = [
+                    ('reminder_schedule_day', '4', 'День недели для отправки регулярных сообщений (0=понедельник, 4=пятница)'),
+                    ('reminder_schedule_time', '19:00', 'Время отправки регулярных сообщений (в формате HH:MM)'),
+                    ('reminder_timezone', 'Europe/Moscow', 'Часовой пояс для расписания')
+                ]
+                
+                for key, value, description in default_settings:
+                    cursor.execute("""
+                        INSERT OR IGNORE INTO SystemSettings (setting_key, setting_value, description)
+                        VALUES (?, ?, ?)
+                    """, (key, value, description))
+                
+                conn.commit()
+                return True
+        except sqlite3.Error as e:
+            print(f"Ошибка при инициализации системных настроек: {e}")
+            return False
+
+    def get_system_setting(self, setting_key, default_value=None):
+        """Получение значения системной настройки"""
+        try:
+            with self.get_db() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT setting_value FROM SystemSettings 
+                    WHERE setting_key = ?
+                """, (setting_key,))
+                row = cursor.fetchone()
+                if row:
+                    return row[0]
+                return default_value
+        except sqlite3.Error as e:
+            print(f"Ошибка при получении настройки {setting_key}: {e}")
+            return default_value
+
+    def update_system_setting(self, setting_key, setting_value):
+        """Обновление системной настройки"""
+        try:
+            with self.get_db() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT OR REPLACE INTO SystemSettings (setting_key, setting_value, updated_at)
+                    VALUES (?, ?, CURRENT_TIMESTAMP)
+                """, (setting_key, setting_value))
+                conn.commit()
+                return True
+        except sqlite3.Error as e:
+            print(f"Ошибка при обновлении настройки {setting_key}: {e}")
+            return False
+
+    def get_reminder_schedule(self):
+        """Получение настроек расписания регулярных сообщений"""
+        try:
+            # Инициализируем настройки если их нет
+            self.init_system_settings()
+            
+            schedule = {
+                'day': int(self.get_system_setting('reminder_schedule_day', '4')),  # По умолчанию пятница
+                'time': self.get_system_setting('reminder_schedule_time', '19:00'),  # По умолчанию 19:00
+                'timezone': self.get_system_setting('reminder_timezone', 'Europe/Moscow')
+            }
+            return schedule
+        except Exception as e:
+            print(f"Ошибка при получении расписания напоминаний: {e}")
+            # Возвращаем значения по умолчанию
+            return {
+                'day': 4,  # Пятница
+                'time': '19:00',
+                'timezone': 'Europe/Moscow'
+            }
+
+    def update_reminder_schedule(self, day, time, timezone='Europe/Moscow'):
+        """Обновление настроек расписания регулярных сообщений"""
+        try:
+            # Валидация
+            if not (0 <= day <= 6):
+                raise ValueError("День недели должен быть от 0 (понедельник) до 6 (воскресенье)")
+            
+            # Проверяем формат времени
+            time_parts = time.split(':')
+            if len(time_parts) != 2:
+                raise ValueError("Время должно быть в формате HH:MM")
+            
+            hour, minute = int(time_parts[0]), int(time_parts[1])
+            if not (0 <= hour <= 23) or not (0 <= minute <= 59):
+                raise ValueError("Некорректное время")
+            
+            # Инициализируем настройки если их нет
+            self.init_system_settings()
+            
+            # Обновляем настройки
+            success = True
+            success &= self.update_system_setting('reminder_schedule_day', str(day))
+            success &= self.update_system_setting('reminder_schedule_time', time)
+            success &= self.update_system_setting('reminder_timezone', timezone)
+            
+            return success
+        except Exception as e:
+            print(f"Ошибка при обновлении расписания напоминаний: {e}")
+            return False
+
+    def get_all_system_settings(self):
+        """Получение всех системных настроек"""
+        try:
+            self.init_system_settings()
+            
+            with self.get_db() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT setting_key, setting_value, description, updated_at
+                    FROM SystemSettings
+                    ORDER BY setting_key
+                """)
+                
+                settings = {}
+                for row in cursor.fetchall():
+                    settings[row[0]] = {
+                        'value': row[1],
+                        'description': row[2],
+                        'updated_at': row[3]
+                    }
+                
+                return settings
+        except sqlite3.Error as e:
+            print(f"Ошибка при получении системных настроек: {e}")
+            return {} 
