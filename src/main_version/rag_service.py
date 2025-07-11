@@ -150,9 +150,9 @@ ensemble_retriever = EnsembleRetriever(
 # Инициализация модели GigaChat
 def create_retrieval_chain_from_folder(role, specialization, question_id, embedding_retriever, prompt_template):
     
-    # Заполнение шаблона промпта
+    # Заполнение шаблона промпта (роль больше не используется)
     template = string.Template(prompt_template)
-    filled_prompt = template.substitute(role=role, specialization=specialization)
+    filled_prompt = template.substitute(specialization=specialization)
 
     # Создание промпта
     prompt = ChatPromptTemplate.from_template(filled_prompt)
@@ -192,12 +192,11 @@ def get_prompt_from_db(question_id):
 
 
 
-def get_best_retriever_for_role_spec(role, specialization, vector_store_preference='auto'):
+def get_best_retriever_for_specialization(specialization, vector_store_preference='auto'):
     """
     Выбирает лучший retriever на основе специализации и настроек вопроса
     
     Args:
-        role: Роль пользователя
         specialization: Специализация пользователя
         vector_store_preference: Настройка векторного хранилища из БД ('auto', 'by_specialization', 'analyst', 'qa', 'web', 'java', 'python', 'ensemble')
     """
@@ -238,6 +237,11 @@ def get_best_retriever_for_role_spec(role, specialization, vector_store_preferen
         print(f"Не удалось определить ретривер для специализации '{specialization}'. Используется ансамбль из 5 баз.")
         return ensemble_retriever
 
+# Функция-обертка для обратной совместимости
+def get_best_retriever_for_role_spec(role, specialization, vector_store_preference='auto'):
+    """Устаревшая функция для обратной совместимости. Используйте get_best_retriever_for_specialization."""
+    return get_best_retriever_for_specialization(specialization, vector_store_preference)
+
 async def generate_semantic_search_queries(question, role, specialization):
     """
     Генерирует семантически связанные поисковые запросы для улучшения векторного поиска
@@ -250,20 +254,19 @@ async def generate_semantic_search_queries(question, role, specialization):
         profanity_check=False
     )
     
-    # Промпт для генерации альтернативных поисковых запросов
+    # Промпт для генерации альтернативных поисковых запросов (убрана роль)
     query_generation_prompt = f"""
 Дан вопрос: "{question}"
-Роль пользователя: {role if role else "не указана"}
 Специализация: {specialization if specialization else "не указана"}
 
-Сгенерируй -5 альтернативных поисковых запросов для поиска в корпоративной базе знаний.
+Сгенерируй 5 альтернативных поисковых запросов для поиска в корпоративной базе знаний.
 
 Альтернативные запросы должны:
 1. Включать точные фразы из корпоративных документов
 2. Фокусироваться на конкретных практиках и процессах
 3. Быть короткими и точными для векторного поиска
 4. Покрывать разные аспекты развития и лидерства
-5. Учитывать роль и специализацию пользователя
+5. Учитывать специализацию пользователя
 
 Ответь только списком из 5-6 запросов, каждый с новой строки, без нумерации и дополнительного текста:
 """
@@ -289,8 +292,8 @@ async def enhanced_vector_search(question, role, specialization, embedding_retri
     """
     Улучшенный векторный поиск с использованием множественных семантических запросов
     """
-    # Генерируем альтернативные поисковые запросы
-    search_queries = await generate_semantic_search_queries(question, role, specialization)
+    # Генерируем альтернативные поисковые запросы (роль больше не используется)
+    search_queries = await generate_semantic_search_queries(question, "", specialization)
     
     # Собираем все найденные документы
     all_docs = []
@@ -347,11 +350,10 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
     """
     Создает улучшенную retrieval chain с семантическим векторным поиском и поддержкой стриминга
     """
-    # ИСПРАВЛЕНО: Сначала заполняем только $role и $specialization
+    # Заполняем только $specialization (роль больше не используется)
     # {input} и {context} будут заполнены позже с реальными данными
     template = string.Template(prompt_template)
     base_prompt = template.substitute(
-        role=role,
         specialization=specialization
     )
     
@@ -368,7 +370,6 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
         def __init__(self, llm, base_prompt, role, specialization, embedding_retriever):
             self.llm = llm
             self.base_prompt = base_prompt
-            self.role = role
             self.specialization = specialization
             self.embedding_retriever = embedding_retriever
 
@@ -380,7 +381,7 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
             dialogue_context = input_data.get('dialogue_context', '[]')
 
             # 1. Используем улучшенный поиск для получения релевантных документов
-            docs = await enhanced_vector_search(question, self.role, self.specialization, self.embedding_retriever)
+            docs = await enhanced_vector_search(question, None, self.specialization, self.embedding_retriever)
             
             # 2. Формируем контекст из документов
             context_text = "\n\n".join([doc.page_content for doc in docs])
@@ -433,10 +434,9 @@ async def create_enhanced_retrieval_chain_for_suggestions(role, specialization, 
     """
     Создает улучшенную retrieval chain для генерации связанных вопросов (промпт 999)
     """
-    # Заполнение шаблона промпта со всеми необходимыми переменными
+    # Заполнение шаблона промпта со всеми необходимыми переменными (убрана роль)
     template = string.Template(prompt_template)
     filled_prompt = template.substitute(
-        role=role,
         specialization=specialization,
         user_question=user_question,
         bot_answer=bot_answer
@@ -456,8 +456,8 @@ async def create_enhanced_retrieval_chain_for_suggestions(role, specialization, 
         
         print(f"Генерируем связанные вопросы с улучшенным векторным поиском: {search_query}")
         
-        # Выполняем улучшенный векторный поиск
-        relevant_docs = await enhanced_vector_search(search_query, role, specialization, embedding_retriever)
+        # Выполняем улучшенный векторный поиск (роль больше не используется)
+        relevant_docs = await enhanced_vector_search(search_query, None, specialization, embedding_retriever)
         
         # Формируем контекст из найденных документов
         context = "\n\n".join([doc.page_content for doc in relevant_docs])
@@ -468,7 +468,7 @@ async def create_enhanced_retrieval_chain_for_suggestions(role, specialization, 
 Дополнительный контекст из корпоративных документов:
 {context}
 
-Используй этот контекст для генерации более релевантных и специфичных вопросов, связанных с ролью {role} и специализацией {specialization}."""
+Используй этот контекст для генерации более релевантных и специфичных вопросов, связанных со специализацией {specialization}."""
         
         print(f"Отправляем запрос в GigaChat для генерации связанных вопросов...")
         
@@ -506,11 +506,11 @@ async def websocket_suggest_endpoint(websocket: WebSocket):
     
     if use_rag:
         # Используем RAG для более точной генерации вопросов
-        embedding_retriever = get_best_retriever_for_role_spec(role, specialization)
+        embedding_retriever = get_best_retriever_for_specialization(specialization)
         
         # Создаем специальную retrieval chain для генерации связанных вопросов (промпт 999)
         retrieval_chain = await create_enhanced_retrieval_chain_for_suggestions(
-            role=role,
+            role=None,  # Роль больше не используется
             specialization=specialization,
             user_question=user_question,
             bot_answer=bot_answer,
@@ -521,7 +521,7 @@ async def websocket_suggest_endpoint(websocket: WebSocket):
         try:
             print("ws_suggest: Using RAG-enhanced question generation...")
             # Формируем запрос для поиска релевантных документов
-            search_query = f"Вопросы по теме: {user_question}. Роль: {role}. Специализация: {specialization}"
+            search_query = f"Вопросы по теме: {user_question}. Специализация: {specialization}"
             
             # Вызываем функцию напрямую, так как она возвращает функцию
             response = await retrieval_chain({'input': search_query})
@@ -545,16 +545,15 @@ async def websocket_suggest_endpoint(websocket: WebSocket):
         filled_prompt = template.substitute(
             user_question=user_question,
             bot_answer=bot_answer,
-            role=role,
             specialization=specialization
         )
 
         # Добавляем инструкции по генерации релевантных вопросов
         question_generation_guidance = f"""
-Учитывая, что пользователь имеет роль '{role}' и специализацию '{specialization}',
+Учитывая, что пользователь имеет специализацию '{specialization}',
 сгенерируйте 3-5 релевантных вопросов, которые:
 1. Соответствуют текущему контексту диалога
-2. Учитывают специфику роли и специализации пользователя
+2. Учитывают специфику специализации пользователя
 3. Помогают углубить понимание обсуждаемой темы
 4. Могут быть полезны для профессионального развития в рамках специализации
 5. Не выходят за рамки компетенций пользователя
@@ -605,7 +604,8 @@ async def websocket_endpoint(websocket: WebSocket):
     # Получаем параметр vector_store (если есть)
     try:
         vector_store = await websocket.receive_text()
-    except:
+    except Exception as e:
+        logger.warning(f"Ошибка получения vector_store параметра: {e}. Используется значение по умолчанию 'auto'")
         vector_store = 'auto'  # Значение по умолчанию для обратной совместимости
     
     question_id = int(question_id)
@@ -621,9 +621,9 @@ async def websocket_endpoint(websocket: WebSocket):
     if not prompt_template:
         prompt_template = get_prompt_from_db(777)
     
-    # Логика выбора retriever теперь учитывает параметр vector_store
-    print(f"Определяем retriever для роли '{role}', специализации '{specialization}' и настройки '{vector_store}'...")
-    embedding_retriever = get_best_retriever_for_role_spec(role, specialization, vector_store)
+    # Логика выбора retriever теперь учитывает параметр vector_store (роль больше не используется)
+    print(f"Определяем retriever для специализации '{specialization}' и настройки '{vector_store}'...")
+    embedding_retriever = get_best_retriever_for_specialization(specialization, vector_store)
 
     # Создаем retrieval_chain для вопросов, которые его используют
     retrieval_chain = None
@@ -633,11 +633,11 @@ async def websocket_endpoint(websocket: WebSocket):
     if should_use_rag:
         print(f"RAG-search для question_id={question_id}")
         retrieval_chain = await create_enhanced_retrieval_chain(
-            role=role,
+            role="",  # Пустая строка для обратной совместимости
             specialization=specialization,
             question_id=question_id,
             embedding_retriever=embedding_retriever,
-            prompt_template=prompt_template,
+            prompt_template=prompt_template
         )
 
         # Для свободного ввода передаём историю диалога, иначе пустой список

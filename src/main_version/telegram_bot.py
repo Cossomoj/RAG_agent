@@ -63,6 +63,44 @@ feedback_bot = telebot.TeleBot(FEEDBACK_BOT_TOKEN)
 cache_dict = {}
 cache_by_specialization = {}
 
+def get_cache_type_for_question(question_id):
+    """
+    Определяет тип кеша для вопроса на основе поля specialization в БД.
+    
+    Returns:
+        'by_specialization' - если specialization IS NULL (универсальный вопрос)
+        'general' - если specialization IS NOT NULL (специфичный вопрос)
+        'no_cache' - если вопрос не найден или не должен кешироваться
+    """
+    try:
+        # Специальные ID которые не кешируются
+        if question_id in [777, 888]:
+            return 'no_cache'
+        
+        conn = sqlite3.connect(DATABASE_URL)
+        cursor = conn.cursor()
+        cursor.execute("SELECT specialization FROM Questions WHERE question_id = ?", (question_id,))
+        result = cursor.fetchone()
+        conn.close()
+        
+        if not result:
+            # Если вопрос не найден в БД, используем общий кеш
+            logger.warning(f"Question ID {question_id} не найден в БД, используем общий кеш")
+            return 'general'
+        
+        specialization = result[0]
+        
+        if specialization is None:
+            # Универсальный вопрос - кешируем по специализации пользователя
+            return 'by_specialization'
+        else:
+            # Специфичный вопрос - используем общий кеш
+            return 'general'
+            
+    except Exception as e:
+        logger.error(f"Ошибка при определении типа кеша для question_id {question_id}: {e}")
+        return 'general'  # Fallback к общему кешу
+
 def clear_all_cache():
     """
     Функция для полной очистки всех кешей.
@@ -134,7 +172,7 @@ def init_db():
     cursor = conn.cursor()
 
     try:
-        # Создаем таблицу Users
+        # Создаем таблицу Users (убрано поле Role)
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS Users (
             user_id INTEGER PRIMARY KEY,
@@ -142,11 +180,41 @@ def init_db():
             user_fullname TEXT DEFAULT NULL,
             reminder BOOl DEFAULT TRUE,
             create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-            Role TEXT DEFAULT NULL,
             Specialization TEXT DEFAULT NULL,
             is_onboarding BOOLEAN DEFAULT FALSE NOT NULL
         )
         ''')
+        
+        # Миграция: удаляем поле Role если оно существует
+        try:
+            cursor.execute("PRAGMA table_info(Users)")
+            columns = [column[1] for column in cursor.fetchall()]
+            if 'Role' in columns:
+                # Создаем новую таблицу без поля Role
+                cursor.execute('''
+                CREATE TABLE Users_new (
+                    user_id INTEGER PRIMARY KEY,
+                    username TEXT DEFAULT NULL,
+                    user_fullname TEXT DEFAULT NULL,
+                    reminder BOOl DEFAULT TRUE,
+                    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    Specialization TEXT DEFAULT NULL,
+                    is_onboarding BOOLEAN DEFAULT FALSE NOT NULL
+                )
+                ''')
+                
+                # Копируем данные (без поля Role)
+                cursor.execute('''
+                INSERT INTO Users_new (user_id, username, user_fullname, reminder, create_time, Specialization, is_onboarding)
+                SELECT user_id, username, user_fullname, reminder, create_time, Specialization, is_onboarding FROM Users
+                ''')
+                
+                # Удаляем старую таблицу и переименовываем новую
+                cursor.execute("DROP TABLE Users")
+                cursor.execute("ALTER TABLE Users_new RENAME TO Users")
+                logger.info("Поле Role успешно удалено из таблицы Users")
+        except sqlite3.Error as e:
+            logger.warning(f"Ошибка миграции таблицы Users: {e}")
 
         # Создаем таблицу Reminder
         cursor.execute('''
@@ -204,87 +272,24 @@ def require_onboarding(func):
 def start_onboarding(message):
     chat_id = message.chat.id
     
-    # Создаем клавиатуру для выбора роли
+    # Создаем клавиатуру для выбора специализации напрямую
     keyboard = types.InlineKeyboardMarkup()
-    roles = [
-        ("PO/PM", "role_for_db_po"),
-        ("Лид компетенции", "role_for_db_lead"),
-        ("Специалист", "role_for_db_spec"),
-        ("Стажер", "role_for_db_intern")
+    specializations = [
+        ("Аналитик", "spec_for_db_analyst"),
+        ("Тестировщик", "spec_for_db_qa"),
+        ("WEB", "spec_for_db_web"),
+        ("Java", "spec_for_db_java"),
+        ("Python", "spec_for_db_python")
     ]
     
-    for role_name, callback_data in roles:
-        keyboard.add(types.InlineKeyboardButton(text=role_name, callback_data=callback_data))
+    for spec_name, callback_data in specializations:
+        keyboard.add(types.InlineKeyboardButton(text=spec_name, callback_data=callback_data))
     # Добавляем кнопку "В начало"
     keyboard.add(types.InlineKeyboardButton(text="В начало", callback_data="start"))
     
-    bot.send_message(chat_id, "Выберите вашу роль:", reply_markup=keyboard)
+    bot.send_message(chat_id, "Выберите вашу специализацию:", reply_markup=keyboard)
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("role_for_db_"))
-def handle_role_selection(call):
-    chat_id = call.message.chat.id
-    selected_role = call.data.replace("role_for_db_", "")
-    
-    # Сохраняем роль в базу данных
-    conn = sqlite3.connect(DATABASE_URL)
-    cursor = conn.cursor()
-    
-    if selected_role == "po":
-        # Если выбран PO/PM, автоматически устанавливаем специализацию
-        cursor.execute('''
-            UPDATE Users 
-            SET Role = ?, Specialization = ?, is_onboarding = TRUE 
-            WHERE user_id = ?
-        ''', ("PO/PM", "PO/PM", chat_id))
-        conn.commit()
-        conn.close()
-        
-        # Показываем сообщение об успешном завершении онбординга
-        bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=call.message.message_id,
-            text="Отлично! Ваша роль: PO/PM\nСпециализация установлена автоматически."
-        )
-        # Вызываем меню
-        handle_role(call)
-        
-    else:
-        # Сохраняем роль
-        role_mapping = {
-            "lead": "Лид компетенции",
-            "spec": "Специалист",
-            "intern": "Стажер"
-        }
-        
-        cursor.execute('''
-            UPDATE Users 
-            SET Role = ? 
-            WHERE user_id = ?
-        ''', (role_mapping[selected_role], chat_id))
-        conn.commit()
-        conn.close()
-        
-        # Создаем клавиатуру для выбора специализации
-        keyboard = types.InlineKeyboardMarkup()
-        specializations = [
-            ("Аналитик", "spec_for_db_analyst"),
-            ("Тестировщик", "spec_for_db_qa"),
-            ("WEB", "spec_for_db_web"),
-            ("Java", "spec_for_db_java"),
-            ("Python", "spec_for_db_python")
-        ]
-        
-        for spec_name, callback_data in specializations:
-            keyboard.add(types.InlineKeyboardButton(text=spec_name, callback_data=callback_data))
-        # Добавляем кнопку "В начало"
-        keyboard.add(types.InlineKeyboardButton(text="В начало", callback_data="start"))
-    
-        bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=call.message.message_id,
-            text="Теперь выберите вашу специализацию:",
-            reply_markup=keyboard
-        )
+# Обработчик выбора роли удален, так как роль больше не используется
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("spec_for_db_"))
 def handle_specialization_selection(call):
@@ -318,18 +323,17 @@ def handle_specialization_selection(call):
         text=f"Отлично! Ваша специализация: {spec_mapping[selected_spec]}"
     )
 
-    # Получаем роль и специализацию из базы данных
+    # Получаем только специализацию из базы данных
     conn = sqlite3.connect(DATABASE_URL)
     cursor = conn.cursor()
-    cursor.execute("SELECT Role, Specialization FROM Users WHERE user_id = ?", (chat_id,))
+    cursor.execute("SELECT Specialization FROM Users WHERE user_id = ?", (chat_id,))
     result = cursor.fetchone()
     conn.close()
 
     if result:
-        role, specialization = result
+        specialization = result[0]
         if chat_id not in user_data:
             user_data[chat_id] = {}
-        user_data[chat_id]["role"] = role 
         user_data[chat_id]["specialization"] = specialization
     
     # Вызываем меню
@@ -609,20 +613,19 @@ def handle_giga_mentor(call):
 def handle_restart_onboarding(call):
     chat_id = call.message.chat.id
     
-    # Получаем текущую роль и специализацию из базы данных
+    # Получаем текущую специализацию из базы данных
     conn = sqlite3.connect(DATABASE_URL)
     cursor = conn.cursor()
-    cursor.execute("SELECT Role, Specialization FROM Users WHERE user_id = ?", (chat_id,))
+    cursor.execute("SELECT Specialization FROM Users WHERE user_id = ?", (chat_id,))
     result = cursor.fetchone()
     conn.close()
     
-    role = result[0] if result and result[0] else "Не задана"
-    specialization = result[1] if result and result[1] else "Не задана"
+    specialization = result[0] if result and result[0] else "Не задана"
     
     # Создаем клавиатуру с кнопками
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
-        types.InlineKeyboardButton(text="Изменить роль", callback_data="onboarding"),
+        types.InlineKeyboardButton(text="Изменить специализацию", callback_data="onboarding"),
         types.InlineKeyboardButton(text="В начало", callback_data="start")
     )
     
@@ -630,9 +633,9 @@ def handle_restart_onboarding(call):
     bot.edit_message_text(
         chat_id=chat_id,
         message_id=call.message.message_id,
-        text=f"Ваша текущая роль: {role}\nВаша специализация: {specialization}\n\n"
-             f"Для изменения ранее выбранной роли / специализации:\n"
-             f"Выберите 'Изменить роль'",
+        text=f"Ваша специализация: {specialization}\n\n"
+             f"Для изменения специализации:\n"
+             f"Выберите 'Изменить специализацию'",
             
         reply_markup=markup
     )
@@ -907,7 +910,8 @@ async def check():
                     # Если там только время
                     try:
                         reminder_formatted = f"{datetime.now().strftime('%Y-%m-%d')} {reminder_datetime}"
-                    except:
+                    except Exception as e:
+                        logger.error(f"Ошибка при парсинге формата времени '{reminder_datetime}': {e}")
                         print(f"Невозможно разобрать формат времени: {reminder_datetime}")
                         continue
             
@@ -920,19 +924,18 @@ async def check():
                 if(not context_str):
                     context_str = "История сообщений пустая"
                 question_id = 777
-                role = 'Аналитик'   
-                specialization = 'Специалист'
+                specialization = 'Аналитик'
                 count_for_pro_activity = 102
                 question = 'without'
                 
                 try:
                     async with websockets.connect(WEBSOCKET_URL) as websocket:
-                        await websocket.send(question) # Отправляем вопрос
-                        await websocket.send(role)
-                        await websocket.send(specialization)
-                        await websocket.send(str(question_id))
-                        await websocket.send(context_str)
-                        await websocket.send(str(count_for_pro_activity))
+                        await websocket.send(question)         # 1. question
+                        await websocket.send("")               # 2. role (пустая строка)
+                        await websocket.send(specialization)   # 3. specialization
+                        await websocket.send(str(question_id)) # 4. question_id
+                        await websocket.send(context_str)      # 5. context
+                        await websocket.send(str(count_for_pro_activity)) # 6. count
                         try:
                             full_answer = ""
                             while True:
@@ -1031,20 +1034,19 @@ async def check_for_daily_msg():
                         logger.warning(f"Преобразован тип context_str в строку для пользователя {chat_id}")
                     
                     question_id = 777  # Изменено с 666 на 777 для корректной обработки
-                    role = 'Аналитик'   
-                    specialization = 'Специалист'
+                    specialization = 'Аналитик'
                     count_for_pro_activity = 101
                     question = 'without'
                     
                     try:
                         logger.debug(f"Подключение к WebSocket для пользователя {chat_id}")
                         async with websockets.connect(WEBSOCKET_URL) as websocket:
-                            await websocket.send(question)
-                            await websocket.send(role)
-                            await websocket.send(specialization)
-                            await websocket.send(str(question_id))
-                            await websocket.send(context_str)
-                            await websocket.send(str(count_for_pro_activity))
+                            await websocket.send(question)         # 1. question
+                            await websocket.send("")               # 2. role (пустая строка)
+                            await websocket.send(specialization)   # 3. specialization
+                            await websocket.send(str(question_id)) # 4. question_id
+                            await websocket.send(context_str)      # 5. context
+                            await websocket.send(str(count_for_pro_activity)) # 6. count
                             
                             full_answer = ""
                             try:
@@ -1110,40 +1112,38 @@ def run_async_task_for_hack():
 # Запуск планировщика в отдельном потоке
 threading.Thread(target=run_async_task_for_hack, daemon=True).start()
 
-# Обработчик нажатия кнопки Выбор роли
+# Обработчик нажатия кнопки Выбор вопросов
 @require_onboarding
 @bot.callback_query_handler(func=lambda call: call.data == "menu_qr")
-def handle_role(call):
+def handle_questions(call):
     bot.clear_step_handler_by_chat_id(call.message.chat.id)
     chat_id = call.message.chat.id
     clear_dialog_context(chat_id)
     
-    # Получаем роль и специализацию из базы данных
+    # Получаем специализацию из базы данных
     conn = sqlite3.connect(DATABASE_URL)
     cursor = conn.cursor()
-    cursor.execute("SELECT Role, Specialization FROM Users WHERE user_id = ?", (chat_id,))
+    cursor.execute("SELECT Specialization FROM Users WHERE user_id = ?", (chat_id,))
     result = cursor.fetchone()
     conn.close()
     
-    if not result or not result[0] or not result[1]:
-        # Если роль или специализация не установлены, запускаем онбординг
+    if not result or not result[0]:
+        # Если специализация не установлена, запускаем онбординг
         redirect_to_onboarding(call.message)
         return
     
-    role = result[0]
-    specialization = result[1]
+    specialization = result[0]
     
     # Сохраняем данные в user_data для использования в других функциях
     if chat_id not in user_data:
         user_data[chat_id] = {}
-    user_data[chat_id]["role"] = role
     user_data[chat_id]["specialization"] = specialization
     
-    # Показываем соответствующие вопросы в зависимости от роли и специализации
+    # Показываем соответствующие вопросы в зависимости от специализации
     markup = types.InlineKeyboardMarkup(row_width=1)
     
-    # Получаем вопросы из БД через questions_loader
-    questions_list = questions_loader.get_questions_by_role(role, specialization)
+    # Получаем вопросы из БД через questions_loader (без роли)
+    questions_list = questions_loader.get_questions_by_specialization(specialization)
     
     questions = []
     for q in questions_list:
@@ -1179,13 +1179,13 @@ def clear_dialog_context(chat_id):
     if chat_id in count_questions_users:
         count_questions_users[chat_id] = 0
 
-# Обработчик выбора роли
+# Обработчик выбора специализации
 @require_onboarding
 @bot.callback_query_handler(func=lambda call: call.data == "menu_r")
 def choose_menu(call):
     bot.clear_step_handler_by_chat_id(call.message.chat.id)
     markup = types.InlineKeyboardMarkup(row_width=1)
-    roles = [
+    specializations = [
         types.InlineKeyboardButton(text="Аналитик", callback_data="specsql_analyst"),
         types.InlineKeyboardButton(text="Тестировщик", callback_data="specsql_tester"),
         types.InlineKeyboardButton(text="WEB", callback_data="specsql_web"),
@@ -1193,8 +1193,8 @@ def choose_menu(call):
         types.InlineKeyboardButton(text="Python", callback_data="specsql_python"),
         types.InlineKeyboardButton(text="В начало", callback_data="start"),
     ]
-    markup.add(*roles)
-    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Выберите роль:", reply_markup=markup)
+    markup.add(*specializations)
+    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Выберите специализацию:", reply_markup=markup)
 
  # Обработка выбора специализации
 @require_onboarding
@@ -1214,25 +1214,24 @@ def handle_role_specialization(call):
     }
     specialization = specialization_mapping.get(data)
     
-    # ИСПРАВЛЕНО: обновляем Specialization, а не role
+    # Обновляем Specialization
     cursor.execute("UPDATE Users SET Specialization = ? WHERE user_id = ?", (specialization, user_id))
     conn.commit()
     
-    # ДОБАВЛЕНО: синхронизируем user_data с БД
-    cursor.execute("SELECT Role, Specialization FROM Users WHERE user_id = ?", (user_id,))
+    # Синхронизируем user_data с БД (только специализация)
+    cursor.execute("SELECT Specialization FROM Users WHERE user_id = ?", (user_id,))
     user_db_data = cursor.fetchone()
     if user_db_data:
         if user_id not in user_data:
             user_data[user_id] = {}
-        user_data[user_id]["role"] = user_db_data[0]
-        user_data[user_id]["specialization"] = user_db_data[1]
+        user_data[user_id]["specialization"] = user_db_data[0]
     
     bot.answer_callback_query(call.id, f"Специализация '{specialization}' успешно сохранена!")
-    cursor.execute("SELECT user_id, Role, Specialization FROM Users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT user_id, Specialization FROM Users WHERE user_id = ?", (user_id,))
     users = cursor.fetchone()
 
     if users:
-        print(f"User ID: {users[0]}, Role: {users[1]}, Specialization: {users[2]}")
+        print(f"User ID: {users[0]}, Specialization: {users[1]}")
     conn.close()
 
     # Возврат в меню
@@ -1240,68 +1239,7 @@ def handle_role_specialization(call):
 
 
 
-# Обработчик выбора роли
-@require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data.startswith("role_"))
-def choose_role(call):
-    chat_id = call.message.chat.id
-    clear_dialog_context(chat_id)
-    role_mapping = {
-        "role_PM": "PO/PM",
-        "role_lead": "Лид компетенций",
-        "role_employee": "Специалист"
-    }
-    selected_role = role_mapping.get(call.data)
-    
-    # ИСПРАВЛЕНО: сохраняем роль в БД
-    conn = sqlite3.connect(DATABASE_URL)
-    cursor = conn.cursor()
-    cursor.execute("UPDATE Users SET Role = ? WHERE user_id = ?", (selected_role, chat_id))
-    conn.commit()
-    
-    # ИСПРАВЛЕНО: синхронизируем user_data с БД
-    user_data[call.message.chat.id] = {"role": selected_role, "specialization": None}
-    if selected_role == "PO/PM":
-        cursor.execute("UPDATE Users SET Specialization = ? WHERE user_id = ?", ("PO/PM", chat_id))
-        conn.commit()
-        user_data[call.message.chat.id]["specialization"] = "PO/PM"
-
-    bot.clear_step_handler_by_chat_id(call.message.chat.id)
-
-    if selected_role in ["Лид компетенций", "Специалист"]:
-        markup = types.InlineKeyboardMarkup(row_width=1)
-        # ИСПРАВЛЕНО: используем правильные callback данные spec_for_db_
-        specializations = [
-            types.InlineKeyboardButton(text="Аналитик", callback_data="spec_for_db_analyst"),
-            types.InlineKeyboardButton(text="Тестировщик", callback_data="spec_for_db_tester"),
-            types.InlineKeyboardButton(text="WEB", callback_data="spec_for_db_web"),
-            types.InlineKeyboardButton(text="Java", callback_data="spec_for_db_java"),
-            types.InlineKeyboardButton(text="Python", callback_data="spec_for_db_python"),
-            types.InlineKeyboardButton(text="В начало", callback_data="start"),
-        ]
-        markup.add(*specializations)
-        
-        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=f"Вы выбрали роль: {selected_role}\nТеперь выберите специализацию:", reply_markup=markup)
-    else:
-        markup = types.InlineKeyboardMarkup(row_width=1)
-        quesions = [
-            types.InlineKeyboardButton(text="Что я могу ожидать от специалиста", callback_data="qid_15"),
-            types.InlineKeyboardButton(text="Что я могу ожидать от лида компетенции", callback_data="qid_16"),
-            types.InlineKeyboardButton(text="Что ожидается от меня", callback_data="qid_17"),
-            types.InlineKeyboardButton(text="Что еще ты умеешь?", callback_data="question_777"),
-            types.InlineKeyboardButton(text="Ввести свой вопрос", callback_data="question_custom"),
-            types.InlineKeyboardButton(text="В начало", callback_data="start")
-        ]
-        markup.add(*quesions)
-        bot.edit_message_text(chat_id = call.message.chat.id, message_id=call.message.message_id, text=(
-        "Вы находитесь в разделе напоминания\n\n"
-        "Выберите:\n"
-        "•'Запланировать сообщение на тему' - для создания единоразового сообщения\n"
-        "•'Регулярные сообщения' - для настройки регулярных сообщений\n"
-        "•'Мои уведомления' - для просмотра существующих уведомлений"
-    ), reply_markup=markup)
-    
-    conn.close()
+# Обработчик выбора роли удален, так как роль больше не используется
 
 # Обработчик предопределенных вопросов
 @require_onboarding
@@ -1342,14 +1280,12 @@ def handle_predefined_question_group(call):
 def handle_predefined_question_group_1(call):
     chat_id = call.message.chat.id
     clear_dialog_context(chat_id)
-    role = ""
     specialization = ""
     question_id = 777
     
     if call.message.chat.id not in user_data:
-        user_data[call.message.chat.id] = {"role": "Специалист", "specialization": "Аналитик"}
+        user_data[call.message.chat.id] = {"specialization": "Аналитик"}
 
-    role = user_data[call.message.chat.id]['role']
     specialization = user_data[call.message.chat.id]['specialization']
     
     
@@ -1369,19 +1305,17 @@ def handle_predefined_question_group_1(call):
         question = "Проведение встреч компетенции"
         question_id = 10
 
-    if (question_id in cache_dict):
-            #mplusk1
+    cache_type = get_cache_type_for_question(question_id)
+    
+    if cache_type == 'general' and question_id in cache_dict:
+        asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
+    elif cache_type == 'by_specialization' and question_id in cache_by_specialization:
+        if specialization in cache_by_specialization[question_id]:
             asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
-            #mplusk2
-    elif (question_id in cache_by_specialization):
-        if(specialization in cache_by_specialization[question_id]):
-            #mplusk1
-            asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
-            #mplusk2
         else:
-            asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
+            asyncio.run(websocket_question_from_user(question, call.message, None, specialization, question_id))
     else:
-        asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
+        asyncio.run(websocket_question_from_user(question, call.message, None, specialization, question_id))
 
 
 @require_onboarding
@@ -1389,14 +1323,12 @@ def handle_predefined_question_group_1(call):
 def handle_predefined_question_group_2(call):
     chat_id = call.message.chat.id
     clear_dialog_context(chat_id)
-    role = ""
     specialization = ""
     question_id = 777
     
     if call.message.chat.id not in user_data:
-        user_data[call.message.chat.id] = {"role": "Специалист", "specialization": "Аналитик"}
+        user_data[call.message.chat.id] = {"specialization": "Аналитик"}
 
-    role = user_data[call.message.chat.id]['role']
     specialization = user_data[call.message.chat.id]['specialization']
     
     
@@ -1416,33 +1348,29 @@ def handle_predefined_question_group_2(call):
         question = "Советы по тайм-менеджменту"
         question_id = 24
 
-    if (question_id in cache_dict):
-            #mplusk1
+    cache_type = get_cache_type_for_question(question_id)
+    
+    if cache_type == 'general' and question_id in cache_dict:
+        asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
+    elif cache_type == 'by_specialization' and question_id in cache_by_specialization:
+        if specialization in cache_by_specialization[question_id]:
             asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
-            #mplusk2
-    elif (question_id in cache_by_specialization):
-        if(specialization in cache_by_specialization[question_id]):
-            #mplusk1
-            asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
-            #mplusk2
         else:
-            asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
+            asyncio.run(websocket_question_from_user(question, call.message, None, specialization, question_id))
     else:
-        asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
+        asyncio.run(websocket_question_from_user(question, call.message, None, specialization, question_id))
 
 @require_onboarding
 @bot.callback_query_handler(func=lambda call: call.data.startswith("po_question"))
 def handle_predefined_question_group_2(call):
     chat_id = call.message.chat.id
     clear_dialog_context(chat_id)
-    role = ""
     specialization = ""
     question_id = 777
     
     if call.message.chat.id not in user_data:
-        user_data[call.message.chat.id] = {"role": "PO/PM", "specialization": "PO/PM"}
+        user_data[call.message.chat.id] = {"specialization": "PO/PM"}
 
-    role = user_data[call.message.chat.id]['role']
     user_data[call.message.chat.id]['specialization'] = "PO/PM"
     specialization = user_data[call.message.chat.id]['specialization']
     
@@ -1457,19 +1385,17 @@ def handle_predefined_question_group_2(call):
         question = "Что ожидается от меня"
         question_id = 17
 
-    if (question_id in cache_dict):
-            #mplusk1
+    cache_type = get_cache_type_for_question(question_id)
+    
+    if cache_type == 'general' and question_id in cache_dict:
+        asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
+    elif cache_type == 'by_specialization' and question_id in cache_by_specialization:
+        if specialization in cache_by_specialization[question_id]:
             asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
-            #mplusk2
-    elif (question_id in cache_by_specialization):
-        if(specialization in cache_by_specialization[question_id]):
-            #mplusk1
-            asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
-            #mplusk2
         else:
-            asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
+            asyncio.run(websocket_question_from_user(question, call.message, None, specialization, question_id))
     else:
-        asyncio.run(websocket_question_from_user(question, call.message, role, specialization, question_id))
+        asyncio.run(websocket_question_from_user(question, call.message, None, specialization, question_id))
 
 
 
@@ -1487,7 +1413,7 @@ def handle_predefined_question(call):
 
     # Получаем профиль пользователя
     role, specialization = get_user_profile_from_db(chat_id)
-    if not role or not specialization:
+    if not specialization:
         bot.send_message(chat_id, "Не удалось получить ваш профиль. Пожалуйста, пройдите онбординг заново через /start.")
         logger.warning(f"[{chat_id}] Профиль не найден при обработке {callback_data}")
         return
@@ -1517,7 +1443,7 @@ def handle_predefined_question(call):
         bot.send_message(chat_id, "Произошла ошибка при обработке запроса. Попробуйте позже.")
         return
 
-    logger.info(f"[{chat_id}] Handling question. RAG_ID={rag_id}, VS='{vector_store_setting}', Role='{role}', Spec='{specialization}'")
+    logger.info(f"[{chat_id}] Handling question. RAG_ID={rag_id}, VS='{vector_store_setting}', Spec='{specialization}'")
 
     # Сообщение «Формирую ответ»
     typing_msg = bot.send_message(chat_id, "Формирую ответ... ⏳", parse_mode='Markdown')
@@ -1526,7 +1452,6 @@ def handle_predefined_question(call):
     asyncio.run(websocket_question_from_user(
         question=question_text,
         message=typing_msg,
-        role=role,
         specialization=specialization,
         question_id=rag_id, # ИСПРАВЛЕНО: передаем правильный ID
         show_suggested_questions=True,
@@ -1582,7 +1507,8 @@ def handle_message_history(call):
                 from datetime import datetime
                 dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
                 formatted_time = dt.strftime("%d.%m %H:%M")
-            except:
+            except Exception as e:
+                logger.warning(f"Ошибка при форматировании timestamp '{timestamp}': {e}")
                 formatted_time = timestamp[:16]  # Fallback
             
             # Определяем эмодзи и префикс в зависимости от роли
@@ -1605,7 +1531,7 @@ def handle_message_history(call):
         markup = types.InlineKeyboardMarkup(row_width=2)
         
         # Кнопка "Показать больше" (если есть еще сообщения)
-        cursor = conn = sqlite3.connect(DATABASE_URL)
+        conn = sqlite3.connect(DATABASE_URL)
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM Message_history WHERE user_id = ?", (chat_id,))
         total_count = cursor.fetchone()[0]
@@ -1673,25 +1599,30 @@ def process_custom_question(message):
     """
     logger.info(f"Обрабатываем кастомный вопрос от пользователя {message.chat.id}")
     
-    # Получаем роль и специализацию из базы данных
-    role, specialization = get_user_profile_from_db(message.chat.id)
+    # Получаем специализацию из базы данных
+    _, specialization = get_user_profile_from_db(message.chat.id)
     
-    if not role or not specialization:
+    if not specialization:
         bot.send_message(message.chat.id, "Не удалось получить ваш профиль. Пожалуйста, пройдите онбординг заново через /start.")
         logger.warning(f"Не найден профиль для пользователя {message.chat.id} при обработке кастомного вопроса.")
         return
 
     question_id = 888  # Используем ID=888 для кастомных вопросов с памятью диалога
     question = message.text
-    asyncio.run(websocket_question_from_user(question, message, role, specialization, question_id, show_suggested_questions=True))
+    asyncio.run(websocket_question_from_user(question, message, specialization, question_id, show_suggested_questions=True))
 
 async def handling_cached_requests(question_id, message, question, specialization):
     print("Кешированное сообщение")
 
-    if (question_id not in [1, 2, 3, 4, 5, 18, 19, 20]):
+    cache_type = get_cache_type_for_question(question_id)
+    
+    if cache_type == 'general':
         arr = cache_dict[question_id]
-    else:
+    elif cache_type == 'by_specialization':
         arr = cache_by_specialization[question_id][specialization]
+    else:
+        logger.error(f"Попытка получить кеш для некешируемого question_id {question_id}")
+        return
     full_ans_for_context = ""
 
     chat_id = message.chat.id
@@ -1712,21 +1643,20 @@ async def handling_cached_requests(question_id, message, question, specializatio
     dialogue_context[chat_id].append({"role": "assistant", "content": full_ans_for_context})
     save_message_in_db(chat_id, "assistant", full_ans_for_context)
     
-    # Получаем роль пользователя из базы данных
+    # Получаем специализацию пользователя из базы данных
     conn = sqlite3.connect(DATABASE_URL)
     cursor = conn.cursor()
-    cursor.execute("SELECT Role, Specialization FROM Users WHERE user_id = ?", (chat_id,))
+    cursor.execute("SELECT Specialization FROM Users WHERE user_id = ?", (chat_id,))
     user_info = cursor.fetchone()
     conn.close()
     
-    role = user_info[0] if user_info else "Пользователь"
-    user_specialization = user_info[1] if user_info else specialization
+    user_specialization = user_info[0] if user_info else specialization
     
     # Обрезаем ответ бота, чтобы избежать ошибок с длиной промпта
     truncated_answer = (full_ans_for_context[:2000] + '...') if len(full_ans_for_context) > 2000 else full_ans_for_context
     
     # Запускаем генерацию подсказанных вопросов
-    await generate_and_show_suggested_questions(chat_id, question, truncated_answer, role, user_specialization)
+    await generate_and_show_suggested_questions(chat_id, question, truncated_answer, "", user_specialization)
     
     markup = types.InlineKeyboardMarkup()
     button = [types.InlineKeyboardButton(text="Ввести вопрос", callback_data="question_custom"),
@@ -1737,7 +1667,7 @@ async def handling_cached_requests(question_id, message, question, specializatio
 
 
     #mplusk2
-async def websocket_question_from_user(question, message, role, specialization, question_id, show_suggested_questions=True, vector_store='auto'):
+async def websocket_question_from_user(question, message, specialization, question_id, show_suggested_questions=True, vector_store='auto'):
     print(f"websocket_question_from_user: question='{question}', question_id={question_id}")
 
     chat_id = message.chat.id
@@ -1768,13 +1698,13 @@ async def websocket_question_from_user(question, message, role, specialization, 
         logger.info(f"Подключаемся к RAG сервису: {WEBSOCKET_URL}")
         async with websockets.connect(WEBSOCKET_URL) as websocket:
             logger.info(f"Отправляем данные в RAG сервис: question_id={question_id}")
-            await websocket.send(question) # Отправляем текст вопроса пользователя через WebSocket
-            await websocket.send(role) # Отправляем роль пользователя (например, "разработчик", "аналитик")
-            await websocket.send(specialization) # Отправляем специализацию пользователя (например, "Python", "Java")
-            await websocket.send(str(question_id)) # Отправляем уникальный ID вопроса, преобразованный в строку
-            await websocket.send(context_str) # Отправляем контекст беседы (история предыдущих сообщений)
-            await websocket.send(str(count_questions_users[chat_id])) # Отправляем количество вопросов пользователя, преобразованное в строку
-            await websocket.send(vector_store)  # Отправляем название векторного хранилища для поиска релевантных документов
+            await websocket.send(question)                          # 1. question
+            await websocket.send("")                                # 2. role (пустая строка)
+            await websocket.send(specialization)                    # 3. specialization
+            await websocket.send(str(question_id))                  # 4. question_id
+            await websocket.send(context_str)                       # 5. context
+            await websocket.send(str(count_questions_users[chat_id])) # 6. count
+            await websocket.send(vector_store)                      # 7. vector_store
             logger.info(f"Данные отправлены, ожидаем ответ от RAG сервиса")
 
             try:
@@ -1836,14 +1766,18 @@ async def websocket_question_from_user(question, message, role, specialization, 
                     answer_for_cache.append(full_answer)
                     answer_for_countinue_dialog += full_answer
                 print("")
-                # Кэшируем ответы только для предопределенных вопросов (не для 777 и 888)
-                if(question_id not in [777, 888]):
-                    if(question_id not in [1, 2, 3, 4, 5, 18, 19, 20]):
-                        cache_dict[question_id] = answer_for_cache
-                    else:
-                        if question_id not in cache_by_specialization:
-                            cache_by_specialization[question_id] = {}
-                        cache_by_specialization[question_id][specialization] = answer_for_cache
+                # Кэшируем ответы на основе типа вопроса из БД
+                cache_type = get_cache_type_for_question(question_id)
+                
+                if cache_type == 'general':
+                    cache_dict[question_id] = answer_for_cache
+                    logger.info(f"Ответ сохранен в общий кеш для question_id={question_id}")
+                elif cache_type == 'by_specialization':
+                    if question_id not in cache_by_specialization:
+                        cache_by_specialization[question_id] = {}
+                    cache_by_specialization[question_id][specialization] = answer_for_cache
+                    logger.info(f"Ответ сохранен в кеш по специализации для question_id={question_id}, specialization={specialization}")
+                # cache_type == 'no_cache' - не кешируем (777, 888)
                 
             dialogue_context[chat_id].append({"role": "assistant", "content": answer_for_countinue_dialog})
             save_message_in_db(chat_id, "assistant", answer_for_countinue_dialog)
@@ -1875,7 +1809,7 @@ async def websocket_question_from_user(question, message, role, specialization, 
 
             # Запускаем генерацию подсказанных вопросов для всех типов вопросов (включая ID=888)
             if show_suggested_questions:
-                await generate_and_show_suggested_questions(chat_id, question, truncated_answer, role, specialization)
+                await generate_and_show_suggested_questions(chat_id, question, truncated_answer, "", specialization)
 
             # Разные сообщения для разных типов вопросов
             if question_id == 888:
@@ -1961,21 +1895,20 @@ def handle_suggested_question(call):
         # Очищаем контекст диалога для нового вопроса
         clear_dialog_context(chat_id)
         
-        # Получаем роль и специализацию
+        # Получаем специализацию
         conn = sqlite3.connect(DATABASE_URL)
         cursor = conn.cursor()
-        cursor.execute("SELECT Role, Specialization FROM Users WHERE user_id = ?", (chat_id,))
+        cursor.execute("SELECT Specialization FROM Users WHERE user_id = ?", (chat_id,))
         user_info = cursor.fetchone()
         conn.close()
         
-        role = user_info[0] if user_info else "Пользователь"
-        specialization = user_info[1] if user_info else "Не указана"
+        specialization = user_info[0] if user_info else "Не указана"
         
         bot.send_message(chat_id, f"Вы выбрали вопрос: {question}")
         
         # Отправляем вопрос на обработку (с предложенными вопросами)
         # ID=777 для выбранных предложенных вопросов
-        asyncio.run(websocket_question_from_user(question, call.message, role, specialization, 777, show_suggested_questions=True))
+        asyncio.run(websocket_question_from_user(question, call.message, specialization, 777, show_suggested_questions=True))
         
         # Удаляем предложенные вопросы после выбора
         if chat_id in suggested_questions_storage:
@@ -2052,19 +1985,17 @@ def handle_text_message(message):
     
     logger.info(f"Начинаем обработку свободного текста для пользователя {chat_id}: '{question}'")
     
-    # Получаем роль и специализацию пользователя из базы данных
+    # Получаем специализацию пользователя из базы данных
     conn = sqlite3.connect(DATABASE_URL)
     cursor = conn.cursor()
-    cursor.execute("SELECT Role, Specialization FROM Users WHERE user_id = ?", (chat_id,))
+    cursor.execute("SELECT Specialization FROM Users WHERE user_id = ?", (chat_id,))
     user_info = cursor.fetchone()
     conn.close()
     
     if user_info:
-        role = user_info[0]
-        specialization = user_info[1]
+        specialization = user_info[0]
     else:
         # Если пользователь не найден в БД, используем значения по умолчанию
-        role = "Пользователь"
         specialization = "Не указана"
     
     # Для свободного ввода (ID=888) всегда загружаем свежий контекст из БД (последние 6 сообщений)
@@ -2080,7 +2011,7 @@ def handle_text_message(message):
     
     # Отправляем вопрос на обработку в RAG систему (с предложенными вопросами)
     question_id = 888  # ID для свободного ввода текста (отдельный промпт)
-    asyncio.run(websocket_question_from_user(question, message, role, specialization, question_id, show_suggested_questions=True))
+    asyncio.run(websocket_question_from_user(question, message, specialization, question_id, show_suggested_questions=True))
 
 # Обработчик для показа полной истории сообщений
 @require_onboarding
@@ -2125,7 +2056,8 @@ def handle_full_history(call):
                 from datetime import datetime
                 dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
                 formatted_time = dt.strftime("%d.%m %H:%M")
-            except:
+            except Exception as e:
+                logger.warning(f"Ошибка при форматировании timestamp '{timestamp}' в полной истории: {e}")
                 formatted_time = timestamp[:16]
             
             # Определяем эмодзи
@@ -2238,17 +2170,18 @@ def handle_clear_history_confirm(call):
 
 def get_user_profile_from_db(chat_id):
     """
-    Извлекает роль и специализацию пользователя из базы данных.
-    Возвращает (role, specialization) или (None, None) если пользователь не найден.
+    Извлекает специализацию пользователя из базы данных.
+    Возвращает (specialization) или (None) если пользователь не найден.
+    Первый элемент всегда None, так как роль больше не используется.
     """
     try:
         conn = sqlite3.connect(DATABASE_URL)
         cursor = conn.cursor()
-        cursor.execute("SELECT Role, Specialization FROM Users WHERE user_id = ?", (chat_id,))
+        cursor.execute("SELECT Specialization FROM Users WHERE user_id = ?", (chat_id,))
         result = cursor.fetchone()
         conn.close()
         if result:
-            return result[0], result[1]
+            return None, result[0]  # Возвращаем (None, specialization) для совместимости
     except Exception as e:
         logger.error(f"Ошибка при получении профиля пользователя {chat_id} из БД: {e}")
     return None, None
@@ -2280,21 +2213,40 @@ def handle_predefined_question_universal(call):
     vector_store_setting = question_info.get('vector_store', 'auto')
     
     # ИСПРАВЛЕНО: Распаковываем кортеж, а не используем как словарь
-    role, specialization = get_user_profile_from_db(chat_id)
-    if not role or not specialization:
+    _, specialization = get_user_profile_from_db(chat_id)
+    if not specialization:
         logger.error(f"[{chat_id}] User profile not found, redirecting to onboarding.")
         redirect_to_onboarding(call.message)
         return
     
-    logger.info(f"[{chat_id}] Handling question_id={rag_id}, Role='{role}', Spec='{specialization}', VS='{vector_store_setting}'")
+    logger.info(f"[{chat_id}] Handling question_id={rag_id}, Spec='{specialization}', VS='{vector_store_setting}'")
     
+    # ДОБАВЛЕНО: Проверяем кеш перед отправкой в RAG на основе типа вопроса из БД
+    cache_type = get_cache_type_for_question(question_id)
+    
+    if cache_type == 'general' and question_id in cache_dict:
+        logger.info(f"[{chat_id}] Найден ответ в общем кеше для question_id={question_id}")
+        asyncio.run(handling_cached_requests(question_id, call.message, question_text, specialization))
+        return
+    elif cache_type == 'by_specialization' and question_id in cache_by_specialization:
+        if specialization in cache_by_specialization[question_id]:
+            logger.info(f"[{chat_id}] Найден ответ в кеше по специализации для question_id={question_id}, specialization={specialization}")
+            asyncio.run(handling_cached_requests(question_id, call.message, question_text, specialization))
+            return
+        else:
+            logger.info(f"[{chat_id}] В кеше по специализации нет данных для question_id={question_id}, specialization={specialization}")
+    elif cache_type == 'no_cache':
+        logger.info(f"[{chat_id}] question_id={question_id} не кешируется, отправляем в RAG")
+    else:
+        logger.info(f"[{chat_id}] Кеш не найден для question_id={question_id}, отправляем в RAG")
+    
+    # Если кеш не найден, отправляем в RAG
     typing_message = bot.send_message(chat_id, "<i>Печатаю...</i>", parse_mode='HTML')
     
     try:
         asyncio.run(websocket_question_from_user(
             question=question_text,
             message=typing_message,
-            role=role,
             specialization=specialization,
             question_id=rag_id,
             show_suggested_questions=True,
@@ -2417,7 +2369,6 @@ async def generate_and_show_suggested_questions(chat_id: int,
     payload = {
         "user_question": user_question,
         "bot_answer": bot_answer,
-        "role": role,
         "specialization": specialization,
     }
 
