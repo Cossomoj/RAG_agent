@@ -150,9 +150,9 @@ ensemble_retriever = EnsembleRetriever(
 # Инициализация модели GigaChat
 def create_retrieval_chain_from_folder(role, specialization, question_id, embedding_retriever, prompt_template):
     
-    # Заполнение шаблона промпта (роль больше не используется)
-    template = string.Template(prompt_template)
-    filled_prompt = template.substitute(specialization=specialization)
+    # ИСПРАВЛЕНИЕ: Безопасная замена переменных без ошибок
+    # Заменяем только $specialization, остальные переменные оставляем как есть
+    filled_prompt = prompt_template.replace('$specialization', specialization)
 
     # Создание промпта
     prompt = ChatPromptTemplate.from_template(filled_prompt)
@@ -350,12 +350,9 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
     """
     Создает улучшенную retrieval chain с семантическим векторным поиском и поддержкой стриминга
     """
-    # Заполняем только $specialization (роль больше не используется)
-    # {input} и {context} будут заполнены позже с реальными данными
-    template = string.Template(prompt_template)
-    base_prompt = template.substitute(
-        specialization=specialization
-    )
+    # ИСПРАВЛЕНИЕ: Безопасная замена переменных без ошибок
+    # Заменяем только $specialization, остальные переменные оставляем как есть
+    base_prompt = prompt_template.replace('$specialization', specialization)
     
     # Создание LLM
     llm = GigaChat(
@@ -434,13 +431,11 @@ async def create_enhanced_retrieval_chain_for_suggestions(role, specialization, 
     """
     Создает улучшенную retrieval chain для генерации связанных вопросов (промпт 999)
     """
-    # Заполнение шаблона промпта со всеми необходимыми переменными (убрана роль)
-    template = string.Template(prompt_template)
-    filled_prompt = template.substitute(
-        specialization=specialization,
-        user_question=user_question,
-        bot_answer=bot_answer
-    )
+    # ИСПРАВЛЕНИЕ: Безопасная замена переменных без ошибок
+    # Заменяем переменные без использования template.substitute()
+    filled_prompt = prompt_template.replace('$specialization', specialization)
+    filled_prompt = filled_prompt.replace('$user_question', user_question)
+    filled_prompt = filled_prompt.replace('$bot_answer', bot_answer)
     
     # Создание LLM
     llm = GigaChat(
@@ -540,13 +535,11 @@ async def websocket_suggest_endpoint(websocket: WebSocket):
             use_rag = False
     
     if not use_rag:
-        # Используем прямое обращение к LLM без RAG
-        template = string.Template(prompt_template)
-        filled_prompt = template.substitute(
-            user_question=user_question,
-            bot_answer=bot_answer,
-            specialization=specialization
-        )
+        # ИСПРАВЛЕНИЕ: Безопасная замена переменных без ошибок
+        # Заменяем переменные без использования template.substitute()
+        filled_prompt = prompt_template.replace('$specialization', specialization)
+        filled_prompt = filled_prompt.replace('$user_question', user_question)
+        filled_prompt = filled_prompt.replace('$bot_answer', bot_answer)
 
         # Добавляем инструкции по генерации релевантных вопросов
         question_generation_guidance = f"""
