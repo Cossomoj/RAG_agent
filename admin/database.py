@@ -8,7 +8,7 @@ class DatabaseOperations:
     def __init__(self, db_path=DATABASE_URL):
         # Преобразуем относительный путь в абсолютный
         self.db_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', db_path))
-        print(f"Подключение к базе данных: {self.db_path}")  # Отладочная информация
+
         # Проверяем существование файла базы данных
         if not os.path.exists(self.db_path):
             raise FileNotFoundError(f"База данных не найдена по пути: {self.db_path}")
@@ -19,8 +19,7 @@ class DatabaseOperations:
             conn.row_factory = sqlite3.Row  # Это позволит получать результаты в виде словарей
             return conn
         except sqlite3.Error as e:
-            print(f"Ошибка подключения к базе данных: {e}")
-            raise
+            raise sqlite3.Error(f"Ошибка подключения к базе данных: {e}")
 
     def get_all_prompts(self):
         try:
@@ -28,10 +27,8 @@ class DatabaseOperations:
                 cursor = conn.cursor()
                 cursor.execute('SELECT * FROM Prompts ORDER BY created_at DESC')
                 prompts = [dict(row) for row in cursor.fetchall()]
-                print(f"Получено промптов: {len(prompts)}")  # Отладочная информация
                 return prompts
         except sqlite3.Error as e:
-            print(f"Ошибка при получении промптов: {e}")
             return []
 
     def add_prompt(self, question_id, question_text, prompt_template):
@@ -161,7 +158,6 @@ class DatabaseOperations:
                 }
                 
         except sqlite3.Error as e:
-            print(f"Ошибка при получении пользователей: {e}")
             return {
                 'users': [],
                 'total': 0,
@@ -231,7 +227,6 @@ class DatabaseOperations:
 
                 return user_details
         except sqlite3.Error as e:
-            print(f"Ошибка при получении деталей пользователя: {e}")
             return None
 
     def get_statistics(self, days=30):
@@ -332,7 +327,6 @@ class DatabaseOperations:
                 }
                 
         except sqlite3.Error as e:
-            print(f"Ошибка при получении статистики: {e}")
             return {
                 'total_users': 0,
                 'total_messages': 0,
@@ -389,7 +383,6 @@ class DatabaseOperations:
                 }
                 
         except sqlite3.Error as e:
-            print(f"Ошибка при получении вопросов: {e}")
             return {
                 'questions': [],
                 'total': 0,
@@ -439,7 +432,6 @@ class DatabaseOperations:
                 conn.commit()
                 return cursor.lastrowid
         except sqlite3.Error as e:
-            print(f"Ошибка при добавлении вопроса: {e}")
             raise
     
     def update_question(self, old_callback_data, **kwargs):
@@ -474,7 +466,6 @@ class DatabaseOperations:
                 return cursor.rowcount > 0
                 
         except sqlite3.Error as e:
-            print(f"Ошибка при обновлении вопроса: {e}")
             raise
     
     def delete_question(self, callback_data):
@@ -494,7 +485,6 @@ class DatabaseOperations:
                 cursor.execute("SELECT * FROM VectorStores ORDER BY id")
                 return [dict(row) for row in cursor.fetchall()]
         except sqlite3.Error as e:
-            print(f"Ошибка при получении векторных хранилищ: {e}")
             return []
     
     def get_question_categories(self):
@@ -511,7 +501,6 @@ class DatabaseOperations:
                 """)
                 return [dict(row) for row in cursor.fetchall()]
         except sqlite3.Error as e:
-            print(f"Ошибка при получении тегов: {e}")
             return []
     
     def reload_questions_cache(self):
@@ -521,7 +510,6 @@ class DatabaseOperations:
             response = requests.post('http://127.0.0.1:8007/reload-questions')
             return response.json()
         except Exception as e:
-            print(f"Ошибка при перезагрузке кеша вопросов: {e}")
             return {"success": False, "error": str(e)} 
 
     def init_system_settings(self):
@@ -556,7 +544,6 @@ class DatabaseOperations:
                 conn.commit()
                 return True
         except sqlite3.Error as e:
-            print(f"Ошибка при инициализации системных настроек: {e}")
             return False
 
     def get_system_setting(self, setting_key, default_value=None):
@@ -573,7 +560,6 @@ class DatabaseOperations:
                     return row[0]
                 return default_value
         except sqlite3.Error as e:
-            print(f"Ошибка при получении настройки {setting_key}: {e}")
             return default_value
 
     def update_system_setting(self, setting_key, setting_value):
@@ -588,7 +574,6 @@ class DatabaseOperations:
                 conn.commit()
                 return True
         except sqlite3.Error as e:
-            print(f"Ошибка при обновлении настройки {setting_key}: {e}")
             return False
 
     def get_reminder_schedule(self):
@@ -604,7 +589,6 @@ class DatabaseOperations:
             }
             return schedule
         except Exception as e:
-            print(f"Ошибка при получении расписания напоминаний: {e}")
             # Возвращаем значения по умолчанию
             return {
                 'day': 4,  # Пятница
@@ -639,7 +623,6 @@ class DatabaseOperations:
             
             return success
         except Exception as e:
-            print(f"Ошибка при обновлении расписания напоминаний: {e}")
             return False
 
     def get_all_system_settings(self):
@@ -665,5 +648,4 @@ class DatabaseOperations:
                 
                 return settings
         except sqlite3.Error as e:
-            print(f"Ошибка при получении системных настроек: {e}")
             return {} 

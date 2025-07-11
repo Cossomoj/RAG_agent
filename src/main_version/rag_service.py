@@ -217,29 +217,22 @@ def get_best_retriever_for_specialization(specialization, vector_store_preferenc
     
     # Если указано конкретное хранилище, используем его
     if vector_store_preference in store_mapping:
-        print(f"Используется явно указанный retriever: {vector_store_preference}")
         return store_mapping[vector_store_preference]
     
     # Если auto или by_specialization, выбираем по специализации
     spec_lower = specialization.lower() if specialization else ""
     
     if 'аналитик' in spec_lower:
-        print("Выбран retriever для АНАЛИТИКА")
         return embedding_retriever_bsa
     elif 'тестировщик' in spec_lower:
-        print("Выбран retriever для ТЕСТИРОВЩИКА")
         return embedding_retriever_test
     elif 'web' in spec_lower or 'фронтенд' in spec_lower:
-        print("Выбран retriever для WEB")
         return embedding_retriever_web
     elif 'java' in spec_lower:
-        print("Выбран retriever для JAVA")
         return embedding_retriever_java
     elif 'python' in spec_lower:
-        print("Выбран retriever для PYTHON")
         return embedding_retriever_python
     else:
-        print(f"Не удалось определить ретривер для специализации '{specialization}'. Используется ансамбль из 5 баз.")
         return ensemble_retriever
 
 
@@ -311,14 +304,10 @@ async def generate_semantic_search_queries(question, role, specialization):
         # Добавляем исходный вопрос в начало списка
         all_queries = [question] + alternative_queries
         
-        print(f"Сгенерированы поисковые запросы:")
-        for i, query in enumerate(all_queries, 1):
-            print(f"  {i}. {query}")
-        
         return all_queries
         
     except Exception as e:
-        print(f"Ошибка при генерации альтернативных запросов: {e}")
+        logger.error(f"Ошибка при генерации альтернативных запросов: {e}")
         return [question]  # Возвращаем только исходный вопрос в случае ошибки
 
 async def enhanced_vector_search(question, role, specialization, embedding_retriever, top_k=8):
@@ -357,7 +346,7 @@ async def enhanced_vector_search(question, role, specialization, embedding_retri
                 doc_scores[doc_id]['query_matches'].append(query)
         
         except Exception as e:
-            print(f"Ошибка поиска для запроса '{query}': {e}")
+            logger.error(f"Ошибка поиска для запроса '{query}': {e}")
             continue
     
     # Сортируем документы по общему счету
@@ -365,17 +354,6 @@ async def enhanced_vector_search(question, role, specialization, embedding_retri
     
     # Возвращаем топ-K документов
     result_docs = [item['doc'] for item in sorted_docs[:top_k]]
-    
-    print(f"\nРезультаты улучшенного векторного поиска:")
-    for i, item in enumerate(sorted_docs[:top_k], 1):
-        doc = item['doc']
-        score = item['score']
-        source = doc.metadata.get('source', 'Неизвестно')
-        print(f"  {i}. Счет: {score:.3f} | Источник: {source.split('/')[-1]}")
-        print(f"     Совпадения с запросами: {len(item['query_matches'])}")
-        print(f"     Запросы: {item['query_matches'][:2]}")  # Показываем первые 2 запроса
-        print(f"     Содержимое: {doc.page_content[:150]}...")
-        print()
     
     return result_docs
 
@@ -482,8 +460,6 @@ async def create_enhanced_retrieval_chain_for_suggestions(role, specialization, 
     async def enhanced_suggestions_process(input_data):
         search_query = input_data.get('input', '')
         
-        print(f"Генерируем связанные вопросы с улучшенным векторным поиском: {search_query}")
-        
         # Выполняем улучшенный векторный поиск (роль больше не используется)
         relevant_docs = await enhanced_vector_search(search_query, None, specialization, embedding_retriever)
         
@@ -498,8 +474,6 @@ async def create_enhanced_retrieval_chain_for_suggestions(role, specialization, 
 
 Используй этот контекст для генерации более релевантных и специфичных вопросов, связанных со специализацией {specialization}."""
         
-        print(f"Отправляем запрос в GigaChat для генерации связанных вопросов...")
-        
         # Получаем ответ от LLM
         response = await llm.ainvoke(final_prompt)
         
@@ -511,9 +485,7 @@ async def create_enhanced_retrieval_chain_for_suggestions(role, specialization, 
 @app.websocket("/ws_suggest")
 async def websocket_suggest_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print("ws_suggest: connection accepted")
     data = await websocket.receive_text()
-    print(f"ws_suggest: received data: {data}")
     payload = json.loads(data)
     
     user_question = payload.get("user_question")
@@ -523,14 +495,12 @@ async def websocket_suggest_endpoint(websocket: WebSocket):
 
     prompt_template = get_prompt_from_db(999)
     if not prompt_template:
-        print("ws_suggest: ERROR - Prompt 999 not found")
         await websocket.send_text(json.dumps({"error": "Prompt not found"}))
         await websocket.close()
         return
 
     # Всегда используем RAG для генерации связанных вопросов (промпт 999)
     use_rag = True
-    print(f"ws_suggest: Using RAG for question generation")
     
     if use_rag:
         # Используем RAG для более точной генерации вопросов
@@ -547,14 +517,12 @@ async def websocket_suggest_endpoint(websocket: WebSocket):
         )
         
         try:
-            print("ws_suggest: Using RAG-enhanced question generation...")
             # Формируем запрос для поиска релевантных документов
             search_query = f"Вопросы по теме: {user_question}. Специализация: {specialization}"
             
             # Вызываем функцию напрямую, так как она возвращает функцию
             response = await retrieval_chain({'input': search_query})
             raw_response = response.get('answer', '')
-            print(f"ws_suggest: RAG response: {raw_response}")
             
             # Парсим ответ
             cleaned_response = re.sub(r'^\s*\d+\.\s*', '', raw_response, flags=re.MULTILINE)
@@ -564,7 +532,7 @@ async def websocket_suggest_endpoint(websocket: WebSocket):
             questions = questions[:5]
             
         except Exception as e:
-            print(f"ws_suggest: ERROR in RAG call: {e}, falling back to direct LLM")
+            logger.error(f"Ошибка в RAG для генерации вопросов: {e}")
             use_rag = False
     
     if not use_rag:
@@ -596,24 +564,19 @@ async def websocket_suggest_endpoint(websocket: WebSocket):
         )
         
         try:
-            print(f"ws_suggest: Using direct LLM for question generation...")
             response = await llm.ainvoke(filled_prompt)
-            print(f"ws_suggest: LLM response: {response.content}")
             
             # Удаляем нумерацию, чтобы обеспечить корректный парсинг
             cleaned_response = re.sub(r'^\s*\d+\.\s*', '', response.content, flags=re.MULTILINE)
             questions = [q.strip() for q in cleaned_response.split('\n') if q.strip()]
         except Exception as e:
-            print(f"ws_suggest: ERROR in LLM call: {e}")
+            logger.error(f"Ошибка в LLM для генерации вопросов: {e}")
             await websocket.send_text(json.dumps({"error": str(e)}))
             await websocket.close()
             return
 
-    print(f"ws_suggest: Final questions: {questions}")
     await websocket.send_text(json.dumps(questions))
-    print(f"ws_suggest: Sent questions to client: {json.dumps(questions)}")
     await websocket.close()
-    print("ws_suggest: connection closed")
 #mplusk2
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -624,7 +587,6 @@ async def websocket_endpoint(websocket: WebSocket):
     specialization = await websocket.receive_text()
     question_id = await websocket.receive_text()
     context = await websocket.receive_text()
-    print(context)
     count = await websocket.receive_text()
     
     # Получаем параметр vector_store (если есть)
@@ -636,19 +598,12 @@ async def websocket_endpoint(websocket: WebSocket):
     
     question_id = int(question_id)
     count = int(count)
-    print(question)
-    print(role)
-    print(specialization)
-    print(f"количество {count}")
-    print(f"айди {question_id}")
-    print(f"векторное хранилище {vector_store}")
     
     prompt_template = get_prompt_from_db(question_id)
     if not prompt_template:
         prompt_template = get_prompt_from_db(777)
     
     # Логика выбора retriever теперь учитывает параметр vector_store (роль больше не используется)
-    print(f"Определяем retriever для специализации '{specialization}' и настройки '{vector_store}'...")
     embedding_retriever = get_best_retriever_for_specialization(specialization, vector_store)
 
     # Создаем retrieval_chain для вопросов, которые его используют
@@ -658,14 +613,10 @@ async def websocket_endpoint(websocket: WebSocket):
     # ИСПРАВЛЕНО: Для свободного ввода проверяем, связан ли вопрос с IT
     if question_id == 888:  # Свободный ввод
         if not is_it_related_question(question):
-            print(f"Вопрос '{question}' не связан с IT. Используем прямой ответ без RAG.")
             should_use_rag = False
-        else:
-            print(f"Вопрос '{question}' связан с IT. Используем RAG с корпоративными документами.")
     
     # --- 1. Используем RAG только для IT-вопросов или библиотечных вопросов ---
     if should_use_rag:
-        print(f"RAG-search для question_id={question_id}")
         retrieval_chain = await create_enhanced_retrieval_chain(
             role="",  # Пустая строка для обратной совместимости
             specialization=specialization,
@@ -685,7 +636,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.send_text(chunk["answer"])
     else:
         # --- 2. Прямой ответ GigaChat без RAG для общих вопросов ---
-        print(f"Прямой ответ GigaChat для общего вопроса: {question}")
         
         # Используем базовый промпт для общих вопросов
         general_prompt = f"""Ты дружелюбный AI-ассистент. Ответь на вопрос пользователя полно и информативно.
@@ -710,13 +660,13 @@ async def websocket_endpoint(websocket: WebSocket):
             response = await llm.ainvoke(general_prompt)
             await websocket.send_text(response.content)
         except Exception as e:
-            print(f"Ошибка при получении ответа от GigaChat: {e}")
+            logger.error(f"Ошибка при получении ответа от GigaChat: {e}")
             await websocket.send_text("Извините, произошла ошибка при обработке вашего вопроса.")
 
     await websocket.close()
 
 if __name__ == "__main__":
-    print("Запускаем сервер на ws://127.0.0.1:8000/ws")
+    logger.info("Запускаем сервер на ws://127.0.0.1:8000/ws")
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
 

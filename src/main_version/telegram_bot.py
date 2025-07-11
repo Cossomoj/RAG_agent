@@ -381,7 +381,7 @@ def get_future_reminders(user_id):
         return result
     
     except sqlite3.Error as e:
-        print(f"Ошибка при получении напоминаний: {e}")
+        logger.error(f"Ошибка при получении напоминаний: {e}")
         return []
     finally:
         if conn:
@@ -816,9 +816,6 @@ def process_reminder_input(message):
             raise ValueError("Недостаточно данных. Нужны дата, время и текст напоминания")
             
         date_part, time_part, reminder_text = parts
-        print(date_part)
-        print(time_part)
-        print(reminder_text)
         
         # Объединяем дату и время для парсинга
         datetime_str = f"{date_part} {time_part}"
@@ -907,7 +904,6 @@ async def check():
                         reminder_formatted = f"{datetime.now().strftime('%Y-%m-%d')} {reminder_datetime}"
                     except Exception as e:
                         logger.error(f"Ошибка при парсинге формата времени '{reminder_datetime}': {e}")
-                        print(f"Невозможно разобрать формат времени: {reminder_datetime}")
                         continue
             
             # Сравниваем текущее время с временем напоминания
@@ -938,7 +934,7 @@ async def check():
                                 if answer_part:
                                     full_answer += answer_part
                                 else:
-                                    print("Получено пустое сообщение от WebSocket.")
+                                    logger.warning("Получено пустое сообщение от WebSocket.")
                             
                         except websockets.exceptions.ConnectionClosed:
                             markup = types.InlineKeyboardMarkup(row_width=1)
@@ -950,16 +946,16 @@ async def check():
                             try:
                                 # Пытаемся отправить сообщение
                                 bot.send_message(chat_id=chat_id, text=full_answer, reply_markup=markup)
-                                print(f"Сообщение отправлено пользователю {chat_id}")
+                                logger.info(f"Сообщение отправлено пользователю {chat_id}")
                             except telebot.apihelper.ApiException as e:
                                 # Если пользователь заблокировал бота, вы получите исключение
                                 if "Forbidden: bot was blocked by the user" in str(e):
-                                    print(f"Пользователь {chat_id} заблокировал бота.")
+                                    logger.warning(f"Пользователь {chat_id} заблокировал бота.")
                                 else:
                                     # Обработка других возможных ошибок
-                                    print(f"Ошибка при отправке сообщения: {e}")
+                                    logger.error(f"Ошибка при отправке сообщения: {e}")
                 except Exception as e:
-                    print(f"Ошибка при обработке напоминания: {e}")
+                    logger.error(f"Ошибка при обработке напоминания: {e}")
         
         conn.close()
         await asyncio.sleep(60)  # Проверяем каждую минуту
@@ -1293,7 +1289,7 @@ def handle_role_specialization(call):
     users = cursor.fetchone()
 
     if users:
-        print(f"User ID: {users[0]}, Specialization: {users[1]}")
+        logger.debug(f"User ID: {users[0]}, Specialization: {users[1]}")
     conn.close()
 
     # Возврат в меню
@@ -1600,18 +1596,11 @@ def handle_message_history(call):
         conn.close()
         
         buttons = []
-        print(f"!!! СОЗДАНИЕ КНОПОК: total_count = {total_count} !!!")
         if total_count > 10:
-            print("!!! ДОБАВЛЯЕМ КНОПКУ 'Показать все' !!!")
             buttons.append(types.InlineKeyboardButton(text="📄 Показать все", callback_data="history_full"))
         
-        print("!!! ДОБАВЛЯЕМ КНОПКУ 'Очистить историю' !!!")
         buttons.append(types.InlineKeyboardButton(text="🗑 Очистить историю", callback_data="history_clear"))
         buttons.append(types.InlineKeyboardButton(text="◀️ Назад в меню", callback_data="personal_account"))
-        
-        print(f"!!! ВСЕГО КНОПОК СОЗДАНО: {len(buttons)} !!!")
-        for i, btn in enumerate(buttons):
-            print(f"!!! КНОПКА {i}: text='{btn.text}', callback_data='{btn.callback_data}' !!!")
         
         # Добавляем кнопки по 2 в ряд, последнюю отдельно
         if len(buttons) >= 2:
@@ -1675,7 +1664,7 @@ def process_custom_question(message):
     asyncio.run(websocket_question_from_user(question, message, specialization, question_id, show_suggested_questions=True))
 
 async def handling_cached_requests(question_id, message, question, specialization):
-    print("Кешированное сообщение")
+    logger.debug("Используется кешированное сообщение")
 
     cache_type = get_cache_type_for_question(question_id)
     
@@ -1731,10 +1720,7 @@ async def handling_cached_requests(question_id, message, question, specializatio
 
     #mplusk2
 async def websocket_question_from_user(question, message, specialization, question_id, show_suggested_questions=True, vector_store='auto'):
-    print(f"websocket_question_from_user: question='{question}', question_id={question_id}")
-
     chat_id = message.chat.id
-    print(f"websocket_question_from_user: chat_id={chat_id}")
     
     logger.info(f"websocket_question_from_user вызвана для пользователя {chat_id}, question_id={question_id}, question='{question[:50]}...'")
     
@@ -1925,9 +1911,7 @@ async def websocket_question_from_user(question, message, specialization, questi
         bot.send_message(chat_id, "Попробуйте позже или вернитесь в начало", reply_markup=markup)
 
 current_timezone = time.tzname
-print(f"Текущий часовой пояс: {current_timezone}")     
 current_timenow = datetime.now(moscow_tz).strftime("%H:%M")
-print(f"Текущий часовой пояс:{current_timenow}")
 
 @require_onboarding
 def handle_feedback(message):
@@ -1948,7 +1932,7 @@ def handle_feedback(message):
         bot.send_message(chat_id, "Спасибо! Ваш отзыв принят! 🎉")
     except Exception as e:
         bot.send_message(chat_id, "❌ Ошибка при отправке отзыва. Попробуйте позже.")
-        print(f"Ошибка при отправке отзыва: {e}")
+        logger.error(f"Ошибка при отправке отзыва: {e}")
 
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton(text="В начало", callback_data="start"))
@@ -2195,10 +2179,8 @@ def handle_full_history(call):
 @require_onboarding
 @bot.callback_query_handler(func=lambda call: call.data == "history_clear")
 def handle_clear_history(call):
-    print("!!! HISTORY_CLEAR HANDLER CALLED !!!")
     chat_id = call.message.chat.id
     logger.info(f"Обработчик history_clear вызван для пользователя {chat_id}")
-    print(f"!!! chat_id: {chat_id}, call.data: {call.data} !!!")
     
     # Показываем подтверждение
     markup = types.InlineKeyboardMarkup(row_width=2)

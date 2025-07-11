@@ -2973,87 +2973,13 @@ function saveUserId(userId) {
     }
 }
 
-// Функция для тестирования Markdown парсинга (для отладки)
-function testMarkdownParsing() {
-    const testText = `# Заголовок 1
-## Заголовок 2  
-### Middle-аналитик
-Обычный текст после заголовка третьего уровня.
 
-- Пункт списка 1
-- Пункт списка 2
-
-**Жирный текст** и *курсив*.`;
-
-    console.log('🧪 Тестируем Markdown парсинг:');
-    console.log('Исходный текст:', testText);
-    
-    const formatted = formatAnswerText(testText);
-    console.log('После formatAnswerText:', formatted);
-    
-    const html = convertMarkdownToHtml(formatted);
-    console.log('После convertMarkdownToHtml:', html);
-    
-    return html;
-}
-
-
-
-// Функция для тестирования парсинга Markdown
-function testMarkdownParsing() {
-    const testText = `# Ожидания от Лида Компетенции
-
-## Product Owner (PO):
-
-### Middle-аналитик
-
-- Проведение анализа текущих процессов
-- Создание диаграмм и моделей
-- Помощь в формулировке требований
-
-### Senior-аналитик
-
-- Владение стратегиями тестирования
-- Опыт работы с командой
-
-## Системный аналитик
-
-1. Формулирование технических требований
-2. Проектирование решений
-3. Работа с архитектурой системы`;
-
-    console.log('🧪 Тестируем парсинг Markdown:');
-    console.log('Исходный текст:', testText);
-    
-    const result = convertMarkdownToHtml(testText);
-    console.log('Результат:', result);
-    
-    // Показываем результат в интерфейсе
-    const container = document.getElementById('chat-container');
-    if (container) {
-        const testDiv = document.createElement('div');
-        testDiv.innerHTML = `
-            <div class="message bot-message">
-                <div class="message-content">
-                    ${result}
-            </div>
-        </div>
-    `;
-        container.appendChild(testDiv);
-        container.scrollTop = container.scrollHeight;
-    }
-}
-
-// Добавляем тестовые функции в глобальную область для отладки
-window.testMarkdownParsing = testMarkdownParsing;
 
 // Функция для постобработки ответа от RAG
 function postProcessAnswer(text) {
     if (!text || typeof text !== 'string') {
         return text;
     }
-    
-    console.log('🔧 Постобработка ответа...');
     
     let processed = text;
     
@@ -3104,7 +3030,6 @@ function postProcessAnswer(text) {
     // После обычного текста перед заголовками
     processed = processed.replace(/^([^#\n-*\d].+)\n(#{1,6}\s)/gm, '$1\n\n$2');
     
-    console.log('✅ Постобработка завершена');
     return processed.trim();
 }
 
@@ -3121,12 +3046,9 @@ async function loadReminderSettings() {
         if (response.ok) {
             const data = await response.json();
             AppState.profile.reminder_enabled = data.reminder_enabled;
-            console.log('✅ Настройки напоминаний загружены:', data);
-        } else {
-            console.warn('⚠️ Ошибка загрузки настроек напоминаний:', response.status);
         }
     } catch (error) {
-        console.error('❌ Ошибка при загрузке настроек напоминаний:', error);
+        // Тихо обрабатываем ошибки загрузки настроек
     }
 }
 
@@ -3149,14 +3071,12 @@ async function updateReminderSettings(reminderEnabled) {
         
         if (response.ok) {
             const data = await response.json();
-            console.log('✅ Настройки напоминаний обновлены:', data);
             return data;
         } else {
             const errorText = await response.text();
             throw new Error(`Ошибка API: ${response.status} - ${errorText}`);
         }
     } catch (error) {
-        console.error('❌ Ошибка при обновлении настроек напоминаний:', error);
         throw error;
     }
 }

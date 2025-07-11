@@ -102,7 +102,6 @@ def index():
 @login_required
 def prompts():
     all_prompts = db.get_all_prompts()
-    print("Полученные промпты:", all_prompts)  # Отладочная информация
     if all_prompts is None:
         all_prompts = []  # Если нет промптов, используем пустой список
     return render_template('prompts.html', prompts=all_prompts)
@@ -323,8 +322,6 @@ def clear_cache():
     """Очистка кешей всех систем одновременно"""
     results = {'bot': None, 'webapp': None}
     errors = []
-    
-    print(f"[ADMIN] Очистка кешей: TELEGRAM_BOT_URL={TELEGRAM_BOT_URL}, WEBAPP_URL={WEBAPP_URL}")
     
     # 1. Очищаем кеш телеграм-бота
     try:
