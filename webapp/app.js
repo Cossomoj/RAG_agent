@@ -588,6 +588,9 @@ function createQuestionScreen() {
     header.innerHTML = '';
     header.appendChild(createScreenHeader('Задать вопрос'));
     
+    // ИСПРАВЛЕНО: Очищаем предыдущий вопрос и ответ при открытии экрана
+    clearPreviousQuestionAndAnswer();
+    
     // Форма
     formContainer.innerHTML = '';
     
@@ -605,6 +608,8 @@ function createQuestionScreen() {
     
     const textarea = createTextarea('Опишите вашу ситуацию или задайте вопрос...');
     textarea.id = 'question-input';
+    // ИСПРАВЛЕНО: Очищаем поле ввода
+    textarea.value = '';
     
     const sendButton = createButton('Отправить', 'primary', sendQuestion);
     sendButton.id = 'send-question';
@@ -614,6 +619,51 @@ function createQuestionScreen() {
     form.appendChild(sendButton);
     
     formContainer.appendChild(form);
+}
+
+// Функция для очистки предыдущего вопроса и ответа
+function clearPreviousQuestionAndAnswer() {
+    // Очищаем контейнер с заданным вопросом
+    const askedQuestionContainer = document.getElementById('asked-question-container');
+    if (askedQuestionContainer) {
+        askedQuestionContainer.classList.add('hidden');
+        const askedQuestionText = document.getElementById('asked-question-text');
+        if (askedQuestionText) {
+            askedQuestionText.innerHTML = '';
+        }
+    }
+    
+    // Очищаем контейнер с ответом
+    const answerContainer = document.getElementById('answer-container');
+    if (answerContainer) {
+        answerContainer.classList.add('hidden');
+        const answerContent = document.getElementById('answer-content');
+        if (answerContent) {
+            answerContent.innerHTML = '';
+        }
+    }
+    
+    // Очищаем связанные вопросы
+    const suggestedQuestions = document.getElementById('suggested-questions');
+    if (suggestedQuestions) {
+        suggestedQuestions.classList.add('hidden');
+        const suggestedList = document.getElementById('suggested-list');
+        if (suggestedList) {
+            suggestedList.innerHTML = '';
+        }
+    }
+    
+    // Очищаем предыдущие вопросы
+    const previousQuestions = document.getElementById('previous-questions');
+    if (previousQuestions) {
+        previousQuestions.classList.add('hidden');
+        const previousList = document.getElementById('previous-list');
+        if (previousList) {
+            previousList.innerHTML = '';
+        }
+    }
+    
+    console.log('🧹 Предыдущий вопрос и ответ очищены');
 }
 
 // Получение названия категории
