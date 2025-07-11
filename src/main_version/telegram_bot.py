@@ -1586,7 +1586,8 @@ def handle_message_history(call):
 @bot.callback_query_handler(func=lambda call: call.data == "question_custom")
 def ask_custom_question(call):
     chat_id = call.message.chat.id
-    # НЕ очищаем контекст для сохранения памяти диалога
+    # ИСПРАВЛЕНО: Очищаем контекст диалога при переходе в "Задать вопрос"
+    clear_dialog_context(chat_id)
     bot.send_message(call.message.chat.id, "Введите ваш вопрос:")
     bot.register_next_step_handler(call.message, process_custom_question)
 
@@ -1673,7 +1674,7 @@ async def websocket_question_from_user(question, message, specialization, questi
     chat_id = message.chat.id
     print(f"websocket_question_from_user: chat_id={chat_id}")
     
-    logger.info(f"websocket_question_from_user вызвана для пользователя {chat_id}, question_id={question_id}")
+    logger.info(f"websocket_question_from_user вызвана для пользователя {chat_id}, question_id={question_id}, question='{question[:50]}...'")
     
     if chat_id not in dialogue_context:
         dialogue_context[chat_id] = []
@@ -1705,7 +1706,7 @@ async def websocket_question_from_user(question, message, specialization, questi
             await websocket.send(context_str)                       # 5. context
             await websocket.send(str(count_questions_users[chat_id])) # 6. count
             await websocket.send(vector_store)                      # 7. vector_store
-            logger.info(f"Данные отправлены, ожидаем ответ от RAG сервиса")
+            logger.info(f"Данные отправлены в RAG сервис для пользователя {chat_id}, ожидаем ответ")
 
             try:
                 message_2 = bot.send_message(message.chat.id, "Ожидайте ответа...")
@@ -1726,23 +1727,39 @@ async def websocket_question_from_user(question, message, specialization, questi
                     if answer_part:
                         empty_message_count = 0  # Сбрасываем счетчик пустых сообщений
                         full_answer += answer_part
-                        if time.time() - last_send_time >= 1:
+                        # ИСПРАВЛЕНО: Отправляем ответ каждые 0.5 секунды вместо 1 секунды для более быстрого отображения
+                        if time.time() - last_send_time >= 0.5:
                             try:
                                 message_2 = bot.send_message(chat_id=message_2.chat.id, text=full_answer, parse_mode="Markdown")
                                 answer_for_cache.append(full_answer)
                                 answer_for_countinue_dialog += full_answer
                                 full_answer = ""
                                 last_send_time = time.time()
+                                logger.debug(f"Отправлен промежуточный ответ пользователю {chat_id}")
                             except telebot.apihelper.ApiTelegramException as e:
+                                # ИСПРАВЛЕНО: Обрабатываем все ошибки Telegram API, не только rate limit
                                 if e.error_code == 429:
                                     retry_after = int(e.result.headers.get('Retry-After', 1))
-                                    print(f"Rate limit exceeded. Retrying after {retry_after} seconds...")
+                                    logger.warning(f"Rate limit exceeded. Retrying after {retry_after} seconds...")
                                     time.sleep(retry_after)
                                     message_2 = bot.send_message(chat_id=message_2.chat.id, text=full_answer, parse_mode="Markdown")
                                     answer_for_countinue_dialog += full_answer
                                     answer_for_cache.append(full_answer)
                                     last_send_time = time.time()
                                     full_answer = ""
+                                else:
+                                    # Для других ошибок (например, неправильный Markdown) пробуем без форматирования
+                                    logger.warning(f"Ошибка отправки сообщения с Markdown для пользователя {chat_id}: {e}. Отправляем без форматирования.")
+                                    try:
+                                        message_2 = bot.send_message(chat_id=message_2.chat.id, text=full_answer)
+                                        answer_for_countinue_dialog += full_answer
+                                        answer_for_cache.append(full_answer)
+                                        last_send_time = time.time()
+                                        full_answer = ""
+                                    except Exception as inner_e:
+                                        logger.error(f"Критическая ошибка отправки сообщения для пользователя {chat_id}: {inner_e}")
+                            except Exception as e:
+                                logger.error(f"Неожиданная ошибка при отправке сообщения для пользователя {chat_id}: {e}")
                     else:
                         # Пустое сообщение может означать конец потока
                         empty_message_count += 1
@@ -1761,10 +1778,28 @@ async def websocket_question_from_user(question, message, specialization, questi
                 
             except websockets.exceptions.ConnectionClosed:
                 logger.info(f"WebSocket соединение закрыто для пользователя {chat_id}")
-                if (full_answer != ""):
-                    message_2 = bot.send_message(chat_id=message_2.chat.id, text=full_answer)
-                    answer_for_cache.append(full_answer)
-                    answer_for_countinue_dialog += full_answer
+                # ИСПРАВЛЕНО: Всегда отправляем финальный ответ, даже если он пустой
+                if full_answer:
+                    try:
+                        message_2 = bot.send_message(chat_id=message_2.chat.id, text=full_answer)
+                        answer_for_cache.append(full_answer)
+                        answer_for_countinue_dialog += full_answer
+                        logger.info(f"Отправлен финальный ответ пользователю {chat_id}")
+                    except Exception as e:
+                        logger.error(f"Ошибка отправки финального ответа для пользователя {chat_id}: {e}")
+                        # Пробуем отправить хотя бы уведомление об ошибке
+                        try:
+                            bot.send_message(chat_id, "❌ Произошла ошибка при отображении ответа. Ответ сохранен в истории.")
+                        except:
+                            pass
+                elif not answer_for_countinue_dialog:
+                    # Если вообще нет ответа, отправляем сообщение об ошибке
+                    try:
+                        bot.send_message(chat_id, "❌ Не удалось получить ответ от AI. Попробуйте еще раз.")
+                        logger.warning(f"Пустой ответ от RAG для пользователя {chat_id}")
+                    except Exception as e:
+                        logger.error(f"Ошибка отправки сообщения об ошибке для пользователя {chat_id}: {e}")
+                
                 print("")
                 # Кэшируем ответы на основе типа вопроса из БД
                 cache_type = get_cache_type_for_question(question_id)
