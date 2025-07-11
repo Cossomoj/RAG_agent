@@ -548,9 +548,7 @@ def send_welcome(message):
         f"Добро пожаловать в GigaMentor, {user_fullname}! 🤖\n\n"
         f"Я - ваш персональный ИИ-ассистент. Для взаимодействия со мной:\n\n"
         f"1️⃣ Нажмите кнопку 'Начать'\n"
-        f"2️⃣ При первом входе выберите одну из ролей:\n"
-        f"• PO/PM   • Лид компетенции   • Специалист   • Стажёр\n"
-        f"3️⃣ Далее выберите специализацию:\n"
+        f"2️⃣ Далее выберите специализацию:\n"
         f"• Аналитик   • Тестировщик   • Web-разработчик   • Java-разработчик   • Python-разработчик",
         reply_markup=markup
     )
@@ -1651,7 +1649,7 @@ async def handling_cached_requests(question_id, message, question, specializatio
     user_specialization = user_info[0] if user_info else specialization
     
     # Обрезаем ответ бота, чтобы избежать ошибок с длиной промпта
-    truncated_answer = (full_ans_for_context[:2000] + '...') if len(full_ans_for_context) > 2000 else full_ans_for_context
+    truncated_answer = (full_ans_for_context[:4000] + '...') if len(full_ans_for_context) > 4000 else full_ans_for_context
     
     # Запускаем генерацию подсказанных вопросов
     await generate_and_show_suggested_questions(chat_id, question, truncated_answer, "", user_specialization)
@@ -1837,7 +1835,7 @@ async def websocket_question_from_user(question, message, specialization, questi
                     button = [types.InlineKeyboardButton(text="В начало", callback_data="start")]
                 markup.add(*button)
             #mplusk1
-            truncated_answer = (answer_for_countinue_dialog[:2000] + '...') if len(answer_for_countinue_dialog) > 2000 else answer_for_countinue_dialog
+            truncated_answer = (answer_for_countinue_dialog[:4000] + '...') if len(answer_for_countinue_dialog) > 4000 else answer_for_countinue_dialog
 
             # Запускаем генерацию подсказанных вопросов для всех типов вопросов (включая ID=888)
             if show_suggested_questions:
@@ -2103,8 +2101,8 @@ def handle_full_history(call):
             history_text += f"{emoji} {formatted_time}: {display_message}\n\n"
         
         # Проверяем длину сообщения (Telegram ограничивает 4096 символов)
-        if len(history_text) > 4000:
-            history_text = history_text[:3900] + "\n\n... (история обрезана из-за ограничений Telegram)"
+        if len(history_text) > 8000:
+            history_text = history_text[:7900] + "\n\n... (история обрезана из-за ограничений длины)"
         
         # Кнопки навигации
         markup = types.InlineKeyboardMarkup(row_width=2)

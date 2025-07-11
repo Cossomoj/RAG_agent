@@ -265,7 +265,7 @@ async def handle_cached_request(question_id, question, user_id, specialization):
                 # Создаем payload для генерации связанных вопросов
                 suggestion_payload = {
                     'user_question': question,
-                    'bot_answer': full_cached_answer[:2000],  # Обрезаем как в боте
+                                                'bot_answer': full_cached_answer[:4000],  # Обрезаем как в боте
                     'specialization': specialization
                 }
                 
@@ -528,7 +528,7 @@ def ask_question():
                 if result.get('answer'):
                     suggestion_payload = {
                         'user_question': question,
-                        'bot_answer': result['answer'][:2000],
+                        'bot_answer': result['answer'][:4000],
                         'specialization': specialization
                     }
                     
@@ -639,11 +639,11 @@ def ask_library_question():
             suggested_questions = []
             if result.get('answer'):
                 # Создаем payload для генерации связанных вопросов
-                suggestion_payload = {
-                    'user_question': question,
-                    'bot_answer': result['answer'][:2000],  # Обрезаем как в боте
-                    'specialization': specialization
-                }
+                                    suggestion_payload = {
+                        'user_question': question,
+                        'bot_answer': result['answer'][:4000],  # Обрезаем как в боте
+                        'specialization': specialization
+                    }
                 
                 # Отправляем запрос на генерацию связанных вопросов
                 suggestion_loop = asyncio.new_event_loop()
