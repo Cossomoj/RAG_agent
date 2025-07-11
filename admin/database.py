@@ -138,7 +138,7 @@ class DatabaseOperations:
                     """, (user_dict['user_id'],))
                     user_dict['recent_messages'] = [
                         {
-                            'role': msg[0],
+                            'role': msg[0],  # Это поле role в Message_history (user/assistant), не Role пользователя
                             'message': msg[1],
                             'time': msg[2]
                         }
@@ -206,7 +206,7 @@ class DatabaseOperations:
                 """, (user_id,))
                 user_details['messages'] = [
                     {
-                        'role': msg[0],
+                        'role': msg[0],  # Это поле role в Message_history (user/assistant), не Role пользователя
                         'message': msg[1],
                         'time': msg[2]
                     }
@@ -314,15 +314,8 @@ class DatabaseOperations:
                 """)
                 specializations = [{'name': row[0], 'count': row[1]} for row in cursor.fetchall()]
                 
-                # Статистика по ролям
-                cursor.execute("""
-                    SELECT Role, COUNT(*) as count
-                    FROM Users 
-                    WHERE Role IS NOT NULL
-                    GROUP BY Role
-                    ORDER BY count DESC
-                """)
-                roles = [{'name': row[0], 'count': row[1]} for row in cursor.fetchall()]
+                # Статистика по ролям (убрана, так как поле Role удалено)
+                roles = []
                 
                 return {
                     'total_users': total_users,
@@ -421,9 +414,9 @@ class DatabaseOperations:
             return None
     
     def add_question(self, callback_data, question_text, question_id, category=None, 
-                    role=None, specialization=None, vector_store='auto', prompt_id=None, 
+                    specialization=None, vector_store='auto', prompt_id=None, 
                     is_active=True, order_position=None):
-        """Добавление нового вопроса"""
+        """Добавление нового вопроса (убран параметр role)"""
         try:
             with self.get_db() as conn:
                 cursor = conn.cursor()
@@ -436,11 +429,11 @@ class DatabaseOperations:
                 
                 cursor.execute("""
                     INSERT INTO Questions 
-                    (callback_data, question_text, question_id, category, role, 
+                    (callback_data, question_text, question_id, category, 
                      specialization, vector_store, prompt_id, is_active, order_position)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    callback_data, question_text, question_id, category, role,
+                    callback_data, question_text, question_id, category,
                     specialization, vector_store, prompt_id, is_active, order_position
                 ))
                 conn.commit()
@@ -461,7 +454,7 @@ class DatabaseOperations:
                 
                 for key, value in kwargs.items():
                     if key in ['callback_data', 'question_text', 'question_id', 'category', 
-                              'role', 'specialization', 'vector_store', 'prompt_id', 
+                              'specialization', 'vector_store', 'prompt_id', 
                               'is_active', 'order_position']:
                         set_parts.append(f"{key} = ?")
                         values.append(value)

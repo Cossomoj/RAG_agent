@@ -1,10 +1,13 @@
 FROM python:3.12-slim
 
-# Устанавливаем git, ssh, supervisor, nginx, openssl и certbot для SSL
-RUN apt-get update && apt-get install -y git openssh-client supervisor nginx openssl certbot python3-certbot-nginx cron && rm -rf /var/lib/apt/lists/*
+# Устанавливаем git, ssh, supervisor, nginx, openssl для SSL (certbot установим через pip)
+RUN apt-get update && apt-get install -y git openssh-client supervisor nginx openssl cron curl && rm -rf /var/lib/apt/lists/*
 
-# Создаем директорию для SSL сертификатов
-RUN mkdir -p /etc/nginx/ssl
+# Устанавливаем последнюю версию certbot через pip (избегаем баг с AttributeError)
+RUN pip install --upgrade certbot
+
+# Создаем директории для SSL сертификатов и webroot
+RUN mkdir -p /etc/nginx/ssl /var/www/html
 
 # Создаем временный самоподписанный SSL сертификат (будет заменен на Let's Encrypt)
 RUN openssl req -x509 -nodes -days 1 -newkey rsa:2048 \
@@ -61,18 +64,43 @@ RUN chmod +x /app/src/main_version/*.py
 RUN chmod +x /app/admin/*.py
 RUN chmod +x /app/webapp/api/*.py
 
-# Создаем скрипт для получения SSL сертификата
+# Создаем улучшенный скрипт для получения SSL сертификата
 RUN echo '#!/bin/bash\n\
 echo "🔐 Получение SSL сертификата от Let'\''s Encrypt..."\n\
 # Запускаем nginx в фоне для получения сертификата\n\
 nginx\n\
-sleep 5\n\
-# Получаем сертификат от Let'\''s Encrypt\n\
-certbot --nginx -d restocorp.ru --non-interactive --agree-tos --email admin@restocorp.ru --redirect --quiet\n\
-if [ $? -eq 0 ]; then\n\
-    echo "✅ SSL сертификат успешно получен!"\n\
+sleep 3\n\
+# Проверяем доступность домена\n\
+if curl -s --max-time 10 http://restocorp.ru/.well-known/acme-challenge/test >/dev/null 2>&1; then\n\
+    echo "✅ Домен доступен, пробуем получить сертификат..."\n\
+else\n\
+    echo "⚠️ Домен недоступен или есть проблемы с сетью"\n\
+fi\n\
+# Получаем сертификат от Let'\''s Encrypt используя webroot метод\n\
+certbot certonly --webroot \\\n\
+    --webroot-path=/var/www/html \\\n\
+    --email admin@restocorp.ru \\\n\
+    --agree-tos \\\n\
+    --no-eff-email \\\n\
+    --domains restocorp.ru \\\n\
+    --non-interactive \\\n\
+    --quiet\n\
+if [ $? -eq 0 ] && [ -f "/etc/letsencrypt/live/restocorp.ru/fullchain.pem" ]; then\n\
+    echo "✅ SSL сертификат успешно получен! Обновляем конфигурацию nginx..."\n\
+    # Обновляем пути к сертификатам в конфигурации nginx\n\
+    sed -i "s|ssl_certificate /etc/nginx/ssl/nginx.crt;|ssl_certificate /etc/letsencrypt/live/restocorp.ru/fullchain.pem;|g" /etc/nginx/sites-available/ragapp\n\
+    sed -i "s|ssl_certificate_key /etc/nginx/ssl/nginx.key;|ssl_certificate_key /etc/letsencrypt/live/restocorp.ru/privkey.pem;|g" /etc/nginx/sites-available/ragapp\n\
+    # Тестируем новую конфигурацию\n\
+    if nginx -t; then\n\
+        echo "✅ Конфигурация nginx обновлена успешно"\n\
+    else\n\
+        echo "❌ Ошибка в конфигурации nginx, возвращаем самоподписанные сертификаты"\n\
+        sed -i "s|ssl_certificate /etc/letsencrypt/live/restocorp.ru/fullchain.pem;|ssl_certificate /etc/nginx/ssl/nginx.crt;|g" /etc/nginx/sites-available/ragapp\n\
+        sed -i "s|ssl_certificate_key /etc/letsencrypt/live/restocorp.ru/privkey.pem;|ssl_certificate_key /etc/nginx/ssl/nginx.key;|g" /etc/nginx/sites-available/ragapp\n\
+    fi\n\
 else\n\
     echo "⚠️ Не удалось получить SSL сертификат, используем самоподписанный"\n\
+    echo "   Возможные причины: домен недоступен извне, проблемы с DNS, лимиты Let'\''s Encrypt"\n\
 fi\n\
 # Останавливаем nginx\n\
 nginx -s quit\n\
@@ -86,8 +114,8 @@ echo "🚀 Запуск RAG сервиса..."\n\
 # Запускаем supervisor\n\
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/services.conf' > /usr/local/bin/start.sh && chmod +x /usr/local/bin/start.sh
 
-# Настраиваем автообновление сертификата через cron
-RUN echo "0 12 * * * /usr/bin/certbot renew --quiet && supervisorctl restart nginx" > /etc/cron.d/certbot-renew
+# Настраиваем автообновление сертификата через cron (только если Let's Encrypt сертификат существует)
+RUN echo "0 12 * * * [ -f /etc/letsencrypt/live/restocorp.ru/fullchain.pem ] && /usr/bin/certbot renew --quiet && supervisorctl restart nginx" > /etc/cron.d/certbot-renew
 RUN chmod 0644 /etc/cron.d/certbot-renew
 RUN crontab /etc/cron.d/certbot-renew
 

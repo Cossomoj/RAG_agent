@@ -12,7 +12,6 @@ const AppState = {
     currentScreen: 'main-menu',
     user: null,
     profile: {
-        role: '',
         specialization: ''
     },
     history: [],
@@ -25,8 +24,7 @@ const AppState = {
     }
 };
 
-// Глобальные переменные для ролей и специализаций
-let roles = [];
+// Глобальные переменные для специализаций (роли удалены)
 let specializations = [];
 
 // Инициализация приложения
@@ -53,8 +51,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         console.log('📱 Инициализируем Telegram WebApp...');
         initTelegramWebApp();
         
-        console.log('📋 Загружаем роли и специализации...');
-        await loadRolesAndSpecializations();
+        console.log('📋 Загружаем специализации...');
+        await loadSpecializations();
         
         console.log('👤 Загружаем профиль пользователя...');
         await loadUserProfile();
@@ -806,7 +804,6 @@ async function useQuestionDirectly(index) {
                 question: question.text,
                 question_id: questionId,
                 user_id: userId,
-                role: AppState.profile.role,
                 specialization: AppState.profile.specialization
             })
         });
@@ -821,7 +818,6 @@ async function useQuestionDirectly(index) {
                 question: question.text,
                 answer: data.answer,
                 timestamp: new Date(),
-                role: AppState.profile.role,
                 specialization: AppState.profile.specialization,
                 cached: data.cached || false
             });
@@ -1169,36 +1165,22 @@ function createHistoryScreen() {
     }, 100);
 }
 
-// Обновление специализаций при выборе роли
-function updateSpecializations() {
-    const roleSelect = document.getElementById('role-select');
+// Инициализация специализаций (роли больше не используются)
+function initSpecializations() {
     const specializationSelect = document.getElementById('specialization-select');
     
-    if (!roleSelect || !specializationSelect) return;
-    
-    const role = roleSelect.value;
+    if (!specializationSelect) return;
     
     // Очищаем список специализаций
     specializationSelect.innerHTML = '<option value="">Выберите специализацию</option>';
     
-    // Для PO/PM специализация устанавливается автоматически
-    if (role === 'PO/PM') {
+    // Показываем все доступные специализации
+    specializations.forEach(spec => {
         const option = document.createElement('option');
-        option.value = 'PO/PM';
-        option.textContent = 'PO/PM';
-        option.selected = true;
+        option.value = spec.value;
+        option.textContent = spec.label;
         specializationSelect.appendChild(option);
-        specializationSelect.disabled = true;
-    } else {
-        // Для других ролей показываем все доступные специализации
-        specializationSelect.disabled = false;
-        specializations.forEach(spec => {
-            const option = document.createElement('option');
-            option.value = spec.value;
-            option.textContent = spec.label;
-            specializationSelect.appendChild(option);
-        });
-    }
+    });
     
     // Обновляем информацию профиля при изменении
     setTimeout(() => {
@@ -1206,67 +1188,39 @@ function updateSpecializations() {
     }, 100);
 }
 
-// Обновление информации профиля
+// Обновление информации профиля (убрана роль)
 function updateProfileInfo() {
     const profileName = document.getElementById('profile-name');
     const profileStatus = document.getElementById('profile-status');
     
     if (!profileName || !profileStatus) return;
     
-    const roleSelect = document.getElementById('role-select');
     const specializationSelect = document.getElementById('specialization-select');
     
-    if (roleSelect) AppState.profile.role = roleSelect.value;
     if (specializationSelect) AppState.profile.specialization = specializationSelect.value;
     
-    if (AppState.profile.role && AppState.profile.specialization) {
-        profileName.textContent = `${AppState.profile.role} • ${AppState.profile.specialization}`;
+    if (AppState.profile.specialization) {
+        profileName.textContent = `Специализация: ${AppState.profile.specialization}`;
         profileStatus.textContent = 'Профиль настроен';
     } else {
         profileName.textContent = 'Настройка профиля';
-        profileStatus.textContent = 'Заполните информацию о себе';
+        profileStatus.textContent = 'Выберите вашу специализацию';
     }
 }
 
-// Отображение профиля
+// Отображение профиля (убрана роль)
 function renderProfile() {
-    const roleSelect = document.getElementById('role-select');
     const specializationSelect = document.getElementById('specialization-select');
     
-    if (!roleSelect || !specializationSelect) return;
+    if (!specializationSelect) return;
     
-    // Заполняем список ролей
-    roleSelect.innerHTML = '<option value="">Выберите вашу роль</option>';
-    roles.forEach(role => {
-        const option = document.createElement('option');
-        option.value = role.value;
-        option.textContent = role.label;
-        roleSelect.appendChild(option);
-    });
+    // Инициализируем специализации
+    initSpecializations();
     
     // Устанавливаем значения из профиля
-    if (AppState.profile.role) {
-        roleSelect.value = AppState.profile.role;
-        updateSpecializations();
-        
-        if (AppState.profile.specialization) {
-            specializationSelect.value = AppState.profile.specialization;
-        }
+    if (AppState.profile.specialization) {
+        specializationSelect.value = AppState.profile.specialization;
     }
-    
-    // Добавляем обработчики изменений
-    roleSelect.addEventListener('change', async function() {
-        console.log('🔄 Изменение роли:', this.value);
-        AppState.profile.role = this.value;
-        updateSpecializations();
-        updateProfileInfo();
-        
-        // Автоматически сохраняем изменения
-        if (AppState.profile.role && AppState.profile.specialization) {
-            console.log('💾 Автосохранение профиля после изменения роли...');
-            await autoSaveProfile();
-        }
-    });
     
     specializationSelect.addEventListener('change', async function() {
         console.log('🔄 Изменение специализации:', this.value);
@@ -1274,7 +1228,7 @@ function renderProfile() {
         updateProfileInfo();
         
         // Автоматически сохраняем изменения и перезагружаем вопросы
-        if (AppState.profile.role && AppState.profile.specialization) {
+        if (AppState.profile.specialization) {
             console.log('💾 Автосохранение профиля после изменения специализации...');
             await autoSaveProfile();
             
@@ -1299,7 +1253,7 @@ async function autoSaveProfile() {
             return false;
         }
         
-        if (!AppState.profile.role || !AppState.profile.specialization) {
+        if (!AppState.profile.specialization) {
             console.warn('⚠️ Не удалось автосохранить: профиль неполный');
             return false;
         }
@@ -1330,26 +1284,24 @@ async function autoSaveProfile() {
     }
 }
 
-// Сохранение профиля
+// Сохранение профиля (убрана роль)
 async function saveProfile() {
     console.log('💾 Сохраняем профиль...');
     
-    const roleSelect = document.getElementById('role-select');
     const specializationSelect = document.getElementById('specialization-select');
     
-    if (!roleSelect || !specializationSelect) {
-        console.error('❌ Элементы select не найдены!');
+    if (!specializationSelect) {
+        console.error('❌ Элемент select для специализации не найден!');
         return;
     }
     
-    AppState.profile.role = roleSelect.value;
     AppState.profile.specialization = specializationSelect.value;
     
     console.log('📝 Данные профиля для сохранения:', AppState.profile);
     
-    if (!AppState.profile.role || !AppState.profile.specialization) {
-        console.warn('⚠️ Не все поля заполнены');
-        showAlert('Пожалуйста, заполните все поля профиля');
+    if (!AppState.profile.specialization) {
+        console.warn('⚠️ Специализация не выбрана');
+        showAlert('Пожалуйста, выберите вашу специализацию');
         return;
     }
     
@@ -1427,22 +1379,13 @@ function createProfileScreen() {
 
         <!-- Форма профиля -->
         <div class="profile-form">
-            <div class="form-section" style="margin-bottom: 24px;">
-                <h4 style="color: var(--tg-theme-text-color); margin-bottom: 8px;">Роль в команде</h4>
-                <div class="select-wrapper" style="position: relative;">
-                    <select id="role-select" onchange="updateSpecializations()" style="width: 100%; padding: 12px; border: 1px solid var(--tg-theme-section-separator-color); border-radius: 8px; background: var(--tg-theme-secondary-bg-color); color: var(--tg-theme-text-color); font-size: 16px; appearance: none;">
-                        <option value="">Выберите вашу роль</option>
-                    </select>
-                    <div class="select-icon" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--tg-theme-hint-color);">▼</div>
-                </div>
-                <p class="field-description" style="color: var(--tg-theme-hint-color); font-size: 12px; margin-top: 4px;">Выберите роль, которая лучше всего описывает вашу должность</p>
-            </div>
+
             
             <div class="form-section" style="margin-bottom: 24px;">
                 <h4 style="color: var(--tg-theme-text-color); margin-bottom: 8px;">Специализация</h4>
                 <div class="select-wrapper" style="position: relative;">
                     <select id="specialization-select" style="width: 100%; padding: 12px; border: 1px solid var(--tg-theme-section-separator-color); border-radius: 8px; background: var(--tg-theme-secondary-bg-color); color: var(--tg-theme-text-color); font-size: 16px; appearance: none;">
-                        <option value="">Сначала выберите роль</option>
+                        <option value="">Выберите специализацию</option>
                     </select>
                     <div class="select-icon" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--tg-theme-hint-color);">▼</div>
                 </div>
@@ -1566,7 +1509,7 @@ async function sendFeedback() {
             user_id: userId,
             user_name: cleanUserName,
             username: cleanUsername,
-            role: AppState.profile.role || 'Не указана',
+
             specialization: AppState.profile.specialization || 'Не указана',
             category: 'general'
         };
@@ -1883,7 +1826,6 @@ async function sendQuestion() {
         const requestPayload = {
             question: question,
             user_id: userId,
-            role: AppState.profile.role,
             specialization: AppState.profile.specialization,
             question_id: null  // Всегда null для свободного ввода
         };
@@ -1918,7 +1860,6 @@ async function sendQuestion() {
                 question: question,
                 answer: data.answer,
                 timestamp: new Date(),
-                role: AppState.profile.role,
                 specialization: AppState.profile.specialization
             });
             
@@ -2336,7 +2277,6 @@ async function generateSuggestedQuestions() {
                 type: 'generate_questions',
                 user_question: SuggestedQuestionsState.userQuestion,
                 bot_answer: SuggestedQuestionsState.botAnswer,
-                role: AppState.profile.role,
                 specialization: AppState.profile.specialization
             }));
         };
@@ -2373,7 +2313,6 @@ async function generateSuggestedQuestionsHTTP() {
             body: JSON.stringify({
                 user_question: SuggestedQuestionsState.userQuestion,
                 bot_answer: SuggestedQuestionsState.botAnswer,
-                role: AppState.profile.role,
                 specialization: AppState.profile.specialization
             })
         });
@@ -2495,7 +2434,7 @@ async function loadUserProfile() {
         
         if (!userId || userId === 'guest') {
             console.warn('⚠️ User ID не определен или является guest, используем пустой профиль');
-            AppState.profile = { role: '', specialization: '' };
+            AppState.profile = { specialization: '' };
             return;
         }
         
@@ -2515,7 +2454,7 @@ async function loadUserProfile() {
             console.log('📋 Финальное состояние AppState.profile:', AppState.profile);
             
             // Если профиль пустой, показываем предупреждение
-            if (!profile.role || !profile.specialization) {
+            if (!profile.specialization) {
                 console.warn('⚠️ Профиль пользователя не настроен в БД');
                 console.warn('📝 Рекомендуется пройти онбординг в Telegram боте или настроить профиль в мини-приложении');
             }
@@ -2528,7 +2467,7 @@ async function loadUserProfile() {
             });
             
             // Устанавливаем пустой профиль при ошибке
-            AppState.profile = { role: '', specialization: '' };
+            AppState.profile = { specialization: '' };
         }
     } catch (error) {
         console.error('❌ КРИТИЧЕСКАЯ ОШИБКА загрузки профиля:', error);
@@ -2539,40 +2478,31 @@ async function loadUserProfile() {
         });
         
         // Устанавливаем пустой профиль при ошибке
-        AppState.profile = { role: '', specialization: '' };
+        AppState.profile = { specialization: '' };
     }
 }
 
 // Загрузка ролей и специализаций
-async function loadRolesAndSpecializations() {
-    console.log('🔄 Загружаем роли и специализации...');
+async function loadSpecializations() {
+    console.log('🔄 Загружаем специализации...');
     console.log('📍 API_BASE_URL:', CONFIG.API_BASE_URL);
     
     try {
-        console.log('🌐 Отправляем запросы к API...');
-        const [rolesResponse, specsResponse] = await Promise.all([
-            fetch(`${CONFIG.API_BASE_URL}/roles`),
-            fetch(`${CONFIG.API_BASE_URL}/specializations`)
-        ]);
+        console.log('🌐 Отправляем запрос к API...');
+        const specsResponse = await fetch(`${CONFIG.API_BASE_URL}/specializations`);
         
-        console.log('📊 Статусы ответов:', {
-            roles: rolesResponse.status,
+        console.log('📊 Статус ответа:', {
             specializations: specsResponse.status
         });
         
-        if (rolesResponse.ok && specsResponse.ok) {
-            roles = await rolesResponse.json();
+        if (specsResponse.ok) {
             specializations = await specsResponse.json();
             
-            console.log('✅ Роли загружены:', roles);
             console.log('✅ Специализации загружены:', specializations);
         } else {
-            const rolesError = rolesResponse.ok ? null : await rolesResponse.text();
-            const specsError = specsResponse.ok ? null : await specsResponse.text();
+            const specsError = await specsResponse.text();
             
-            console.error('❌ Ошибки API:', {
-                rolesStatus: rolesResponse.status,
-                rolesError: rolesError,
+            console.error('❌ Ошибка API:', {
                 specsStatus: specsResponse.status,
                 specsError: specsError
             });
@@ -2580,7 +2510,7 @@ async function loadRolesAndSpecializations() {
             throw new Error('Ошибка загрузки данных');
         }
     } catch (error) {
-        console.error('❌ Ошибка загрузки ролей и специализаций:', error);
+        console.error('❌ Ошибка загрузки специализаций:', error);
         console.error('📋 Детали ошибки:', {
             message: error.message,
             stack: error.stack,
@@ -2588,13 +2518,6 @@ async function loadRolesAndSpecializations() {
         });
         
         // Fallback данные
-        roles = [
-            { "value": "PO/PM", "label": "PO/PM" },
-            { "value": "Лид компетенции", "label": "Лид компетенции" },
-            { "value": "Специалист", "label": "Специалист" },
-            { "value": "Стажер", "label": "Стажер" }
-        ];
-        
         specializations = [
             { "value": "Аналитик", "label": "Аналитик" },
             { "value": "Тестировщик", "label": "Тестировщик" },
@@ -2612,14 +2535,12 @@ async function loadQuestions() {
     console.log('👤 Текущий профиль:', AppState.profile);
     
     try {
-        const role = AppState.profile.role || '';
         const specialization = AppState.profile.specialization || '';
         
-        console.log('🎯 Параметры запроса:', { role, specialization });
+        console.log('🎯 Параметры запроса:', { specialization });
         
         // Загружаем вопросы
         const params = new URLSearchParams();
-        if (role) params.append('role', role);
         if (specialization) params.append('specialization', specialization);
         
         const questionsUrl = `${CONFIG.API_BASE_URL}/questions${params.toString() ? '?' + params.toString() : ''}`;

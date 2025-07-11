@@ -80,29 +80,35 @@ class QuestionsLoader:
         """Получает список вопросов по категории"""
         return self._categories_cache.get(category, [])
     
-    def get_questions_by_role(self, role: str, specialization: Optional[str] = None) -> List[Dict]:
-        """Получает вопросы, доступные для определенной роли"""
+    def get_questions_by_specialization(self, specialization: str) -> List[Dict]:
+        """Получает вопросы, доступные для определенной специализации (роль больше не используется)"""
         result = []
         
         for q in self._questions_cache.values():
-            # Проверяем, подходит ли вопрос для роли
-            if q['role'] is None or q['role'] == role:
-                # Проверяем специализацию, если она указана
-                if q['specialization'] is None or q['specialization'] == specialization:
-                    result.append(q)
+            # Проверяем только специализацию (роль больше не учитывается)
+            if q['specialization'] is None or q['specialization'] == specialization:
+                result.append(q)
         
         return sorted(result, key=lambda x: (x['order_position'] if x['order_position'] is not None else float('inf'), x['id']))
     
-    def get_categories_for_role(self, role: str) -> List[str]:
-        """Получает список категорий, доступных для роли"""
+    def get_questions_by_role(self, role: str, specialization: Optional[str] = None) -> List[Dict]:
+        """Получает вопросы, доступные для определенной роли (устаревший метод, использует только специализацию)"""
+        return self.get_questions_by_specialization(specialization or "")
+    
+    def get_categories_for_specialization(self, specialization: str) -> List[str]:
+        """Получает список категорий, доступных для специализации"""
         categories = set()
         
         for q in self._questions_cache.values():
-            if q['role'] is None or q['role'] == role:
+            if q['specialization'] is None or q['specialization'] == specialization:
                 if q['category']:
                     categories.add(q['category'])
         
         return sorted(list(categories))
+    
+    def get_categories_for_role(self, role: str) -> List[str]:
+        """Получает список категорий, доступных для роли (устаревший метод)"""
+        return []  # Возвращаем пустой список, так как роль больше не используется
     
     def get_vector_store_for_question(self, callback_data: str, user_specialization: str) -> str:
         """Определяет векторное хранилище для вопроса"""
@@ -136,9 +142,9 @@ class QuestionsLoader:
         self.load_all_questions()
     
     def add_question(self, callback_data: str, question_text: str, question_id: int,
-                    category: str = None, role: str = None, specialization: str = None,
+                    category: str = None, specialization: str = None,
                     vector_store: str = 'auto', prompt_id: int = None) -> bool:
-        """Добавляет новый вопрос в БД"""
+        """Добавляет новый вопрос в БД (параметр role удален)"""
         try:
             conn = self.get_db_connection()
             cursor = conn.cursor()
@@ -149,11 +155,11 @@ class QuestionsLoader:
             
             cursor.execute("""
                 INSERT INTO Questions 
-                (callback_data, question_text, question_id, category, role, 
+                (callback_data, question_text, question_id, category, 
                  specialization, vector_store, prompt_id, order_position)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                callback_data, question_text, question_id, category, role,
+                callback_data, question_text, question_id, category,
                 specialization, vector_store, prompt_id, max_pos + 10
             ))
             
@@ -180,7 +186,7 @@ class QuestionsLoader:
             values = []
             
             for key, value in kwargs.items():
-                if key in ['question_text', 'question_id', 'category', 'role', 
+                if key in ['question_text', 'question_id', 'category', 
                           'specialization', 'vector_store', 'prompt_id', 
                           'is_active', 'order_position']:
                     set_parts.append(f"{key} = ?")

@@ -31,6 +31,47 @@ WEBSOCKET_URL = os.environ.get('WEBSOCKET_URL', 'ws://127.0.0.1:8000/ws')
 cache_dict = {}
 cache_by_specialization = {}
 
+def get_cache_type_for_question(question_id):
+    """
+    Определяет тип кеша для вопроса на основе поля specialization в БД.
+    
+    Returns:
+        'by_specialization' - если specialization IS NULL (универсальный вопрос)
+        'general' - если specialization IS NOT NULL (специфичный вопрос)
+        'no_cache' - если вопрос не найден или не должен кешироваться
+    """
+    try:
+        # Специальные ID которые не кешируются
+        if question_id in [777, 888]:
+            return 'no_cache'
+        
+        conn = get_db_connection()
+        if not conn:
+            return 'general'
+            
+        cursor = conn.cursor()
+        cursor.execute("SELECT specialization FROM Questions WHERE question_id = ?", (question_id,))
+        result = cursor.fetchone()
+        conn.close()
+        
+        if not result:
+            # Если вопрос не найден в БД, используем общий кеш
+            logger.warning(f"Question ID {question_id} не найден в БД, используем общий кеш")
+            return 'general'
+        
+        specialization = result["specialization"] if hasattr(result, "specialization") else result[0]
+        
+        if specialization is None:
+            # Универсальный вопрос - кешируем по специализации пользователя
+            return 'by_specialization'
+        else:
+            # Специфичный вопрос - используем общий кеш
+            return 'general'
+            
+    except Exception as e:
+        logger.error(f"Ошибка при определении типа кеша для question_id {question_id}: {e}")
+        return 'general'  # Fallback к общему кешу
+
 # Функции для работы с базой данных Questions
 def get_db_connection():
     """Получение подключения к базе данных"""
@@ -66,8 +107,8 @@ def get_db_connection():
         logger.error(f"Error details: {str(e)}")
         return None
 
-def get_questions_from_db(role=None, specialization=None, category=None, is_active=True):
-    """Получение вопросов из базы данных с фильтрацией"""
+def get_questions_from_db(specialization=None, category=None, is_active=True):
+    """Получение вопросов из базы данных с фильтрацией (убран параметр role)"""
     try:
         conn = get_db_connection()
         if not conn:
@@ -86,10 +127,6 @@ def get_questions_from_db(role=None, specialization=None, category=None, is_acti
         params = [is_active]
         
         # Добавляем фильтры
-        if role:
-            query += " AND (q.role IS NULL OR q.role = ?)"
-            params.append(role)
-            
         if specialization:
             query += " AND (q.specialization IS NULL OR q.specialization = ?)"
             params.append(specialization)
@@ -160,14 +197,7 @@ def get_question_categories():
         logger.error(f"Ошибка при получении категорий: {e}")
         return []
 
-# Роли и специализации (синхронизированы с телеграм ботом)
-ROLES = [
-    {"value": "PO/PM", "label": "PO/PM"},
-    {"value": "Лид компетенции", "label": "Лид компетенции"},
-    {"value": "Специалист", "label": "Специалист"},
-    {"value": "Стажер", "label": "Стажер"}
-]
-
+# Специализации (роли удалены)
 SPECIALIZATIONS = [
     {"value": "Аналитик", "label": "Аналитик"},
     {"value": "Тестировщик", "label": "Тестировщик"},
@@ -200,17 +230,22 @@ def clear_webapp_cache():
         logger.error(f"Ошибка при очистке кеша веб-приложения: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
-async def handle_cached_request(question_id, question, user_id, role, specialization):
-    """Обработка кешированного запроса (аналогично Telegram боту)"""
+async def handle_cached_request(question_id, question, user_id, specialization):
+    """Обработка кешированного запроса на основе типа вопроса из БД"""
     try:
-        if question_id in cache_dict:
+        cache_type = get_cache_type_for_question(question_id)
+        
+        if cache_type == 'general' and question_id in cache_dict:
             # Используем общий кеш
             cached_answer_parts = cache_dict[question_id]
             logger.info(f"Найден ответ в общем кеше для question_id={question_id}")
-        elif question_id in cache_by_specialization and specialization in cache_by_specialization[question_id]:
-            # Используем кеш по специализации
-            cached_answer_parts = cache_by_specialization[question_id][specialization]
-            logger.info(f"Найден ответ в кеше по специализации для question_id={question_id}, specialization={specialization}")
+        elif cache_type == 'by_specialization' and question_id in cache_by_specialization:
+            if specialization in cache_by_specialization[question_id]:
+                # Используем кеш по специализации
+                cached_answer_parts = cache_by_specialization[question_id][specialization]
+                logger.info(f"Найден ответ в кеше по специализации для question_id={question_id}, specialization={specialization}")
+            else:
+                return None
         else:
             return None
         
@@ -221,7 +256,7 @@ async def handle_cached_request(question_id, question, user_id, role, specializa
             full_cached_answer = str(cached_answer_parts)
         
         # Сохраняем в историю
-        save_to_history(user_id, question, full_cached_answer, role, specialization)
+        save_to_history(user_id, question, full_cached_answer, specialization)
         
         # Генерируем предложенные вопросы для кешированных ответов
         try:
@@ -231,7 +266,6 @@ async def handle_cached_request(question_id, question, user_id, role, specializa
                 suggestion_payload = {
                     'user_question': question,
                     'bot_answer': full_cached_answer[:2000],  # Обрезаем как в боте
-                    'role': role,
                     'specialization': specialization
                 }
                 
@@ -305,8 +339,8 @@ def get_dialog_context(user_id, max_messages=12):
         logger.error(f"Ошибка получения контекста диалога: {e}")
         return "[]"
 
-async def send_websocket_question(question, user_id, role="", specialization="", question_id=None, vector_store='auto'):
-    """Отправка вопроса через WebSocket к RAG-агенту"""
+async def send_websocket_question(question, user_id, specialization="", question_id=None, vector_store='auto'):
+    """Отправка вопроса через WebSocket к RAG-агенту (убран параметр role)"""
     try:
         async with websockets.connect(WEBSOCKET_URL) as websocket:
             # Определяем question_id на основе текста вопроса, если не передан
@@ -319,12 +353,12 @@ async def send_websocket_question(question, user_id, role="", specialization="",
                 context = get_dialog_context(user_id, max_messages=12)
                 logger.info(f"Контекст диалога для пользователя {user_id}: {context[:100]}...")
             
-            logger.info(f"Отправляем вопрос: '{question}' с question_id: {question_id}, role: '{role}', specialization: '{specialization}'")
+            logger.info(f"Отправляем вопрос: '{question}' с question_id: {question_id}, specialization: '{specialization}'")
             logger.info(f"WebSocket URL: {WEBSOCKET_URL}")
             
             # Отправляем данные в том же порядке, что ожидает RAG-сервис (КАК В ТЕЛЕГРАМ БОТЕ)
             await websocket.send(question)          # 1. question
-            await websocket.send(role)              # 2. role  
+            await websocket.send("")                # 2. role (пустая строка, так как роль не используется)
             await websocket.send(specialization)    # 3. specialization
             await websocket.send(str(question_id))  # 4. question_id
             await websocket.send(context)           # 5. context
@@ -396,21 +430,22 @@ async def send_websocket_question(question, user_id, role="", specialization="",
             found_keywords = [kw for kw in keywords if kw.lower() in answer_for_continue_dialog.lower()]
             logger.info(f"Найденные ключевые слова: {found_keywords}")
             
-            # Кешируем ответы только для предопределенных вопросов (как в телеграм боте)
-            if question_id and int(question_id) not in [777, 888]:
+            # Кешируем ответы на основе типа вопроса из БД
+            if question_id:
                 question_id_int = int(question_id)
+                cache_type = get_cache_type_for_question(question_id_int)
                 
-                # Определяем тип кеширования точно как в телеграм боте
-                if question_id_int not in [1, 2, 3, 4, 5, 18, 19, 20]:
+                if cache_type == 'general':
                     # Общий кеш - используем массив частей ответа
                     cache_dict[question_id_int] = answer_for_cache
                     logger.info(f"Ответ закеширован в общем кеше: question_id={question_id_int}")
-                else:
+                elif cache_type == 'by_specialization':
                     # Кешируем по специализации - используем массив частей ответа
                     if question_id_int not in cache_by_specialization:
                         cache_by_specialization[question_id_int] = {}
                     cache_by_specialization[question_id_int][specialization] = answer_for_cache
                     logger.info(f"Ответ закеширован по специализации: question_id={question_id_int}, specialization={specialization}")
+                # cache_type == 'no_cache' - не кешируем (777, 888)
             
             return {
                 "answer": answer_for_continue_dialog.strip(),
@@ -430,7 +465,6 @@ def ask_question():
         data = request.get_json()
         question = data.get('question', '').strip()
         user_id = data.get('user_id', 'guest')
-        role = data.get('role', '')
         specialization = data.get('specialization', '')
         question_id = data.get('question_id', None)
         vector_store = data.get('vector_store', 'auto')
@@ -473,19 +507,19 @@ def ask_question():
             asyncio.set_event_loop(loop)
             
             cached_result = loop.run_until_complete(
-                handle_cached_request(question_id_int, question, user_id, role, specialization)
+                handle_cached_request(question_id_int, question, user_id, specialization)
             )
             
             if cached_result:
                 logger.info(f"Возвращаем кешированный ответ для question_id={question_id_int}")
                 loop.close()
-                save_to_history(user_id, question, cached_result.get('answer', ''), role, specialization)
+                save_to_history(user_id, question, cached_result.get('answer', ''), specialization)
                 return jsonify(cached_result)
             
             # Если в кеше нет, отправляем запрос к RAG сервису
             logger.info(f"Ручной ввод: отправляем в RAG с question_id={question_id} и vector_store={vector_store}")
             result = loop.run_until_complete(
-                send_websocket_question(question, user_id, role, specialization, question_id, vector_store)
+                send_websocket_question(question, user_id, specialization, question_id, vector_store)
             )
             loop.close()
             
@@ -495,7 +529,6 @@ def ask_question():
                     suggestion_payload = {
                         'user_question': question,
                         'bot_answer': result['answer'][:2000],
-                        'role': role,
                         'specialization': specialization
                     }
                     
@@ -520,12 +553,12 @@ def ask_question():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             result = loop.run_until_complete(
-                send_websocket_question(question, user_id, role, specialization, "888", vector_store)  # 888 для свободного ввода
+                send_websocket_question(question, user_id, specialization, "888", vector_store)  # 888 для свободного ввода
             )
             loop.close()
         
         # Сохраняем в историю
-        save_to_history(user_id, question, result.get('answer', ''), role, specialization)
+        save_to_history(user_id, question, result.get('answer', ''), specialization)
         
         return jsonify(result)
         
@@ -540,7 +573,6 @@ def ask_library_question():
         data = request.get_json()
         question = data.get('question', '').strip()
         user_id = data.get('user_id', 'guest')
-        role = data.get('role', '')
         specialization = data.get('specialization', '')
         question_id = data.get('question_id', None)
         vector_store = data.get('vector_store', 'auto')  # Добавляем поддержку vector_store
@@ -584,7 +616,7 @@ def ask_library_question():
         asyncio.set_event_loop(loop)
         
         cached_result = loop.run_until_complete(
-            handle_cached_request(question_id_int, question, user_id, role, specialization)
+            handle_cached_request(question_id_int, question, user_id, specialization)
         )
         
         if cached_result:
@@ -595,12 +627,12 @@ def ask_library_question():
         # Если в кеше нет, отправляем запрос к RAG сервису
         logger.info(f"Кеш не найден, отправляем запрос к RAG сервису для question_id={question_id_int} с vector_store={vector_store}")
         result = loop.run_until_complete(
-            send_websocket_question(question, user_id, role, specialization, question_id, vector_store)
+            send_websocket_question(question, user_id, specialization, question_id, vector_store)
         )
         loop.close()
         
         # Сохраняем в историю
-        save_to_history(user_id, question, result.get('answer', ''), role, specialization)
+        save_to_history(user_id, question, result.get('answer', ''), specialization)
         
         # Генерируем предложенные вопросы для библиотечных вопросов (аналогично Telegram боту)
         try:
@@ -610,7 +642,6 @@ def ask_library_question():
                 suggestion_payload = {
                     'user_question': question,
                     'bot_answer': result['answer'][:2000],  # Обрезаем как в боте
-                    'role': role,
                     'specialization': specialization
                 }
                 
@@ -644,15 +675,14 @@ def ask_library_question():
 @app.route('/api/questions', methods=['GET'])
 def get_questions():
     """Получение списка вопросов из базы данных с фильтрацией"""
-    role = request.args.get('role')
     specialization = request.args.get('specialization')
     category = request.args.get('category')
     
-    logger.info(f"Запрос вопросов для роли: {role}, специализации: {specialization}, категории: {category}")
+    logger.info(f"Запрос вопросов для специализации: {specialization}, категории: {category}")
     
     try:
         # Получаем вопросы из базы данных
-        questions = get_questions_from_db(role=role, specialization=specialization, category=category)
+        questions = get_questions_from_db(specialization=specialization, category=category)
         
         # Преобразуем в формат, ожидаемый фронтендом
         formatted_questions = []
@@ -662,7 +692,6 @@ def get_questions():
                 'text': q['question_text'],
                 'title': q['question_text'][:50] + '...' if len(q['question_text']) > 50 else q['question_text'],
                 'category': q['category'] or 'general',
-                'role': q['role'],
                 'specialization': q['specialization'],
                 'vector_store': q['vector_store'],
                 'prompt_id': q['prompt_id'],  # ИСПРАВЛЕНО: Добавляем prompt_id для фронтенда
@@ -676,40 +705,9 @@ def get_questions():
         
     except Exception as e:
         logger.error(f"Ошибка при получении вопросов: {e}")
-        # Fallback к статичным вопросам если БД недоступна
-        try:
-            role = role or ''
-            specialization = specialization or ''
-            
-            if not role:
-                # Возвращаем все вопросы для всех ролей
-                all_questions = []
-                for role_name, questions_data in QUESTIONS_BY_ROLE.items():
-                    if isinstance(questions_data, dict) and role_name in ["Лид компетенции", "Специалист"]:
-                        if specialization in questions_data:
-                            all_questions.extend(questions_data[specialization])
-                        else:
-                            all_questions.extend(questions_data["default"])
-                    elif isinstance(questions_data, list):
-                        all_questions.extend(questions_data)
-                return jsonify(all_questions)
-            
-            # Получаем вопросы для конкретной роли
-            if role in QUESTIONS_BY_ROLE:
-                questions_data = QUESTIONS_BY_ROLE[role]
-                
-                if isinstance(questions_data, dict) and role in ["Лид компетенции", "Специалист"]:
-                    if specialization in questions_data:
-                        return jsonify(questions_data[specialization])
-                    else:
-                        return jsonify(questions_data["default"])
-                
-                return jsonify(questions_data)
-            
-            return jsonify([])
-        except Exception as fallback_error:
-            logger.error(f"Ошибка fallback получения вопросов: {fallback_error}")
-            return jsonify({"error": "Ошибка получения вопросов"}), 500
+        # Fallback к пустому списку если БД недоступна
+        logger.warning("БД недоступна, возвращаем пустой список вопросов")
+        return jsonify([])
 
 @app.route('/api/questions/categories', methods=['GET'])
 def get_categories():
@@ -721,14 +719,7 @@ def get_categories():
         logger.error(f"Ошибка при получении категорий: {e}")
         return jsonify([])
 
-@app.route('/api/roles', methods=['GET'])
-def get_roles():
-    """Получение списка ролей"""
-    try:
-        return jsonify(ROLES)
-    except Exception as e:
-        logger.error(f"Ошибка получения ролей: {e}")
-        return jsonify({"error": "Ошибка получения ролей"}), 500
+# API endpoint для ролей удален, так как роли больше не используются
 
 @app.route('/api/specializations', methods=['GET'])
 def get_specializations():
@@ -741,7 +732,7 @@ def get_specializations():
 
 @app.route('/api/profile/<user_id>', methods=['GET'])
 def get_profile(user_id):
-    """Получение профиля пользователя"""
+    """Получение профиля пользователя (убрана роль)"""
     try:
         conn = get_db_connection()
         if not conn:
@@ -749,7 +740,7 @@ def get_profile(user_id):
             
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT Role, Specialization FROM Users WHERE user_id = ?",
+            "SELECT Specialization FROM Users WHERE user_id = ?",
             (user_id,)
         )
         
@@ -758,12 +749,10 @@ def get_profile(user_id):
         
         if user:
             return jsonify({
-                "role": user["Role"] or "",
                 "specialization": user["Specialization"] or ""
             })
         else:
             return jsonify({
-                "role": "",
                 "specialization": ""
             })
             
@@ -773,10 +762,9 @@ def get_profile(user_id):
 
 @app.route('/api/profile/<user_id>', methods=['POST'])
 def save_profile(user_id):
-    """Сохранение профиля пользователя"""
+    """Сохранение профиля пользователя (убрана роль)"""
     try:
         data = request.get_json()
-        role = data.get('role', '')
         specialization = data.get('specialization', '')
         
         conn = get_db_connection()
@@ -792,14 +780,14 @@ def save_profile(user_id):
         if user_exists:
             # Обновляем существующего пользователя
             cursor.execute(
-                "UPDATE Users SET Role = ?, Specialization = ? WHERE user_id = ?",
-                (role, specialization, user_id)
+                "UPDATE Users SET Specialization = ? WHERE user_id = ?",
+                (specialization, user_id)
             )
         else:
             # Создаем нового пользователя
             cursor.execute(
-                "INSERT INTO Users (user_id, Role, Specialization, is_onboarding) VALUES (?, ?, ?, ?)",
-                (user_id, role, specialization, True)
+                "INSERT INTO Users (user_id, Specialization, is_onboarding) VALUES (?, ?, ?)",
+                (user_id, specialization, True)
             )
         
         conn.commit()
@@ -885,7 +873,7 @@ def clear_history(user_id):
         logger.error(f"Ошибка очистки истории: {e}")
         return jsonify({"error": "Ошибка очистки истории"}), 500
 
-def save_to_history(user_id, question, answer, role="", specialization=""):
+def save_to_history(user_id, question, answer, specialization=""):
     """Сохранение диалога в историю"""
     try:
         conn = get_db_connection()
@@ -942,10 +930,9 @@ def suggest_questions():
         
         user_question = data.get('user_question', '')
         bot_answer = data.get('bot_answer', '')
-        role = data.get('role', 'Пользователь')
         specialization = data.get('specialization', 'Не указана')
         
-        logger.info(f"HTTP suggest_questions: получен запрос для роли {role}, специализации {specialization}")
+        logger.info(f"HTTP suggest_questions: получен запрос для специализации {specialization}")
         
         # Попробуем подключиться к RAG сервису через WebSocket
         
@@ -956,7 +943,6 @@ def suggest_questions():
                     payload = {
                         "user_question": user_question,
                         "bot_answer": bot_answer,
-                        "role": role,
                         "specialization": specialization
                     }
                     
@@ -1032,7 +1018,6 @@ def send_feedback():
         user_id = data.get('user_id', 'guest')
         user_name = data.get('user_name', 'Пользователь')
         username = data.get('username', 'не указан')
-        role = data.get('role', 'Не указана')
         specialization = data.get('specialization', 'Не указана')
         
         # Детальная проверка каждого поля
@@ -1041,7 +1026,6 @@ def send_feedback():
         logger.info(f"  - user_id: '{user_id}' (тип: {type(user_id)})")
         logger.info(f"  - user_name: '{user_name}' (тип: {type(user_name)})")
         logger.info(f"  - username: '{username}' (тип: {type(username)})")
-        logger.info(f"  - role: '{role}' (тип: {type(role)})")
         logger.info(f"  - specialization: '{specialization}' (тип: {type(specialization)})")
         
         # Проверяем на проблемные символы
@@ -1068,7 +1052,6 @@ def send_feedback():
             # Экранируем специальные символы Markdown
             safe_user_name = str(user_name).replace('*', '\\*').replace('_', '\\_').replace('`', '\\`')
             safe_username = str(username).replace('*', '\\*').replace('_', '\\_').replace('`', '\\`')
-            safe_role = str(role).replace('*', '\\*').replace('_', '\\_').replace('`', '\\`')
             safe_specialization = str(specialization).replace('*', '\\*').replace('_', '\\_').replace('`', '\\`')
             safe_feedback = str(feedback).replace('*', '\\*').replace('_', '\\_').replace('`', '\\`')
             
@@ -1077,7 +1060,6 @@ def send_feedback():
                 f"👤 *Имя:* {safe_user_name}\n"
                 f"📍 *Username:* @{safe_username}\n"
                 f"🆔 *User ID:* {user_id}\n"
-                f"👔 *Роль:* {safe_role}\n"
                 f"🎯 *Специализация:* {safe_specialization}\n"
                 f"📝 *Отзыв:* {safe_feedback}"
             )

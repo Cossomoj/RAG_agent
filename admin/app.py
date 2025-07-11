@@ -75,8 +75,11 @@ def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        # Здесь должна быть проверка учетных данных
-        if username == "admin_tg_bot" and password == "135beton531":  # Замените на реальную проверку
+        # ИСПРАВЛЕНО: Используем переменные окружения для безопасности
+        admin_username = os.environ.get('ADMIN_USERNAME', 'admin_tg_bot')
+        admin_password = os.environ.get('ADMIN_PASSWORD', '135beton531')
+        
+        if username == admin_username and password == admin_password:
             session['logged_in'] = True
             return redirect(url_for('index'))
         else:
@@ -413,13 +416,12 @@ def add_question():
         if not data.get('callback_data') or not data.get('question_text') or not data.get('question_id'):
             return jsonify({'success': False, 'error': 'Заполните все обязательные поля'})
         
-        # Добавляем вопрос
+        # Добавляем вопрос (убран параметр role)
         db.add_question(
             callback_data=data['callback_data'],
             question_text=data['question_text'],
             question_id=int(data['question_id']),
             category=data.get('category'),
-            role=data.get('role'),
             specialization=data.get('specialization'),
             vector_store=data.get('vector_store', 'auto'),
             prompt_id=data.get('prompt_id') if data.get('prompt_id') else None,
@@ -449,10 +451,10 @@ def update_question(callback_data):
     try:
         data = request.get_json()
         
-        # Фильтруем только допустимые поля для обновления
+        # Фильтруем только допустимые поля для обновления (убрано поле role)
         update_data = {}
         allowed_fields = ['callback_data', 'question_text', 'question_id', 'category', 
-                         'role', 'specialization', 'vector_store', 'prompt_id', 
+                         'specialization', 'vector_store', 'prompt_id', 
                          'is_active', 'order_position']
         
         for field in allowed_fields:
