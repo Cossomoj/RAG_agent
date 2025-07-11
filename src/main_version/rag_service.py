@@ -5,6 +5,7 @@ import asyncio
 import sqlite3
 import json
 import re
+import logging
 from fastapi import FastAPI, WebSocket
 import websockets
 from langchain_community.document_loaders import TextLoader
@@ -25,6 +26,10 @@ import uvicorn
 DATABASE_URL = "/app/src/main_version/AI_agent.db"
 
 load_dotenv()
+
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 # Инициализация FastAPI
@@ -236,6 +241,34 @@ def get_best_retriever_for_specialization(specialization, vector_store_preferenc
     else:
         print(f"Не удалось определить ретривер для специализации '{specialization}'. Используется ансамбль из 5 баз.")
         return ensemble_retriever
+
+
+def is_it_related_question(question):
+    """
+    Определяет, связан ли вопрос с IT или корпоративными процессами
+    """
+    question_lower = question.lower()
+    
+    # IT-термины и корпоративные понятия
+    it_keywords = [
+        'программирование', 'код', 'разработка', 'тестирование', 'баг', 'фича',
+        'аналитик', 'требования', 'scrum', 'agile', 'проект', 'менеджер',
+        'python', 'java', 'javascript', 'frontend', 'backend', 'api', 'база данных',
+        'sql', 'git', 'devops', 'ci/cd', 'docker', 'kubernetes', 'микросервис',
+        'алгоритм', 'структура данных', 'архитектура', 'паттерн', 'framework',
+        'библиотека', 'модуль', 'класс', 'функция', 'переменная', 'метод',
+        'интерфейс', 'наследование', 'полиморфизм', 'инкапсуляция',
+        'компетенции', 'матрица', 'навыки', 'карьера', 'развитие', 'обратная связь',
+        'процесс', 'методология', 'планирование', 'ретроспектива', 'спринт',
+        'pm', 'po', 'product owner', 'project manager', 'team lead', 'senior', 'junior'
+    ]
+    
+    # Проверяем наличие IT-ключевых слов
+    for keyword in it_keywords:
+        if keyword in question_lower:
+            return True
+    
+    return False
 
 # Функция-обертка для обратной совместимости
 def get_best_retriever_for_role_spec(role, specialization, vector_store_preference='auto'):
@@ -620,9 +653,17 @@ async def websocket_endpoint(websocket: WebSocket):
 
     # Создаем retrieval_chain для вопросов, которые его используют
     retrieval_chain = None
-    should_use_rag = True # Всегда используем RAG с новой логикой
+    should_use_rag = True  # По умолчанию используем RAG
     
-    # --- 1. Всегда используем улучшенный RAG ---
+    # ИСПРАВЛЕНО: Для свободного ввода проверяем, связан ли вопрос с IT
+    if question_id == 888:  # Свободный ввод
+        if not is_it_related_question(question):
+            print(f"Вопрос '{question}' не связан с IT. Используем прямой ответ без RAG.")
+            should_use_rag = False
+        else:
+            print(f"Вопрос '{question}' связан с IT. Используем RAG с корпоративными документами.")
+    
+    # --- 1. Используем RAG только для IT-вопросов или библиотечных вопросов ---
     if should_use_rag:
         print(f"RAG-search для question_id={question_id}")
         retrieval_chain = await create_enhanced_retrieval_chain(
@@ -643,9 +684,34 @@ async def websocket_endpoint(websocket: WebSocket):
             if chunk and chunk.get("answer"):
                 await websocket.send_text(chunk["answer"])
     else:
-        # --- 2. Fallback ------------
-        print("[WARN] should_use_rag==False – fallback stub")
-        await websocket.send_text("К сожалению, сейчас сервис недоступен.")
+        # --- 2. Прямой ответ GigaChat без RAG для общих вопросов ---
+        print(f"Прямой ответ GigaChat для общего вопроса: {question}")
+        
+        # Используем базовый промпт для общих вопросов
+        general_prompt = f"""Ты дружелюбный AI-ассистент. Ответь на вопрос пользователя полно и информативно.
+
+Вопрос пользователя: {question}
+
+Дай развернутый и полезный ответ на этот вопрос."""
+
+        # Добавляем контекст диалога если есть
+        if question_id == 888 and context and context != "[]":
+            general_prompt += f"\n\nКонтекст предыдущих сообщений:\n{context}"
+
+        llm = GigaChat(
+            credentials=api_key,
+            model='GigaChat-2',
+            verify_ssl_certs=False,
+            profanity_check=False
+        )
+        
+        try:
+            # Получаем прямой ответ от GigaChat
+            response = await llm.ainvoke(general_prompt)
+            await websocket.send_text(response.content)
+        except Exception as e:
+            print(f"Ошибка при получении ответа от GigaChat: {e}")
+            await websocket.send_text("Извините, произошла ошибка при обработке вашего вопроса.")
 
     await websocket.close()
 
