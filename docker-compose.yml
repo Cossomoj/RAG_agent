@@ -5,6 +5,7 @@ services:
     volumes:
       - /home/user1/sqlite_data_rag/AI_agent.db:/app/src/main_version/AI_agent.db
       - /home/user1/docs:/app/src/main_version/docs
+      - /home/user1/ssl_certs:/etc/nginx/ssl
 
     ports:
       - "8088:8002"  # Админка

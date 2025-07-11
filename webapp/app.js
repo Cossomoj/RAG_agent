@@ -501,7 +501,7 @@ function createCard(content) {
 }
 
 // Навигация между экранами
-async function showScreen(screenId) {
+async function showScreen(screenId, options = {}) {
     // Скрываем все экраны
     document.querySelectorAll('.screen').forEach(screen => {
         screen.classList.remove('active');
@@ -516,8 +516,8 @@ async function showScreen(screenId) {
         // Обновляем состояние кнопок Telegram
         updateTelegramButtons(screenId);
         
-        // Загружаем данные для экрана
-        await loadScreenData(screenId);
+        // Загружаем данные для экрана с опциями
+        await loadScreenData(screenId, options);
     }
 }
 
@@ -542,10 +542,10 @@ function goBack() {
 }
 
 // Загрузка данных для экрана
-async function loadScreenData(screenId) {
+async function loadScreenData(screenId, options = {}) {
     switch (screenId) {
         case 'ask-question':
-            createQuestionScreen();
+            createQuestionScreen(options);
             // Загружаем историю для отображения предыдущих вопросов при необходимости
             await loadHistory();
             break;
@@ -576,7 +576,7 @@ function loadScreenContent(screenId) {
 }
 
 // Создание экрана вопросов
-function createQuestionScreen() {
+function createQuestionScreen(options = {}) {
     const header = document.getElementById('question-header');
     const formContainer = document.getElementById('question-form-container');
     
@@ -586,37 +586,48 @@ function createQuestionScreen() {
     header.innerHTML = '';
     header.appendChild(createScreenHeader('Задать вопрос'));
     
-    // ИСПРАВЛЕНО: Очищаем предыдущий вопрос и ответ при открытии экрана
-    clearPreviousQuestionAndAnswer();
+    // ИСПРАВЛЕНО: Очищаем предыдущий вопрос и ответ только если не установлен флаг preserveContent
+    console.log('🔧 createQuestionScreen() options:', options);
+    if (!options.preserveContent) {
+        console.log('🧹 Очищаем контент (preserveContent=false)');
+        clearPreviousQuestionAndAnswer();
+    } else {
+        console.log('✅ Сохраняем контент (preserveContent=true)');
+    }
     
-    // Форма
-    formContainer.innerHTML = '';
-    
-    const form = document.createElement('div');
-    form.className = 'question-form';
-    
-    const label = document.createElement('label');
-    label.textContent = 'Ваш вопрос:';
-    label.style.cssText = `
-        color: var(--tg-theme-text-color);
-        font-weight: 500;
-        margin-bottom: 8px;
-        display: block;
-    `;
-    
-    const textarea = createTextarea('Опишите вашу ситуацию или задайте вопрос...');
-    textarea.id = 'question-input';
-    // ИСПРАВЛЕНО: Очищаем поле ввода
-    textarea.value = '';
-    
-    const sendButton = createButton('Отправить', 'primary', sendQuestion);
-    sendButton.id = 'send-question';
-    
-    form.appendChild(label);
-    form.appendChild(textarea);
-    form.appendChild(sendButton);
-    
-    formContainer.appendChild(form);
+    // Форма - создаем только если нет флага preserveContent или форма не существует
+    if (!options.preserveContent || !formContainer.querySelector('.question-form')) {
+        console.log('📝 Создаем форму заново');
+        formContainer.innerHTML = '';
+        
+        const form = document.createElement('div');
+        form.className = 'question-form';
+        
+        const label = document.createElement('label');
+        label.textContent = 'Ваш вопрос:';
+        label.style.cssText = `
+            color: var(--tg-theme-text-color);
+            font-weight: 500;
+            margin-bottom: 8px;
+            display: block;
+        `;
+        
+        const textarea = createTextarea('Опишите вашу ситуацию или задайте вопрос...');
+        textarea.id = 'question-input';
+        // ИСПРАВЛЕНО: Очищаем поле ввода
+        textarea.value = '';
+        
+        const sendButton = createButton('Отправить', 'primary', sendQuestion);
+        sendButton.id = 'send-question';
+        
+        form.appendChild(label);
+        form.appendChild(textarea);
+        form.appendChild(sendButton);
+        
+        formContainer.appendChild(form);
+    } else {
+        console.log('✅ Форма сохранена (preserveContent=true)');
+    }
 }
 
 // Функция для очистки предыдущего вопроса и ответа
@@ -779,14 +790,22 @@ async function useQuestionDirectly(index) {
         return;
     }
     
-    // Показываем заданный вопрос
-    displayAskedQuestion(question.text);
-    
     // Сохраняем вопрос для генерации связанных вопросов
     SuggestedQuestionsState.userQuestion = question.text;
     
     // Показываем полноэкранный лоадер
     showLoader();
+    
+    // ИСПРАВЛЕНО: Сначала переходим на экран, затем отображаем ответ
+    console.log('🔄 Переходим на экран ask-question');
+    await showScreen('ask-question');
+    
+    // Небольшая задержка для гарантии того, что DOM обновился
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Показываем заданный вопрос (теперь элементы видны)
+    console.log('📝 Показываем заданный вопрос');
+    displayAskedQuestion(question.text);
     
     try {
         const userId = getUserId();
@@ -827,9 +846,6 @@ async function useQuestionDirectly(index) {
                 await loadHistory();
                 console.log('✅ История обновлена из БД');
             }, 500);
-            
-            // Переходим к экрану с ответом
-            showScreen('ask-question');
             
             // Предыдущие вопросы будут показаны в displayAnswer
         } else {
@@ -2071,9 +2087,23 @@ function convertMarkdownToHtml(text) {
 
 // Отображение ответа
 async function displayAnswer(userQuestion, botAnswer) {
+    console.log('🎯 displayAnswer() вызвана с вопросом:', userQuestion.substring(0, 100) + '...');
+    console.log('🎯 displayAnswer() вызвана с ответом:', botAnswer.substring(0, 100) + '...');
+    
     const answerContainer = document.getElementById('answer-container');
     const answerContent = document.getElementById('answer-content');
-    if (!answerContainer || !answerContent) return;
+    
+    console.log('🔍 Элементы DOM:', {
+        answerContainer: !!answerContainer,
+        answerContent: !!answerContent,
+        answerContainerHidden: answerContainer ? answerContainer.classList.contains('hidden') : 'N/A',
+        answerContentContent: answerContent ? answerContent.innerHTML.length : 'N/A'
+    });
+    
+    if (!answerContainer || !answerContent) {
+        console.error('❌ Не найдены элементы для отображения ответа!');
+        return;
+    }
     
     // Сохраняем данные для генерации связанных вопросов
     SuggestedQuestionsState.userQuestion = userQuestion;
@@ -2108,6 +2138,12 @@ async function displayAnswer(userQuestion, botAnswer) {
     answerContent.appendChild(answerCard);
     answerContainer.classList.remove('hidden');
     
+    console.log('✅ Ответ добавлен в DOM:', {
+        answerContainerHidden: answerContainer.classList.contains('hidden'),
+        answerContentLength: answerContent.innerHTML.length,
+        answerVisible: answerContainer.offsetHeight > 0
+    });
+    
     // Прокрутка к самому верху страницы сразу после вывода ответа
     window.scrollTo({ top: 0, behavior: 'smooth' });
     
@@ -2118,6 +2154,17 @@ async function displayAnswer(userQuestion, botAnswer) {
     setTimeout(async () => {
         await displayPreviousQuestions();
     }, 100);
+    
+    console.log('🎯 displayAnswer() завершена');
+    
+    // Финальная проверка через небольшую задержку
+    setTimeout(() => {
+        console.log('🔍 Финальная проверка элементов:', {
+            answerContainerHidden: answerContainer.classList.contains('hidden'),
+            answerContentLength: answerContent.innerHTML.length,
+            answerVisible: answerContainer.offsetHeight > 0
+        });
+    }, 200);
 }
 
 // Функция копирования ответа в буфер обмена

@@ -159,7 +159,7 @@ def create_retrieval_chain_from_folder(role, specialization, question_id, embedd
 
     llm = GigaChat(
         credentials=api_key,
-        model='GigaChat-2-Max',
+        model='GigaChat-2',
         verify_ssl_certs=False,
         profanity_check=False
     )
@@ -249,7 +249,7 @@ async def generate_semantic_search_queries(question, role, specialization):
     # Создаем LLM для генерации альтернативных запросов
     llm = GigaChat(
         credentials=api_key,
-        model='GigaChat-2-Max',
+        model='GigaChat-2',
         verify_ssl_certs=False,
         profanity_check=False
     )
@@ -357,7 +357,7 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
     # Создание LLM
     llm = GigaChat(
         credentials=api_key,
-        model='GigaChat-2-Max',
+        model='GigaChat-2',
         verify_ssl_certs=False,
         profanity_check=False
     )
@@ -440,7 +440,7 @@ async def create_enhanced_retrieval_chain_for_suggestions(role, specialization, 
     # Создание LLM
     llm = GigaChat(
         credentials=api_key,
-        model='GigaChat-2-Max',
+        model='GigaChat-2',
         verify_ssl_certs=False,
         profanity_check=False
     )
@@ -557,7 +557,7 @@ async def websocket_suggest_endpoint(websocket: WebSocket):
 
         llm = GigaChat(
             credentials=api_key,
-            model='GigaChat-2-Max',
+            model='GigaChat-2',
             verify_ssl_certs=False,
             profanity_check=False
         )

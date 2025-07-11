@@ -571,10 +571,7 @@ def handle_start(call):
     # Создаем клавиатуру с кнопками
     markup = types.InlineKeyboardMarkup(row_width=1)
     roles = [
-        types.InlineKeyboardButton(text="Задать вопрос", callback_data="menu_qr"),
-        types.InlineKeyboardButton(text="🚀 Мини-приложение", web_app=types.WebAppInfo(url="https://restocorp.ru")),
-        types.InlineKeyboardButton(text="Личный кабинет", callback_data="personal_account"),
-        types.InlineKeyboardButton(text="GigaMentor", callback_data="giga_mentor")
+        types.InlineKeyboardButton(text="🚀 Мини-приложение", web_app=types.WebAppInfo(url="https://restocorp.ru"))
     ]
     markup.add(*roles)
     
