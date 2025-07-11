@@ -24,8 +24,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Конфигурация
-DATABASE_URL = '/home/user1/sqlite_data_rag/AI_agent.db'
-WEBSOCKET_URL = 'ws://213.171.25.85:8000/ws'
+DATABASE_URL = os.environ.get('DATABASE_URL', '/app/src/main_version/AI_agent.db')
+WEBSOCKET_URL = os.environ.get('WEBSOCKET_URL', 'ws://127.0.0.1:8000/ws')
 
 # Кеш для ответов (аналогично Telegram боту)
 cache_dict = {}
@@ -35,11 +35,35 @@ cache_by_specialization = {}
 def get_db_connection():
     """Получение подключения к базе данных"""
     try:
+        # Детальное логирование для диагностики
+        logger.info(f"=== DATABASE CONNECTION DEBUG ===")
+        logger.info(f"DATABASE_URL from env: {repr(os.environ.get('DATABASE_URL'))}")
+        logger.info(f"DATABASE_URL used: {repr(DATABASE_URL)}")
+        logger.info(f"Current working directory: {os.getcwd()}")
+        logger.info(f"DB file exists: {os.path.exists(DATABASE_URL)}")
+        if os.path.exists(DATABASE_URL):
+            logger.info(f"DB file stats: {os.stat(DATABASE_URL)}")
+            logger.info(f"DB file permissions: {oct(os.stat(DATABASE_URL).st_mode)}")
+            logger.info(f"DB file readable: {os.access(DATABASE_URL, os.R_OK)}")
+            logger.info(f"DB file writable: {os.access(DATABASE_URL, os.W_OK)}")
+        logger.info(f"Current process UID: {os.getuid()}")
+        logger.info(f"Current process GID: {os.getgid()}")
+        logger.info(f"=== ATTEMPTING SQLITE CONNECTION ===")
+        
         conn = sqlite3.connect(DATABASE_URL)
         conn.row_factory = sqlite3.Row
+        logger.info(f"=== DATABASE CONNECTION SUCCESS ===")
         return conn
     except sqlite3.Error as e:
-        logger.error(f"Ошибка подключения к БД: {e}")
+        logger.error(f"=== DATABASE CONNECTION FAILED ===")
+        logger.error(f"SQLite Error type: {type(e).__name__}")
+        logger.error(f"SQLite Error details: {str(e)}")
+        logger.error(f"SQLite Error args: {e.args}")
+        return None
+    except Exception as e:
+        logger.error(f"=== UNEXPECTED ERROR IN DB CONNECTION ===")
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error(f"Error details: {str(e)}")
         return None
 
 def get_questions_from_db(role=None, specialization=None, category=None, is_active=True):

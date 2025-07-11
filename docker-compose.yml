@@ -1,0 +1,34 @@
+services:
+  rag_service2:
+    container_name: rag_service2
+    working_dir: /app
+    volumes:
+      - /home/user1/sqlite_data_rag/AI_agent.db:/app/src/main_version/AI_agent.db
+      - /home/user1/docs:/app/src/main_version/docs
+
+    ports:
+      - "8088:8002"  # Админка
+      - "8001:8001"  # FastAPI
+      - "8000:8000"  # WebSocket
+      - "8007:8007"  # Дополнительные сервисы
+      - "5000:5000"  # Flask API
+      - "80:80"      # HTTP (редирект на HTTPS)
+      - "443:443"    # HTTPS для Telegram Mini App
+
+    environment:
+      - GIGACHAT_API_KEY=${GIGACHAT_API_KEY}
+      - TELEGRAM_API_KEY=${TELEGRAM_API_KEY}
+      - FEEDBACK_CHAT_ID=${FEEDBACK_CHAT_ID}
+      - FEEDBACK_BOT_TOKEN=${FEEDBACK_BOT_TOKEN}
+      - ALERT_BOT_TOKEN=${ALERT_BOT_TOKEN}
+    build:
+      context: ./rag_service2
+      dockerfile: Dockerfile
+    restart: always
+    networks:
+      - app_network
+
+  
+networks:
+  app_network:
+    driver: bridge
