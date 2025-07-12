@@ -1243,24 +1243,67 @@ function renderProfile() {
     if (reminderToggle) {
         reminderToggle.checked = AppState.profile.reminder_enabled !== false; // По умолчанию true
         
-        // Добавляем обработчик изменения
-        reminderToggle.addEventListener('change', async (e) => {
+        // Удаляем существующий обработчик (если есть) и добавляем новый
+        if (reminderToggle._reminderHandler) {
+            reminderToggle.removeEventListener('change', reminderToggle._reminderHandler);
+        }
+        
+        // Создаем обработчик изменения
+        reminderToggle._reminderHandler = async (e) => {
             try {
+                // Предотвращаем множественные клики
+                if (reminderToggle.disabled) return;
+                
                 const reminderEnabled = e.target.checked;
-                await updateReminderSettings(reminderEnabled);
-                AppState.profile.reminder_enabled = reminderEnabled;
+                
+                // Показываем индикатор загрузки
+                reminderToggle.disabled = true;
+                const toggle = reminderToggle.closest('.toggle-switch');
+                if (toggle) {
+                    toggle.style.opacity = '0.7';
+                    toggle.style.pointerEvents = 'none';
+                }
+                
+                // Добавляем индикатор загрузки к ползунку
+                const slider = reminderToggle.parentElement.querySelector('.slider');
+                const sliderThumb = reminderToggle.parentElement.querySelector('.slider-thumb');
+                if (slider) slider.style.filter = 'brightness(0.8)';
+                if (sliderThumb) sliderThumb.style.boxShadow = '0 2px 8px rgba(0,0,0,0.4)';
+                
+                const result = await updateReminderSettings(reminderEnabled);
+                // Состояние уже обновлено в updateReminderSettings()
+                console.log('💾 Настройки напоминаний сохранены:', result);
                 
                 // Показываем уведомление
                 showAlert(reminderEnabled ? 
                     'Регулярные сообщения включены ✅' : 
                     'Регулярные сообщения отключены ❌');
+                    
             } catch (error) {
                 console.error('Ошибка при изменении настроек напоминаний:', error);
                 // Возвращаем состояние переключателя обратно
                 e.target.checked = !e.target.checked;
+                AppState.profile.reminder_enabled = !reminderEnabled;
                 showAlert('Ошибка при сохранении настроек');
+            } finally {
+                // Убираем индикатор загрузки
+                reminderToggle.disabled = false;
+                const toggle = reminderToggle.closest('.toggle-switch');
+                if (toggle) {
+                    toggle.style.opacity = '1';
+                    toggle.style.pointerEvents = 'auto';
+                }
+                
+                // Убираем индикацию загрузки с ползунка
+                const slider = reminderToggle.parentElement.querySelector('.slider');
+                const sliderThumb = reminderToggle.parentElement.querySelector('.slider-thumb');
+                if (slider) slider.style.filter = '';
+                if (sliderThumb) sliderThumb.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
             }
-        });
+        };
+        
+        // Добавляем обработчик
+        reminderToggle.addEventListener('change', reminderToggle._reminderHandler);
     }
     
     specializationSelect.addEventListener('change', async function() {
@@ -1455,8 +1498,8 @@ function createProfileScreen() {
                     <div class="toggle-switch" style="flex-shrink: 0;">
                         <label class="switch" style="position: relative; display: inline-block; width: 50px; height: 24px;">
                             <input type="checkbox" id="reminder-toggle" style="opacity: 0; width: 0; height: 0;">
-                            <span class="slider" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--tg-theme-section-separator-color); border-radius: 24px; transition: .4s; box-shadow: inset 0 0 0 1px var(--tg-theme-section-separator-color);"></span>
-                            <span class="slider-thumb" style="position: absolute; content: ''; height: 20px; width: 20px; left: 2px; top: 2px; background-color: white; border-radius: 50%; transition: .4s; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></span>
+                            <span class="slider" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--tg-theme-section-separator-color); border-radius: 24px; transition: all 0.3s ease; box-shadow: inset 0 0 0 1px var(--tg-theme-section-separator-color);"></span>
+                            <span class="slider-thumb" style="position: absolute; content: ''; height: 20px; width: 20px; left: 2px; top: 2px; background-color: white; border-radius: 50%; transition: all 0.3s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.2);"></span>
                         </label>
                     </div>
                 </div>
@@ -1471,10 +1514,26 @@ function createProfileScreen() {
         </div>
     `;
     
-    // Рендерим профиль после создания элементов
-    setTimeout(() => {
-        renderProfile();
-    }, 100);
+    // Добавляем CSS стили для переключателя
+    const style = document.createElement('style');
+    style.textContent = `
+        #reminder-toggle:checked + .slider {
+            background-color: var(--tg-theme-button-color) !important;
+        }
+        #reminder-toggle:checked ~ .slider-thumb {
+            transform: translateX(26px);
+        }
+        .slider:hover {
+            box-shadow: inset 0 0 0 1px var(--tg-theme-section-separator-color), 0 0 0 2px rgba(0,0,0,0.1);
+        }
+        .toggle-switch:hover .slider {
+            filter: brightness(1.05);
+        }
+    `;
+    document.head.appendChild(style);
+    
+    // Рендерим профиль сразу после создания элементов
+    renderProfile();
 }
 
 // Инициализация счетчика символов
@@ -3059,6 +3118,8 @@ async function updateReminderSettings(reminderEnabled) {
             throw new Error('User ID не определен');
         }
         
+        console.log(`🔄 Обновляем настройки напоминаний для пользователя ${userId}:`, reminderEnabled);
+        
         const response = await fetch(`${CONFIG.API_BASE_URL}/profile/${userId}/reminder`, {
             method: 'POST',
             headers: {
@@ -3071,12 +3132,19 @@ async function updateReminderSettings(reminderEnabled) {
         
         if (response.ok) {
             const data = await response.json();
+            console.log('✅ Настройки напоминаний успешно обновлены:', data);
+            
+            // Синхронизируем состояние приложения с ответом сервера
+            AppState.profile.reminder_enabled = data.reminder_enabled;
+            
             return data;
         } else {
             const errorText = await response.text();
+            console.error(`❌ Ошибка API при обновлении настроек: ${response.status} - ${errorText}`);
             throw new Error(`Ошибка API: ${response.status} - ${errorText}`);
         }
     } catch (error) {
+        console.error('❌ Исключение при обновлении настроек напоминаний:', error);
         throw error;
     }
 }
