@@ -21,7 +21,9 @@ const AppState = {
     questionFilters: {
         search: '',
         category: ''
-    }
+    },
+    isNewUser: false, // Флаг для нового пользователя
+    onboardingStep: 0 // Текущий шаг онбординга
 };
 
 // Глобальные переменные для специализаций (роли удалены)
@@ -65,6 +67,12 @@ document.addEventListener('DOMContentLoaded', async function() {
         
         console.log('🏠 Создаем главное меню...');
         createMainMenu();
+        
+        // Проверяем, нужно ли показать онбординг
+        if (AppState.isNewUser) {
+            console.log('👋 Новый пользователь, показываем онбординг...');
+            showOnboarding();
+        }
         
         console.log('✅ Инициализация завершена успешно!');
         console.log('📊 Финальное состояние AppState:', {
@@ -2604,6 +2612,7 @@ async function loadUserProfile() {
         if (!userId || userId === 'guest') {
             console.warn('⚠️ User ID не определен или является guest, используем пустой профиль');
             AppState.profile = { specialization: '' };
+            AppState.isNewUser = true;
             return;
         }
         
@@ -2628,6 +2637,7 @@ async function loadUserProfile() {
             if (!profile.specialization) {
                 console.warn('⚠️ Профиль пользователя не настроен в БД');
                 console.warn('📝 Рекомендуется пройти онбординг в Telegram боте или настроить профиль в мини-приложении');
+                AppState.isNewUser = true;
             }
         } else {
             const errorText = await response.text();
@@ -3152,4 +3162,242 @@ async function updateReminderSettings(reminderEnabled) {
         console.error('❌ Исключение при обновлении настроек напоминаний:', error);
         throw error;
     }
+}
+
+// === СИСТЕМА ОНБОРДИНГА ===
+
+// Данные для онбординга
+const onboardingData = [
+    {
+        step: 1,
+        title: "Добро пожаловать!",
+        subtitle: "в RAG Ментор",
+        description: "Ваш персональный помощник для профессионального развития",
+        icon: "👋",
+        buttonText: "Начать знакомство"
+    },
+    {
+        step: 2,
+        title: "Умный помощник",
+        subtitle: "для IT-специалистов",
+        description: "Получайте ответы на вопросы по вашей специализации, изучайте лучшие практики и развивайте навыки",
+        icon: "🤖",
+        buttonText: "Понятно"
+    },
+    {
+        step: 3,
+        title: "Персонализация",
+        subtitle: "под вашу роль",
+        description: "Выберите вашу специализацию, чтобы получать наиболее релевантные ответы и рекомендации",
+        icon: "🎯",
+        buttonText: "Выбрать специализацию"
+    }
+];
+
+// Основная функция показа онбординга
+function showOnboarding() {
+    console.log('🎬 Показываем онбординг...');
+    AppState.onboardingStep = 1;
+    AppState.currentScreen = 'onboarding';
+    createOnboardingScreen();
+}
+
+// Создание экрана онбординга
+function createOnboardingScreen() {
+    const container = document.getElementById('app-container');
+    if (!container) return;
+    
+    const currentStep = onboardingData[AppState.onboardingStep - 1];
+    
+    container.innerHTML = `
+        <div class="screen active" id="onboarding-screen">
+            <div class="onboarding-container">
+                <div class="onboarding-progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: ${(AppState.onboardingStep / onboardingData.length) * 100}%"></div>
+                    </div>
+                    <div class="progress-text">${AppState.onboardingStep} из ${onboardingData.length}</div>
+                </div>
+                
+                <div class="onboarding-content">
+                    <div class="onboarding-icon">${currentStep.icon}</div>
+                    <h1 class="onboarding-title">${currentStep.title}</h1>
+                    <p class="onboarding-subtitle">${currentStep.subtitle}</p>
+                    <p class="onboarding-description">${currentStep.description}</p>
+                </div>
+                
+                <div class="onboarding-actions">
+                    <button class="onboarding-button" id="onboarding-next">
+                        ${currentStep.buttonText}
+                    </button>
+                    ${AppState.onboardingStep > 1 ? '<button class="onboarding-button-secondary" id="onboarding-skip">Пропустить</button>' : ''}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Обработчики событий
+    const nextButton = document.getElementById('onboarding-next');
+    const skipButton = document.getElementById('onboarding-skip');
+    
+    if (nextButton) {
+        nextButton.addEventListener('click', handleOnboardingNext);
+    }
+    
+    if (skipButton) {
+        skipButton.addEventListener('click', skipOnboarding);
+    }
+}
+
+// Переход к следующему шагу онбординга
+function handleOnboardingNext() {
+    if (AppState.onboardingStep < onboardingData.length) {
+        AppState.onboardingStep++;
+        createOnboardingScreen();
+    } else {
+        // Последний шаг - переход к выбору специализации
+        showSpecializationSelection();
+    }
+}
+
+// Пропуск онбординга
+function skipOnboarding() {
+    AppState.isNewUser = false;
+    AppState.onboardingStep = 0;
+    AppState.currentScreen = 'main-menu';
+    createMainMenu();
+}
+
+// Показ экрана выбора специализации
+function showSpecializationSelection() {
+    const container = document.getElementById('app-container');
+    if (!container) return;
+    
+    const specializationOptions = specializations.map(spec => `
+        <div class="specialization-option" data-value="${spec.value}">
+            <div class="specialization-icon">${getSpecializationIcon(spec.value)}</div>
+            <div class="specialization-name">${spec.label}</div>
+        </div>
+    `).join('');
+    
+    container.innerHTML = `
+        <div class="screen active" id="specialization-screen">
+            <div class="specialization-container">
+                <div class="specialization-header">
+                    <h1>Выберите специализацию</h1>
+                    <p>Это поможет персонализировать ответы под ваши потребности</p>
+                </div>
+                
+                <div class="specialization-grid">
+                    ${specializationOptions}
+                </div>
+                
+                <div class="specialization-actions">
+                    <button class="specialization-button" id="specialization-continue" disabled>
+                        Продолжить
+                    </button>
+                    <button class="specialization-button-secondary" id="specialization-later">
+                        Выбрать позже
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Обработчики событий
+    const options = document.querySelectorAll('.specialization-option');
+    const continueButton = document.getElementById('specialization-continue');
+    const laterButton = document.getElementById('specialization-later');
+    
+    let selectedSpecialization = null;
+    
+    options.forEach(option => {
+        option.addEventListener('click', () => {
+            // Убираем выделение с других опций
+            options.forEach(opt => opt.classList.remove('selected'));
+            
+            // Выделяем выбранную опцию
+            option.classList.add('selected');
+            selectedSpecialization = option.dataset.value;
+            
+            // Активируем кнопку продолжения
+            continueButton.disabled = false;
+        });
+    });
+    
+    if (continueButton) {
+        continueButton.addEventListener('click', async () => {
+            if (selectedSpecialization) {
+                await saveSelectedSpecialization(selectedSpecialization);
+                completeOnboarding();
+            }
+        });
+    }
+    
+    if (laterButton) {
+        laterButton.addEventListener('click', () => {
+            completeOnboarding();
+        });
+    }
+}
+
+// Получение иконки для специализации
+function getSpecializationIcon(specialization) {
+    const icons = {
+        'Аналитик': '📊',
+        'Тестировщик': '🧪',
+        'WEB': '🌐',
+        'Java': '☕',
+        'Python': '🐍'
+    };
+    return icons[specialization] || '💼';
+}
+
+// Сохранение выбранной специализации
+async function saveSelectedSpecialization(specialization) {
+    try {
+        AppState.profile.specialization = specialization;
+        
+        // Сохраняем в базе данных
+        const userId = getUserId();
+        if (userId && userId !== 'guest') {
+            const response = await fetch(`${CONFIG.API_BASE_URL}/profile/${userId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    specialization: specialization
+                })
+            });
+            
+            if (response.ok) {
+                console.log('✅ Специализация сохранена в профиле');
+            } else {
+                console.error('❌ Ошибка сохранения специализации:', response.status);
+            }
+        }
+        
+        // Перезагружаем вопросы для новой специализации
+        await loadQuestions();
+        
+    } catch (error) {
+        console.error('❌ Ошибка при сохранении специализации:', error);
+    }
+}
+
+// Завершение онбординга
+function completeOnboarding() {
+    console.log('✅ Онбординг завершен');
+    AppState.isNewUser = false;
+    AppState.onboardingStep = 0;
+    AppState.currentScreen = 'main-menu';
+    
+    // Показываем главное меню
+    createMainMenu();
+    
+    // Показываем приветственное сообщение
+    setTimeout(() => {
+        showAlert('🎉 Добро пожаловать в RAG Ментор! Теперь вы можете задавать вопросы и получать персонализированные ответы.');
+    }, 500);
 }

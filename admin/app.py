@@ -263,7 +263,42 @@ def statistics():
 def system():
     # Получаем текущие настройки расписания
     schedule = db.get_reminder_schedule()
-    return render_template('system.html', schedule=schedule)
+    # Получаем текущее время сервера
+    current_time = datetime.now()
+    return render_template('system.html', schedule=schedule, current_time=current_time)
+
+@app.route('/system/server-time', methods=['GET'])
+@login_required
+def get_server_time():
+    """Получение текущего времени сервера"""
+    try:
+        now = datetime.now()
+        
+        # Словари для перевода на русский язык
+        months = {
+            1: 'января', 2: 'февраля', 3: 'марта', 4: 'апреля',
+            5: 'мая', 6: 'июня', 7: 'июля', 8: 'августа',
+            9: 'сентября', 10: 'октября', 11: 'ноября', 12: 'декабря'
+        }
+        
+        weekdays = {
+            0: 'понедельник', 1: 'вторник', 2: 'среда', 3: 'четверг',
+            4: 'пятница', 5: 'суббота', 6: 'воскресенье'
+        }
+        
+        # Форматируем дату на русском языке
+        weekday = weekdays[now.weekday()]
+        month = months[now.month]
+        date_str = f"{weekday}, {now.day} {month} {now.year}"
+        
+        return jsonify({
+            'success': True,
+            'time': now.strftime('%H:%M:%S'),
+            'date': date_str,
+            'full_datetime': now.isoformat()
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/system/reminder-schedule', methods=['GET'])
 @login_required
@@ -284,7 +319,8 @@ def update_reminder_schedule():
         
         day = data.get('day')
         time = data.get('time')
-        timezone = data.get('timezone', 'Europe/Moscow')
+        # Используем фиксированный часовой пояс для сервера
+        timezone = 'Europe/Moscow'
         
         if day is None or not time:
             return jsonify({'success': False, 'error': 'Не указаны обязательные параметры (день и время)'}), 400

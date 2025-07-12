@@ -84,17 +84,16 @@
                     </div>
                     
                     <div class="col-md-4">
-                        <label for="scheduleTimezone" class="form-label">Часовой пояс</label>
-                        <select class="form-select" id="scheduleTimezone" required>
-                            <option value="Europe/Moscow" {% if schedule.timezone == 'Europe/Moscow' %}selected{% endif %}>Москва (UTC+3)</option>
-                            <option value="Europe/Kaliningrad" {% if schedule.timezone == 'Europe/Kaliningrad' %}selected{% endif %}>Калининград (UTC+2)</option>
-                            <option value="Asia/Yekaterinburg" {% if schedule.timezone == 'Asia/Yekaterinburg' %}selected{% endif %}>Екатеринбург (UTC+5)</option>
-                            <option value="Asia/Novosibirsk" {% if schedule.timezone == 'Asia/Novosibirsk' %}selected{% endif %}>Новосибирск (UTC+7)</option>
-                            <option value="Asia/Irkutsk" {% if schedule.timezone == 'Asia/Irkutsk' %}selected{% endif %}>Иркутск (UTC+8)</option>
-                            <option value="Asia/Yakutsk" {% if schedule.timezone == 'Asia/Yakutsk' %}selected{% endif %}>Якутск (UTC+9)</option>
-                            <option value="Asia/Vladivostok" {% if schedule.timezone == 'Asia/Vladivostok' %}selected{% endif %}>Владивосток (UTC+10)</option>
-                            <option value="Asia/Kamchatka" {% if schedule.timezone == 'Asia/Kamchatka' %}selected{% endif %}>Камчатка (UTC+12)</option>
-                        </select>
+                        <label class="form-label">Время на сервере</label>
+                        <div class="alert alert-info mb-0">
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-clock me-2"></i>
+                                <div>
+                                    <div id="serverTime" class="fw-bold fs-5"></div>
+                                    <small id="serverDate" class="text-muted"></small>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     
                     <div class="col-12">
@@ -106,7 +105,7 @@
                                 Текущие настройки: 
                                 <strong>
                                     {% set days = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'] %}
-                                    {{ days[schedule.day] }}, {{ schedule.time }} ({{ schedule.timezone }})
+                                    {{ days[schedule.day] }}, {{ schedule.time }}
                                 </strong>
                             </small>
                         </div>
@@ -194,16 +193,36 @@ function sendMessage() {
     }
 }
 
+// Функция для обновления времени сервера
+function updateServerTime() {
+    fetch('/system/server-time')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('serverTime').textContent = data.time;
+                document.getElementById('serverDate').textContent = data.date;
+            } else {
+                console.error('Ошибка получения времени сервера:', data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Ошибка запроса времени сервера:', error);
+        });
+}
+
+// Обновляем время каждую секунду
+setInterval(updateServerTime, 1000);
+updateServerTime(); // Обновляем сразу при загрузке страницы
+
 // Обработка формы настройки расписания
 document.getElementById('scheduleForm').addEventListener('submit', function(e) {
     e.preventDefault();
     
     const day = document.getElementById('scheduleDay').value;
     const time = document.getElementById('scheduleTime').value;
-    const timezone = document.getElementById('scheduleTimezone').value;
     const resultDiv = document.getElementById('schedule-result');
     
-    if (!day || !time || !timezone) {
+    if (!day || !time) {
         resultDiv.innerHTML = '<div class="alert alert-danger">Пожалуйста, заполните все поля</div>';
         return;
     }
@@ -217,8 +236,7 @@ document.getElementById('scheduleForm').addEventListener('submit', function(e) {
         },
         body: JSON.stringify({
             day: parseInt(day),
-            time: time,
-            timezone: timezone
+            time: time
         })
     })
     .then(response => response.json())
@@ -228,7 +246,7 @@ document.getElementById('scheduleForm').addEventListener('submit', function(e) {
             
             // Обновляем отображение текущих настроек
             const days = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
-            const currentSettingsText = `${days[data.schedule.day]}, ${data.schedule.time} (${data.schedule.timezone})`;
+            const currentSettingsText = `${days[data.schedule.day]}, ${data.schedule.time}`;
             document.querySelector('.text-muted strong').textContent = currentSettingsText;
         } else {
             resultDiv.innerHTML = '<div class="alert alert-danger">Ошибка: ' + data.error + '</div>';
