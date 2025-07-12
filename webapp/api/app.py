@@ -786,9 +786,9 @@ def save_profile(user_id):
         
         # Обновляем или создаем запись пользователя
         cursor.execute("""
-            INSERT OR REPLACE INTO Users (user_id, Specialization, reminder, updated_at)
-            VALUES (?, ?, ?, ?)
-        """, (user_id, specialization, reminder_enabled, datetime.now()))
+            INSERT OR REPLACE INTO Users (user_id, Specialization, reminder, create_time, is_onboarding)
+            VALUES (?, ?, ?, ?, ?)
+        """, (user_id, specialization, reminder_enabled, datetime.now(), False))
         
         conn.commit()
         conn.close()
@@ -863,15 +863,15 @@ def update_reminder_settings(user_id):
         if not cursor.fetchone():
             # Создаем пользователя если его нет
             cursor.execute("""
-                INSERT INTO Users (user_id, reminder, Specialization, updated_at)
-                VALUES (?, ?, ?, ?)
-            """, (user_id, reminder_enabled, 'Не указана', datetime.now()))
+                INSERT INTO Users (user_id, reminder, Specialization, create_time, is_onboarding)
+                VALUES (?, ?, ?, ?, ?)
+            """, (user_id, reminder_enabled, 'Не указана', datetime.now(), False))
         else:
             # Обновляем существующего пользователя
             cursor.execute("""
-                UPDATE Users SET reminder = ?, updated_at = ?
+                UPDATE Users SET reminder = ?
                 WHERE user_id = ?
-            """, (reminder_enabled, datetime.now(), user_id))
+            """, (reminder_enabled, user_id))
         
         conn.commit()
         conn.close()

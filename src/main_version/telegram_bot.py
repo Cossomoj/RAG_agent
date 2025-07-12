@@ -196,7 +196,7 @@ def init_db():
                     user_id INTEGER PRIMARY KEY,
                     username TEXT DEFAULT NULL,
                     user_fullname TEXT DEFAULT NULL,
-                    reminder BOOl DEFAULT TRUE,
+                    reminder BOOLEAN DEFAULT TRUE,
                     create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
                     Specialization TEXT DEFAULT NULL,
                     is_onboarding BOOLEAN DEFAULT FALSE NOT NULL
