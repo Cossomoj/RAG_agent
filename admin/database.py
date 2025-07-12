@@ -93,7 +93,7 @@ class DatabaseOperations:
                 cursor = conn.cursor()
                 
                 # Валидация параметров сортировки
-                valid_sort_columns = ['user_id', 'username', 'user_fullname', 'create_time', 'last_activity', 'message_count', 'reminders_count']
+                valid_sort_columns = ['user_id', 'username', 'user_fullname', 'create_time', 'last_activity', 'message_count', 'reminder_status']
                 if sort_by not in valid_sort_columns:
                     sort_by = 'last_activity'
                 
@@ -109,10 +109,9 @@ class DatabaseOperations:
                     u.create_time,
                     COUNT(DISTINCT m.message) as message_count,
                     MAX(m.time) as last_activity,
-                    COUNT(DISTINCT r.id_rem) as reminders_count
+                    u.reminder as reminder_status
                 FROM Users u
                 LEFT JOIN Message_history m ON u.user_id = m.user_id
-                LEFT JOIN Reminder r ON u.user_id = r.user_id
                 GROUP BY u.user_id
                 ORDER BY {sort_by} {sort_order.upper()}
                 LIMIT ? OFFSET ?
@@ -178,11 +177,9 @@ class DatabaseOperations:
                     SELECT 
                         u.*,
                         COUNT(DISTINCT m.message) as message_count,
-                        MAX(m.time) as last_activity,
-                        COUNT(DISTINCT r.id_rem) as reminders_count
+                        MAX(m.time) as last_activity
                     FROM Users u
                     LEFT JOIN Message_history m ON u.user_id = m.user_id
-                    LEFT JOIN Reminder r ON u.user_id = r.user_id
                     WHERE u.user_id = ?
                     GROUP BY u.user_id
                 """, (user_id,))

@@ -80,9 +80,9 @@
                     </a>
                 </th>
                 <th>
-                    <a href="javascript:void(0)" onclick="sortBy('reminders_count')" class="text-decoration-none">
-                        Напоминаний
-                        {% if sort_by == 'reminders_count' %}
+                    <a href="javascript:void(0)" onclick="sortBy('reminder_status')" class="text-decoration-none">
+                        Регулярные сообщения
+                        {% if sort_by == 'reminder_status' %}
                             <i class="bi bi-arrow-{{ 'up' if sort_order == 'asc' else 'down' }}"></i>
                         {% endif %}
                     </a>
@@ -99,7 +99,13 @@
                 <td>{{ user.create_time|datetime or 'Не указано' }}</td>
                 <td>{{ user.last_activity|datetime if user.last_activity else 'Нет активности' }}</td>
                 <td>{{ user.message_count or 0 }}</td>
-                <td>{{ user.reminders_count or 0 }}</td>
+                <td>
+                    {% if user.reminder_status %}
+                        <span class="badge bg-success">✅ Включены</span>
+                    {% else %}
+                        <span class="badge bg-secondary">❌ Выключены</span>
+                    {% endif %}
+                </td>
                 <td>
                     <button type="button" class="btn btn-sm btn-info" 
                             onclick="showUserDetails({{ user.user_id }})">

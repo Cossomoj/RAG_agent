@@ -121,6 +121,33 @@ def clear_all_cache():
         logger.error(f"Ошибка при очистке кешей: {e}")
         return False
 
+def clear_cache_for_specialization(specialization):
+    """
+    Функция для очистки кеша конкретной специализации.
+    Очищает только записи для указанной специализации из cache_by_specialization.
+    """
+    global cache_by_specialization
+    
+    try:
+        cleared_count = 0
+        
+        # Проходим по всем question_id в кеше по специализации
+        for question_id in list(cache_by_specialization.keys()):
+            if specialization in cache_by_specialization[question_id]:
+                # Удаляем запись для данной специализации
+                del cache_by_specialization[question_id][specialization]
+                cleared_count += 1
+                
+                # Если для question_id больше нет записей, удаляем весь ключ
+                if not cache_by_specialization[question_id]:
+                    del cache_by_specialization[question_id]
+        
+        logger.info(f"Очищено {cleared_count} записей кеша для специализации '{specialization}'")
+        return cleared_count
+    except Exception as e:
+        logger.error(f"Ошибка при очистке кеша для специализации '{specialization}': {e}")
+        return 0
+
 def send_message_to_all_users(message_text):
     """
     Функция для отправки сообщения всем пользователям.
@@ -305,22 +332,35 @@ def handle_specialization_selection(call):
         "python": "Python"
     }
     
-    # Сохраняем специализацию и отмечаем онбординг как завершенный
+    new_specialization = spec_mapping[selected_spec]
+    
+    # Получаем текущую специализацию для очистки кеша
     conn = sqlite3.connect(DATABASE_URL)
     cursor = conn.cursor()
+    cursor.execute("SELECT Specialization FROM Users WHERE user_id = ?", (chat_id,))
+    current_user = cursor.fetchone()
+    old_specialization = current_user[0] if current_user else None
+    
+    # Сохраняем специализацию и отмечаем онбординг как завершенный
     cursor.execute('''
         UPDATE Users 
         SET Specialization = ?, is_onboarding = TRUE 
         WHERE user_id = ?
-    ''', (spec_mapping[selected_spec], chat_id))
+    ''', (new_specialization, chat_id))
     conn.commit()
+    
+    # Очищаем кеш для старой специализации, если она отличается от новой
+    if old_specialization and old_specialization != new_specialization:
+        cleared_count = clear_cache_for_specialization(old_specialization)
+        logger.info(f"Пользователь {chat_id} сменил специализацию с '{old_specialization}' на '{new_specialization}'. Очищено {cleared_count} записей кеша.")
+    
     conn.close()
     
     # Показываем сообщение об успешном завершении онбординга
     bot.edit_message_text(
         chat_id=chat_id,
         message_id=call.message.message_id,
-        text=f"Отлично! Ваша специализация: {spec_mapping[selected_spec]}"
+        text=f"Отлично! Ваша специализация: {new_specialization}"
     )
 
     # Получаем только специализацию из базы данных
@@ -1270,11 +1310,21 @@ def handle_role_specialization(call):
         "specsql_java": "Java",
         "specsql_python": "Python"
     }
-    specialization = specialization_mapping.get(data)
+    new_specialization = specialization_mapping.get(data)
+    
+    # Получаем текущую специализацию для очистки кеша
+    cursor.execute("SELECT Specialization FROM Users WHERE user_id = ?", (user_id,))
+    current_user = cursor.fetchone()
+    old_specialization = current_user[0] if current_user else None
     
     # Обновляем Specialization
-    cursor.execute("UPDATE Users SET Specialization = ? WHERE user_id = ?", (specialization, user_id))
+    cursor.execute("UPDATE Users SET Specialization = ? WHERE user_id = ?", (new_specialization, user_id))
     conn.commit()
+    
+    # Очищаем кеш для старой специализации, если она отличается от новой
+    if old_specialization and old_specialization != new_specialization:
+        cleared_count = clear_cache_for_specialization(old_specialization)
+        logger.info(f"Пользователь {user_id} сменил специализацию с '{old_specialization}' на '{new_specialization}'. Очищено {cleared_count} записей кеша.")
     
     # Синхронизируем user_data с БД (только специализация)
     cursor.execute("SELECT Specialization FROM Users WHERE user_id = ?", (user_id,))
@@ -1284,7 +1334,7 @@ def handle_role_specialization(call):
             user_data[user_id] = {}
         user_data[user_id]["specialization"] = user_db_data[0]
     
-    bot.answer_callback_query(call.id, f"Специализация '{specialization}' успешно сохранена!")
+    bot.answer_callback_query(call.id, f"Специализация '{new_specialization}' успешно сохранена!")
     cursor.execute("SELECT user_id, Specialization FROM Users WHERE user_id = ?", (user_id,))
     users = cursor.fetchone()
 
@@ -2370,6 +2420,20 @@ class CacheAPIHandler(BaseHTTPRequestHandler):
         if self.path == "/clear-cache":
             clear_all_cache()
             self._send_json(200, {"success": True, "message": "Кеш успешно очищен"})
+        elif self.path == "/clear-cache-specialization":
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+                body = self.rfile.read(length)
+                data = json.loads(body.decode("utf-8"))
+                specialization = data.get("specialization", "")
+                if not specialization:
+                    self._send_json(400, {"success": False, "error": "Специализация не указана"})
+                    return
+                cleared_count = clear_cache_for_specialization(specialization)
+                self._send_json(200, {"success": True, "message": f"Кеш для специализации '{specialization}' очищен", "cleared_count": cleared_count})
+            except Exception as e:
+                logger.error(f"Ошибка /clear-cache-specialization: {e}")
+                self._send_json(500, {"success": False, "error": str(e)})
         elif self.path == "/send-message":
             try:
                 length = int(self.headers.get("Content-Length", 0))

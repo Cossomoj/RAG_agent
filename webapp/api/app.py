@@ -220,6 +220,67 @@ def clear_all_cache():
     logger.info(f"Кеш веб-приложения очищен, удалено {count} записей.")
     return count
 
+def clear_cache_for_specialization(specialization):
+    """
+    Функция для очистки кеша конкретной специализации в веб-приложении.
+    Очищает только записи для указанной специализации из cache_by_specialization.
+    """
+    global cache_by_specialization
+    
+    try:
+        cleared_count = 0
+        
+        # Проходим по всем question_id в кеше по специализации
+        for question_id in list(cache_by_specialization.keys()):
+            if specialization in cache_by_specialization[question_id]:
+                # Удаляем запись для данной специализации
+                del cache_by_specialization[question_id][specialization]
+                cleared_count += 1
+                
+                # Если для question_id больше нет записей, удаляем весь ключ
+                if not cache_by_specialization[question_id]:
+                    del cache_by_specialization[question_id]
+        
+        logger.info(f"Очищено {cleared_count} записей кеша веб-приложения для специализации '{specialization}'")
+        return cleared_count
+    except Exception as e:
+        logger.error(f"Ошибка при очистке кеша веб-приложения для специализации '{specialization}': {e}")
+        return 0
+
+def sync_clear_cache_with_telegram_bot(specialization):
+    """
+    Синхронизация очистки кеша с телеграм-ботом.
+    Отправляет запрос на очистку кеша конкретной специализации в телеграм-боте.
+    """
+    try:
+        # URL для очистки кеша в телеграм-боте
+        telegram_bot_url = os.environ.get('TELEGRAM_BOT_CACHE_URL', 'http://127.0.0.1:8007/clear-cache-specialization')
+        
+        # Отправляем запрос на очистку кеша в телеграм-боте
+        response = requests.post(telegram_bot_url, json={'specialization': specialization}, timeout=5)
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result.get('success'):
+                logger.info(f"Кеш телеграм-бота для специализации '{specialization}' успешно очищен. Очищено записей: {result.get('cleared_count', 0)}")
+                return True
+            else:
+                logger.warning(f"Ошибка при очистке кеша телеграм-бота: {result.get('error', 'неизвестная ошибка')}")
+                return False
+        else:
+            logger.warning(f"Ошибка HTTP при очистке кеша телеграм-бота: {response.status_code}")
+            return False
+            
+    except requests.exceptions.ConnectionError:
+        logger.warning("Не удалось подключиться к телеграм-боту для очистки кеша (возможно, бот не запущен)")
+        return False
+    except requests.exceptions.Timeout:
+        logger.warning("Превышено время ожидания при очистке кеша телеграм-бота")
+        return False
+    except Exception as e:
+        logger.error(f"Ошибка при синхронизации очистки кеша с телеграм-ботом: {e}")
+        return False
+
 @app.route('/api/clear-cache', methods=['POST'])
 def clear_webapp_cache():
     """Эндпоинт для очистки кеша веб-приложения."""
@@ -740,7 +801,7 @@ def get_profile(user_id):
             
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT Specialization FROM Users WHERE user_id = ?",
+            "SELECT Specialization, reminder FROM Users WHERE user_id = ?",
             (user_id,)
         )
         
@@ -749,11 +810,13 @@ def get_profile(user_id):
         
         if user:
             return jsonify({
-                "specialization": user["Specialization"] or ""
+                "specialization": user["Specialization"] or "",
+                "reminder_enabled": bool(user["reminder"]) if user["reminder"] is not None else True
             })
         else:
             return jsonify({
-                "specialization": ""
+                "specialization": "",
+                "reminder_enabled": True
             })
             
     except Exception as e:
@@ -772,10 +835,10 @@ def save_profile(user_id):
             return jsonify({'error': 'Отсутствуют данные для сохранения'}), 400
             
         # Получаем данные из запроса
-        specialization = data.get('specialization')
+        new_specialization = data.get('specialization')
         reminder_enabled = data.get('reminder_enabled', True)  # По умолчанию включено
         
-        if not specialization:
+        if not new_specialization:
             return jsonify({'error': 'Специализация обязательна'}), 400
             
         conn = get_db_connection()
@@ -784,21 +847,39 @@ def save_profile(user_id):
             
         cursor = conn.cursor()
         
+        # Получаем текущую специализацию для очистки кеша
+        cursor.execute("SELECT Specialization FROM Users WHERE user_id = ?", (user_id,))
+        current_user = cursor.fetchone()
+        old_specialization = current_user[0] if current_user else None
+        
         # Обновляем или создаем запись пользователя
         cursor.execute("""
             INSERT OR REPLACE INTO Users (user_id, Specialization, reminder, create_time, is_onboarding)
             VALUES (?, ?, ?, ?, ?)
-        """, (user_id, specialization, reminder_enabled, datetime.now(), False))
+        """, (user_id, new_specialization, reminder_enabled, datetime.now(), False))
         
         conn.commit()
         conn.close()
+        
+        # Очищаем кеш для старой специализации, если она отличается от новой
+        if old_specialization and old_specialization != new_specialization:
+            # Очищаем кеш веб-приложения
+            cleared_count = clear_cache_for_specialization(old_specialization)
+            logger.info(f"Пользователь {user_id} сменил специализацию с '{old_specialization}' на '{new_specialization}'. Очищено {cleared_count} записей кеша веб-приложения.")
+            
+            # Синхронизируем очистку кеша с телеграм-ботом
+            sync_success = sync_clear_cache_with_telegram_bot(old_specialization)
+            if sync_success:
+                logger.info(f"Кеш телеграм-бота для специализации '{old_specialization}' также очищен")
+            else:
+                logger.warning(f"Не удалось синхронизировать очистку кеша телеграм-бота для специализации '{old_specialization}'")
         
         logger.info(f"Профиль пользователя {user_id} успешно сохранен")
         return jsonify({
             'success': True,
             'message': 'Профиль успешно сохранен',
             'profile': {
-                'specialization': specialization,
+                'specialization': new_specialization,
                 'reminder_enabled': reminder_enabled
             }
         })

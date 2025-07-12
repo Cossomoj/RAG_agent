@@ -1255,6 +1255,7 @@ function renderProfile() {
                 if (reminderToggle.disabled) return;
                 
                 const reminderEnabled = e.target.checked;
+                console.log('🔄 Переключение регулярных сообщений:', reminderEnabled);
                 
                 // Показываем индикатор загрузки
                 reminderToggle.disabled = true;
@@ -1271,8 +1272,13 @@ function renderProfile() {
                 if (sliderThumb) sliderThumb.style.boxShadow = '0 2px 8px rgba(0,0,0,0.4)';
                 
                 const result = await updateReminderSettings(reminderEnabled);
-                // Состояние уже обновлено в updateReminderSettings()
-                console.log('💾 Настройки напоминаний сохранены:', result);
+                console.log('✅ Настройки напоминаний сохранены:', result);
+                
+                // Убеждаемся, что состояние переключателя соответствует ответу сервера
+                if (result && typeof result.reminder_enabled !== 'undefined') {
+                    reminderToggle.checked = result.reminder_enabled;
+                    AppState.profile.reminder_enabled = result.reminder_enabled;
+                }
                 
                 // Показываем уведомление
                 showAlert(reminderEnabled ? 
@@ -1280,11 +1286,14 @@ function renderProfile() {
                     'Регулярные сообщения отключены ❌');
                     
             } catch (error) {
-                console.error('Ошибка при изменении настроек напоминаний:', error);
+                console.error('❌ Ошибка при переключении настроек:', error);
+                
                 // Возвращаем состояние переключателя обратно
-                e.target.checked = !e.target.checked;
-                AppState.profile.reminder_enabled = !reminderEnabled;
-                showAlert('Ошибка при сохранении настроек');
+                const originalState = !reminderEnabled;
+                reminderToggle.checked = originalState;
+                AppState.profile.reminder_enabled = originalState;
+                
+                showAlert('Ошибка при сохранении настроек: ' + (error.message || 'Неизвестная ошибка'));
             } finally {
                 // Убираем индикатор загрузки
                 reminderToggle.disabled = false;
@@ -1520,7 +1529,7 @@ function createProfileScreen() {
         #reminder-toggle:checked + .slider {
             background-color: var(--tg-theme-button-color) !important;
         }
-        #reminder-toggle:checked ~ .slider-thumb {
+        #reminder-toggle:checked + .slider + .slider-thumb {
             transform: translateX(26px);
         }
         .slider:hover {
@@ -2609,8 +2618,7 @@ async function loadUserProfile() {
             console.log('✅ Профиль загружен из БД:', profile);
             
             AppState.profile = {
-                ...profile,
-                reminder_enabled: profile.reminder_enabled !== false // По умолчанию true
+                ...profile
             };
             
             // Проверяем, что профиль корректно установлен
@@ -2635,9 +2643,6 @@ async function loadUserProfile() {
                 reminder_enabled: true
             };
         }
-        
-        // Загружаем настройки напоминаний отдельно
-        await loadReminderSettings();
     } catch (error) {
         console.error('❌ КРИТИЧЕСКАЯ ОШИБКА загрузки профиля:', error);
         console.error('📋 Детали ошибки:', {
