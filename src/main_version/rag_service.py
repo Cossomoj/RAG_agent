@@ -404,6 +404,10 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
                 if dialogue_context and dialogue_context != '[]':
                     dialogue_history_prompt_part = f"\\n\\nКонтекст предыдущих сообщений:\\n{dialogue_context}"
                     final_prompt = final_prompt + dialogue_history_prompt_part
+                
+                # ДОБАВЛЯЕМ ИНФОРМАЦИЮ О ПРОФИЛЕ ПОЛЬЗОВАТЕЛЯ
+                user_profile_context = f"\\n\\nИнформация о пользователе:\\nСпециализация: {self.specialization if self.specialization else 'не указана'}"
+                final_prompt = final_prompt + user_profile_context
                     
             elif '{context}' in self.base_prompt:
                 # Только {context} (старые промпты)
@@ -414,7 +418,10 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
                 if dialogue_context and dialogue_context != '[]':
                     dialogue_history_prompt_part = f"\\n\\nКонтекст предыдущих сообщений:\\n{dialogue_context}"
                 
-                final_prompt = f"{filled_prompt}{dialogue_history_prompt_part}\\n\\nВопрос: {question}\\n\\nОтвет:"
+                # ДОБАВЛЯЕМ ИНФОРМАЦИЮ О ПРОФИЛЕ ПОЛЬЗОВАТЕЛЯ
+                user_profile_context = f"\\n\\nИнформация о пользователе:\\nСпециализация: {self.specialization if self.specialization else 'не указана'}"
+                
+                final_prompt = f"{filled_prompt}{dialogue_history_prompt_part}{user_profile_context}\\n\\nВопрос: {question}\\n\\nОтвет:"
                 
             else:
                 # Fallback: старая логика для промптов без переменных
@@ -422,7 +429,10 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
                 if dialogue_context and dialogue_context != '[]':
                     dialogue_history_prompt_part = f"\\n\\nКонтекст предыдущих сообщений:\\n{dialogue_context}"
 
-                final_prompt = f"{self.base_prompt}{dialogue_history_prompt_part}\\n\\nКонтекст из документов:\\n{context_text}\\n\\nВопрос: {question}\\n\\nОтвет:"
+                # ДОБАВЛЯЕМ ИНФОРМАЦИЮ О ПРОФИЛЕ ПОЛЬЗОВАТЕЛЯ
+                user_profile_context = f"\\n\\nИнформация о пользователе:\\nСпециализация: {self.specialization if self.specialization else 'не указана'}"
+
+                final_prompt = f"{self.base_prompt}{dialogue_history_prompt_part}{user_profile_context}\\n\\nКонтекст из документов:\\n{context_text}\\n\\nВопрос: {question}\\n\\nОтвет:"
             
             # Отладочная информация
             # print(f"\\n--- FINAL PROMPT ---\\n{final_prompt}\\n--- END FINAL PROMPT ---\\n")
@@ -536,25 +546,21 @@ async def websocket_suggest_endpoint(websocket: WebSocket):
             use_rag = False
     
     if not use_rag:
-        # ИСПРАВЛЕНИЕ: Безопасная замена переменных без ошибок
-        # Заменяем переменные без использования template.substitute()
-        filled_prompt = prompt_template.replace('$specialization', specialization)
-        filled_prompt = filled_prompt.replace('$user_question', user_question)
-        filled_prompt = filled_prompt.replace('$bot_answer', bot_answer)
+        # --- 2. Прямой ответ GigaChat без RAG для общих вопросов ---
+        
+        # Используем базовый промпт для общих вопросов
+        general_prompt = f"""Ты дружелюбный AI-ассистент. Ответь на вопрос пользователя полно и информативно.
 
-        # Добавляем инструкции по генерации релевантных вопросов
-        question_generation_guidance = f"""
-Учитывая, что пользователь имеет специализацию '{specialization}',
-сгенерируйте 3-5 релевантных вопросов, которые:
-1. Соответствуют текущему контексту диалога
-2. Учитывают специфику специализации пользователя
-3. Помогают углубить понимание обсуждаемой темы
-4. Могут быть полезны для профессионального развития в рамках специализации
-5. Не выходят за рамки компетенций пользователя
+Информация о пользователе:
+Специализация: {specialization if specialization else 'не указана'}
 
-Формат ответа: каждый вопрос с новой строки, без нумерации.
-"""
-        filled_prompt += question_generation_guidance
+Вопрос пользователя: {user_question}
+
+Дай развернутый и полезный ответ на этот вопрос, учитывая специализацию пользователя."""
+
+        # Добавляем контекст диалога если есть
+        if question_id == 888 and context and context != "[]":
+            general_prompt += f"\n\nКонтекст предыдущих сообщений:\n{context}"
 
         llm = GigaChat(
             credentials=api_key,
@@ -564,7 +570,7 @@ async def websocket_suggest_endpoint(websocket: WebSocket):
         )
         
         try:
-            response = await llm.ainvoke(filled_prompt)
+            response = await llm.ainvoke(general_prompt)
             
             # Удаляем нумерацию, чтобы обеспечить корректный парсинг
             cleaned_response = re.sub(r'^\s*\d+\.\s*', '', response.content, flags=re.MULTILINE)
@@ -640,9 +646,12 @@ async def websocket_endpoint(websocket: WebSocket):
         # Используем базовый промпт для общих вопросов
         general_prompt = f"""Ты дружелюбный AI-ассистент. Ответь на вопрос пользователя полно и информативно.
 
+Информация о пользователе:
+Специализация: {specialization if specialization else 'не указана'}
+
 Вопрос пользователя: {question}
 
-Дай развернутый и полезный ответ на этот вопрос."""
+Дай развернутый и полезный ответ на этот вопрос, учитывая специализацию пользователя."""
 
         # Добавляем контекст диалога если есть
         if question_id == 888 and context and context != "[]":
