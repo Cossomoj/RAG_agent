@@ -810,7 +810,7 @@ def get_profile(user_id):
             
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT Specialization, reminder FROM Users WHERE user_id = ?",
+            "SELECT Specialization, reminder, is_onboarding FROM Users WHERE user_id = ?",
             (user_id,)
         )
         
@@ -820,13 +820,16 @@ def get_profile(user_id):
         if user:
             return jsonify({
                 "specialization": user["Specialization"] or "",
-                "reminder_enabled": bool(user["reminder"]) if user["reminder"] is not None else True
+                "reminder_enabled": bool(user["reminder"]) if user["reminder"] is not None else True,
+                "is_onboarding": int(user["is_onboarding"]) if user["is_onboarding"] is not None else 0
             })
         else:
+            # Пользователь не найден
             return jsonify({
                 "specialization": "",
-                "reminder_enabled": True
-            })
+                "reminder_enabled": True,
+                "is_onboarding": 0
+            }), 404
             
     except Exception as e:
         logger.error(f"Ошибка получения профиля: {e}")
@@ -846,6 +849,7 @@ def save_profile(user_id):
         # Получаем данные из запроса
         new_specialization = data.get('specialization', '')
         reminder_enabled = data.get('reminder_enabled', True)
+        is_onboarding = data.get('is_onboarding', None)
         
         if not new_specialization:
             return jsonify({'error': 'Специализация обязательна'}), 400
@@ -864,47 +868,36 @@ def save_profile(user_id):
         current_user = cursor.fetchone()
         
         # Обновляем или создаем запись пользователя
-        cursor.execute("""
-            INSERT OR REPLACE INTO Users (user_id, Specialization, reminder, create_time, is_onboarding)
-            VALUES (?, ?, ?, ?, ?)
-        """, (user_id, new_specialization, reminder_enabled, datetime.now(), False))
+        if current_user:
+            # Обновляем существующего пользователя
+            if is_onboarding is not None:
+                cursor.execute("""
+                    UPDATE Users 
+                    SET Specialization = ?, reminder = ?, is_onboarding = ?
+                    WHERE user_id = ?
+                """, (new_specialization, reminder_enabled, is_onboarding, user_id))
+            else:
+                cursor.execute("""
+                    UPDATE Users 
+                    SET Specialization = ?, reminder = ?
+                    WHERE user_id = ?
+                """, (new_specialization, reminder_enabled, user_id))
+        else:
+            # Создаем нового пользователя
+            cursor.execute("""
+                INSERT INTO Users (user_id, Specialization, reminder, create_time, is_onboarding)
+                VALUES (?, ?, ?, ?, ?)
+            """, (user_id, new_specialization, reminder_enabled, datetime.now(), is_onboarding if is_onboarding is not None else 1))
         
         conn.commit()
         conn.close()
         
-        # АЛЬТЕРНАТИВНЫЙ ПОДХОД: Не очищаем кеш при смене специализации
-        # Кеш накапливается для всех специализаций и используется автоматически
-        # Раскомментируйте код ниже, если хотите очищать кеш при смене специализации
-        
-        # # Очищаем кеш для старой специализации, если она отличается от новой
-        # if old_specialization and old_specialization != new_specialization:
-        #     logger.info(f"🔄 СМЕНА СПЕЦИАЛИЗАЦИИ В ВЕБ-ПРИЛОЖЕНИИ: '{old_specialization}' → '{new_specialization}' для пользователя {user_id}")
-        #     
-        #     # Очищаем кеш веб-приложения
-        #     cleared_count = clear_cache_for_specialization(old_specialization)
-        #     logger.info(f"🧹 Очищен кеш веб-приложения: {cleared_count} записей для специализации '{old_specialization}'")
-        #     
-        #     # Синхронизируем очистку кеша с телеграм-ботом
-        #     logger.info(f"🔗 Синхронизируем очистку кеша с телеграм-ботом...")
-        #     sync_success = sync_clear_cache_with_telegram_bot(old_specialization)
-        #     if sync_success:
-        #         logger.info(f"✅ Кеш телеграм-бота для специализации '{old_specialization}' также очищен")
-        #     else:
-        #         logger.warning(f"❌ Не удалось синхронизировать очистку кеша телеграм-бота для специализации '{old_specialization}'")
-        
-        logger.info(f"Профиль пользователя {user_id} успешно сохранен")
-        return jsonify({
-            'success': True,
-            'message': 'Профиль успешно сохранен',
-            'profile': {
-                'specialization': new_specialization,
-                'reminder_enabled': reminder_enabled
-            }
-        })
+        logger.info(f"✅ Профиль пользователя {user_id} успешно сохранен")
+        return jsonify({'success': True})
         
     except Exception as e:
-        logger.error(f"Ошибка при сохранении профиля: {e}")
-        return jsonify({'error': 'Ошибка сервера'}), 500
+        logger.error(f"Ошибка сохранения профиля: {e}")
+        return jsonify({'error': 'Ошибка сохранения профиля'}), 500
 
 @app.route('/api/profile/<user_id>/reminder', methods=['GET'])
 def get_reminder_settings(user_id):

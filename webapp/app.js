@@ -27,6 +27,30 @@ const AppState = {
 // Глобальные переменные для специализаций (роли удалены)
 let specializations = [];
 
+// Функции для работы с ID пользователя
+function saveUserId(userId) {
+    if (userId) {
+        localStorage.setItem('user_id', userId);
+    }
+}
+
+function getUserId() {
+    // Сначала пробуем получить из Telegram
+    if (AppState.user && AppState.user.id) {
+        return AppState.user.id;
+    }
+    
+    // Затем из localStorage
+    const savedId = localStorage.getItem('user_id');
+    if (savedId) {
+        return savedId;
+    }
+    
+    // Если ID не удается получить, возвращаем стандартный ID
+    console.warn('⚠️ Не удалось получить ID пользователя, используем стандартный ID');
+    return '00000000';
+}
+
 // Инициализация приложения
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('🚀 Инициализация мини-приложения...');
@@ -73,6 +97,15 @@ document.addEventListener('DOMContentLoaded', async function() {
             questionsCount: AppState.questions?.length || 0,
             historyCount: AppState.history?.length || 0
         });
+        
+        // Проверяем, нужен ли онбординг
+        if (AppState.needsOnboarding) {
+            console.log('🎯 Требуется онбординг, показываем экран выбора специализации');
+            showOnboardingScreen();
+        } else {
+            console.log('✅ Онбординг не требуется, показываем главное меню');
+            // Главное меню уже активно по умолчанию
+        }
         
     } catch (error) {
         console.error('❌ КРИТИЧЕСКАЯ ОШИБКА инициализации:', error);
@@ -2617,8 +2650,8 @@ async function loadUserProfile() {
         const userId = getUserId();
         console.log('🔑 User ID для загрузки профиля:', userId);
         
-        if (!userId || userId === 'guest') {
-            console.warn('⚠️ User ID не определен или является guest, используем пустой профиль');
+        if (!userId) {
+            console.error('⚠️ User ID не определен');
             AppState.profile = { specialization: '' };
             return;
         }
@@ -2633,19 +2666,32 @@ async function loadUserProfile() {
             const profile = await response.json();
             console.log('✅ Профиль загружен из БД:', profile);
             
-            // Больше не сохраняем предыдущую специализацию - кеш не очищается
-            
             AppState.profile = {
                 ...profile
             };
             
-            // Проверяем, что профиль корректно установлен
-            console.log('📋 Финальное состояние AppState.profile:', AppState.profile);
+            // Проверяем статус онбординга
+            if (!profile.is_onboarding || profile.is_onboarding === 0) {
+                console.log('🎯 Пользователь не прошел онбординг, показываем экран выбора специализации');
+                // Флаг для показа онбординга после инициализации
+                AppState.needsOnboarding = true;
+                // Если пользователь со стандартным ID, устанавливаем специальный флаг
+                if (userId === '00000000') {
+                    AppState.isGuestUser = true;
+                }
+            }
             
-            // Если профиль пустой, показываем предупреждение
-            if (!profile.specialization) {
-                console.warn('⚠️ Профиль пользователя не настроен в БД');
-                console.warn('📝 Рекомендуется пройти онбординг в Telegram боте или настроить профиль в мини-приложении');
+            console.log('📋 Финальное состояние AppState.profile:', AppState.profile);
+        } else if (response.status === 404) {
+            // Пользователь не найден в БД - нужен онбординг
+            console.log('⚠️ Пользователь не найден в БД, требуется онбординг');
+            AppState.needsOnboarding = true;
+            AppState.profile = { 
+                specialization: '',
+                reminder_enabled: true
+            };
+            if (userId === '00000000') {
+                AppState.isGuestUser = true;
             }
         } else {
             const errorText = await response.text();
@@ -2998,4 +3044,124 @@ function showConfirmationModal(title, message, onConfirm) {
     modal.appendChild(content);
     
     modal.style.display = 'flex';
+}
+
+// Функции для онбординга
+function createOnboardingScreen() {
+    const specializationSelection = document.getElementById('specialization-selection');
+    if (!specializationSelection) return;
+    
+    specializationSelection.innerHTML = '';
+    
+    // Создаем кнопки для каждой специализации
+    specializations.forEach(spec => {
+        const button = document.createElement('button');
+        button.className = 'specialization-button';
+        button.style.cssText = `
+            padding: 16px 20px;
+            background: var(--tg-theme-secondary-bg-color);
+            color: var(--tg-theme-text-color);
+            border: 2px solid transparent;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        `;
+        
+        // Добавляем эмодзи для каждой специализации
+        const emojis = {
+            'Python-разработчик': '🐍',
+            'Java-разработчик': '☕',
+            'Web-разработчик': '🌐',
+            'Системный аналитик': '📊',
+            'QA-инженер': '🧪'
+        };
+        
+        button.innerHTML = `
+            <span style="font-size: 24px;">${emojis[spec] || '💼'}</span>
+            <span>${spec}</span>
+        `;
+        
+        button.addEventListener('click', () => selectSpecialization(spec));
+        
+        button.addEventListener('mouseenter', () => {
+            button.style.borderColor = 'var(--tg-theme-button-color)';
+            button.style.transform = 'translateY(-2px)';
+        });
+        
+        button.addEventListener('mouseleave', () => {
+            button.style.borderColor = 'transparent';
+            button.style.transform = 'translateY(0)';
+        });
+        
+        specializationSelection.appendChild(button);
+    });
+}
+
+async function selectSpecialization(specialization) {
+    console.log('✅ Выбрана специализация:', specialization);
+    
+    showLoader();
+    
+    try {
+        const userId = getUserId();
+        const isGuestUser = userId === '00000000';
+        
+        // Сохраняем профиль с выбранной специализацией
+        const response = await fetch(`${CONFIG.API_BASE_URL}/profile/${userId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                specialization: specialization,
+                reminder_enabled: true,
+                is_onboarding: isGuestUser ? 0 : 1  // Для гостевых пользователей is_onboarding остается 0
+            })
+        });
+        
+        if (response.ok) {
+            console.log('✅ Профиль сохранен с выбранной специализацией');
+            
+            // Обновляем локальное состояние
+            AppState.profile.specialization = specialization;
+            AppState.needsOnboarding = false;
+            
+            // Перезагружаем вопросы для новой специализации
+            await loadQuestions();
+            
+            // Показываем главное меню
+            showScreen('main-menu');
+            
+            // Показываем приветственное сообщение
+            showAlert(`Отлично! Теперь я буду помогать вам как ${specialization}`);
+        } else {
+            throw new Error('Ошибка сохранения специализации');
+        }
+    } catch (error) {
+        console.error('❌ Ошибка при выборе специализации:', error);
+        showAlert('Произошла ошибка. Пожалуйста, попробуйте еще раз.');
+    } finally {
+        hideLoader();
+    }
+}
+
+function showOnboardingScreen() {
+    console.log('🎯 Показываем экран онбординга');
+    
+    // Скрываем кнопку "Назад" для онбординга
+    if (tg && tg.BackButton) {
+        tg.BackButton.hide();
+    }
+    
+    // Создаем экран онбординга
+    createOnboardingScreen();
+    
+    // Показываем экран
+    showScreen('onboarding');
 }
