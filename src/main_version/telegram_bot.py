@@ -967,6 +967,14 @@ async def check():
                         await websocket.send(str(question_id)) # 4. question_id
                         await websocket.send(context_str)      # 5. context
                         await websocket.send(str(count_for_pro_activity)) # 6. count
+                        
+                        # Получаем специализацию пользователя и определяем vector_store
+                        _, user_specialization = get_user_profile_from_db(chat_id)
+                        if not user_specialization:
+                            user_specialization = 'Аналитик'
+                        user_vector_store = get_vector_store_for_specialization(user_specialization)
+                        
+                        await websocket.send(user_vector_store)  # 7. vector_store
                         try:
                             full_answer = ""
                             while True:
@@ -1114,53 +1122,85 @@ async def check_for_daily_msg():
                 
                 logger.info(f"Найдено {len(users_results)} пользователей с включенными напоминаниями")
 
+                # Счетчики для статистики
+                successful_sends = 0
+                failed_sends = 0
+
                 # Отправляем сообщение каждому пользователю
                 for user in users_results:
                     chat_id = user['user_id']
                     
                     logger.info(f"Обработка пользователя {chat_id}")
                     
-                    # Получаем историю диалога пользователя
-                    context_str = take_history_dialog_from_db(chat_id)
-                    logger.debug(f"Тип context_str для пользователя {chat_id}: {type(context_str)}")
-                    
-                    if context_str is None:
-                        context_str = "История сообщений пустая"
-                        logger.warning(f"История сообщений пуста для пользователя {chat_id}")
-                    elif not isinstance(context_str, str):
-                        context_str = str(context_str)  # преобразуем в строку
-                        logger.warning(f"Преобразован тип context_str в строку для пользователя {chat_id}")
-                    
-                    question_id = 777  # Изменено с 666 на 777 для корректной обработки
-                    specialization = 'Аналитик'
-                    count_for_pro_activity = 101
-                    question = 'without'
-                    
                     try:
+                        # Получаем историю диалога пользователя
+                        context_str = take_history_dialog_from_db(chat_id)
+                        logger.debug(f"Тип context_str для пользователя {chat_id}: {type(context_str)}")
+                        
+                        if context_str is None:
+                            context_str = "История сообщений пустая"
+                            logger.warning(f"История сообщений пуста для пользователя {chat_id}")
+                        elif not isinstance(context_str, str):
+                            context_str = str(context_str)  # преобразуем в строку
+                            logger.warning(f"Преобразован тип context_str в строку для пользователя {chat_id}")
+                        
+                        question_id = 777  # Изменено с 666 на 777 для корректной обработки
+                        
+                        # Получаем реальную специализацию пользователя из базы данных
+                        _, specialization = get_user_profile_from_db(chat_id)
+                        if not specialization:
+                            specialization = 'Аналитик'  # Значение по умолчанию
+                        
+                        # Определяем vector_store на основе специализации
+                        vector_store = get_vector_store_for_specialization(specialization)
+                        
+                        count_for_pro_activity = 101
+                        question = 'without'
+                        
                         logger.debug(f"Подключение к WebSocket для пользователя {chat_id}")
-                        async with websockets.connect(WEBSOCKET_URL) as websocket:
-                            await websocket.send(question)         # 1. question
-                            await websocket.send("")               # 2. role (пустая строка)
-                            await websocket.send(specialization)   # 3. specialization
-                            await websocket.send(str(question_id)) # 4. question_id
-                            await websocket.send(context_str)      # 5. context
-                            await websocket.send(str(count_for_pro_activity)) # 6. count
-                            
-                            full_answer = ""
-                            try:
-                                while True:
-                                    answer_part = await websocket.recv()
-                                    if answer_part:
-                                        full_answer += answer_part
-                                    else:
-                                        logger.warning(f"Получено пустое сообщение от WebSocket для пользователя {chat_id}")
-                            except websockets.exceptions.ConnectionClosed:
-                                logger.info(f"WebSocket соединение закрыто для пользователя {chat_id}")
-                                # Создаем клавиатуру
+                        
+                        # Добавляем тайм-аут для WebSocket соединения (30 секунд)
+                        try:
+                            async with websockets.connect(WEBSOCKET_URL) as websocket:
+                                # Отправляем данные с тайм-аутом
+                                await asyncio.wait_for(websocket.send(question), timeout=10.0)
+                                await asyncio.wait_for(websocket.send(""), timeout=10.0)
+                                await asyncio.wait_for(websocket.send(specialization), timeout=10.0)
+                                await asyncio.wait_for(websocket.send(str(question_id)), timeout=10.0)
+                                await asyncio.wait_for(websocket.send(context_str), timeout=10.0)
+                                await asyncio.wait_for(websocket.send(str(count_for_pro_activity)), timeout=10.0)
+                                await asyncio.wait_for(websocket.send(vector_store), timeout=10.0)  # 7-й параметр vector_store
+                                
+                                full_answer = ""
+                                timeout_count = 0
+                                max_timeout_count = 3
+                                
+                                try:
+                                    while timeout_count < max_timeout_count:
+                                        try:
+                                            # Получаем ответ с тайм-аутом (10 секунд)
+                                            answer_part = await asyncio.wait_for(websocket.recv(), timeout=10.0)
+                                            if answer_part:
+                                                full_answer += answer_part
+                                                timeout_count = 0  # Сбрасываем счетчик при получении данных
+                                            else:
+                                                logger.warning(f"Получено пустое сообщение от WebSocket для пользователя {chat_id}")
+                                                timeout_count += 1
+                                        except asyncio.TimeoutError:
+                                            logger.warning(f"Тайм-аут при получении данных от WebSocket для пользователя {chat_id}, попытка {timeout_count + 1}")
+                                            timeout_count += 1
+                                            if timeout_count >= max_timeout_count:
+                                                logger.error(f"Превышено максимальное количество тайм-аутов для пользователя {chat_id}")
+                                                break
+                                except websockets.exceptions.ConnectionClosed:
+                                    logger.info(f"WebSocket соединение закрыто для пользователя {chat_id}")
+                                
+                                # Проверяем, получили ли мы ответ
                                 if full_answer is None or full_answer == "":
-                                    full_answer = "История сообщений пустая"
+                                    full_answer = "История сообщений пустая. Попробуйте позже."
                                     logger.warning(f"Пустой ответ от AI для пользователя {chat_id}")
-                                    
+                                
+                                # Создаем клавиатуру
                                 markup = types.InlineKeyboardMarkup(row_width=1)
                                 buttons = [
                                     types.InlineKeyboardButton(text="В начало", callback_data="start"),
@@ -1172,17 +1212,31 @@ async def check_for_daily_msg():
                                     # Отправляем сообщение
                                     bot.send_message(chat_id=chat_id, text=full_answer, reply_markup=markup)
                                     logger.info(f"Регулярное сообщение успешно отправлено пользователю {chat_id}")
+                                    successful_sends += 1
                                 except telebot.apihelper.ApiException as e:
                                     if "Forbidden: bot was blocked by the user" in str(e):
                                         logger.warning(f"Пользователь {chat_id} заблокировал бота")
                                     else:
                                         logger.error(f"Ошибка при отправке сообщения пользователю {chat_id}: {e}")
+                                    failed_sends += 1
+                                    
+                        except asyncio.TimeoutError:
+                            logger.error(f"Тайм-аут WebSocket соединения для пользователя {chat_id}")
+                            failed_sends += 1
+                        except Exception as websocket_error:
+                            logger.error(f"Ошибка WebSocket для пользователя {chat_id}: {websocket_error}")
+                            failed_sends += 1
+                            
                     except Exception as e:
-                        logger.error(f"Ошибка при обработке пользователя {chat_id}: {e}")
+                        logger.error(f"Общая ошибка при обработке пользователя {chat_id}: {e}")
+                        failed_sends += 1
+                
+                # Логируем статистику
+                logger.info(f"Отправка регулярных сообщений завершена. Успешно: {successful_sends}, Ошибки: {failed_sends}")
                 
                 # После отправки всем пользователям ждем до следующего дня, 
                 # чтобы не отправить сообщения дважды (спим 23 часа)
-                logger.info("Все регулярные сообщения отправлены, ожидание до следующей проверки (23 часа)")
+                logger.info("Все регулярные сообщения обработаны, ожидание до следующей проверки (23 часа)")
                 await asyncio.sleep(23 * 60 * 60)  # 23 часа
                 
             # Проверяем время каждую минуту
@@ -1421,9 +1475,11 @@ def handle_predefined_question_group_1(call):
         if specialization in cache_by_specialization[question_id]:
             asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
         else:
-            asyncio.run(websocket_question_from_user(question, call.message, None, specialization, question_id))
+            vector_store = get_vector_store_for_specialization(specialization)
+            asyncio.run(websocket_question_from_user(question, call.message, specialization, question_id, vector_store=vector_store))
     else:
-        asyncio.run(websocket_question_from_user(question, call.message, None, specialization, question_id))
+        vector_store = get_vector_store_for_specialization(specialization)
+        asyncio.run(websocket_question_from_user(question, call.message, specialization, question_id, vector_store=vector_store))
 
 
 @require_onboarding
@@ -1464,9 +1520,11 @@ def handle_predefined_question_group_2(call):
         if specialization in cache_by_specialization[question_id]:
             asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
         else:
-            asyncio.run(websocket_question_from_user(question, call.message, None, specialization, question_id))
+            vector_store = get_vector_store_for_specialization(specialization)
+            asyncio.run(websocket_question_from_user(question, call.message, specialization, question_id, vector_store=vector_store))
     else:
-        asyncio.run(websocket_question_from_user(question, call.message, None, specialization, question_id))
+        vector_store = get_vector_store_for_specialization(specialization)
+        asyncio.run(websocket_question_from_user(question, call.message, specialization, question_id, vector_store=vector_store))
 
 @require_onboarding
 @bot.callback_query_handler(func=lambda call: call.data.startswith("po_question"))
@@ -1501,9 +1559,11 @@ def handle_predefined_question_group_2(call):
         if specialization in cache_by_specialization[question_id]:
             asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
         else:
-            asyncio.run(websocket_question_from_user(question, call.message, None, specialization, question_id))
+            vector_store = get_vector_store_for_specialization(specialization)
+            asyncio.run(websocket_question_from_user(question, call.message, specialization, question_id, vector_store=vector_store))
     else:
-        asyncio.run(websocket_question_from_user(question, call.message, None, specialization, question_id))
+        vector_store = get_vector_store_for_specialization(specialization)
+        asyncio.run(websocket_question_from_user(question, call.message, specialization, question_id, vector_store=vector_store))
 
 
 
@@ -1711,7 +1771,8 @@ def process_custom_question(message):
 
     question_id = 888  # Используем ID=888 для кастомных вопросов с памятью диалога
     question = message.text
-    asyncio.run(websocket_question_from_user(question, message, specialization, question_id, show_suggested_questions=True))
+    vector_store = get_vector_store_for_specialization(specialization)
+    asyncio.run(websocket_question_from_user(question, message, specialization, question_id, show_suggested_questions=True, vector_store=vector_store))
 
 async def handling_cached_requests(question_id, message, question, specialization):
     logger.debug("Используется кешированное сообщение")
@@ -2039,7 +2100,8 @@ def handle_suggested_question(call):
         
         # Отправляем вопрос на обработку (с предложенными вопросами)
         # ID=777 для выбранных предложенных вопросов
-        asyncio.run(websocket_question_from_user(question, call.message, specialization, 777, show_suggested_questions=True))
+        vector_store = get_vector_store_for_specialization(specialization)
+        asyncio.run(websocket_question_from_user(question, call.message, specialization, 777, show_suggested_questions=True, vector_store=vector_store))
         
         # Удаляем предложенные вопросы после выбора
         if chat_id in suggested_questions_storage:
@@ -2142,7 +2204,8 @@ def handle_text_message(message):
     
     # Отправляем вопрос на обработку в RAG систему (с предложенными вопросами)
     question_id = 888  # ID для свободного ввода текста (отдельный промпт)
-    asyncio.run(websocket_question_from_user(question, message, specialization, question_id, show_suggested_questions=True))
+    vector_store = get_vector_store_for_specialization(specialization)
+    asyncio.run(websocket_question_from_user(question, message, specialization, question_id, show_suggested_questions=True, vector_store=vector_store))
 
 # Обработчик для показа полной истории сообщений
 @require_onboarding
@@ -2314,6 +2377,27 @@ def get_user_profile_from_db(chat_id):
     except Exception as e:
         logger.error(f"Ошибка при получении профиля пользователя {chat_id} из БД: {e}")
     return None, None
+
+
+def get_vector_store_for_specialization(specialization):
+    """Определяет vector_store на основе специализации пользователя"""
+    if not specialization:
+        return 'ensemble'
+    
+    spec_lower = specialization.lower()
+    
+    if 'аналитик' in spec_lower:
+        return 'analyst'
+    elif 'тестировщик' in spec_lower or 'qa' in spec_lower:
+        return 'qa'
+    elif 'web' in spec_lower or 'фронтенд' in spec_lower or 'frontend' in spec_lower:
+        return 'web'
+    elif 'java' in spec_lower:
+        return 'java'
+    elif 'python' in spec_lower:
+        return 'python'
+    else:
+        return 'ensemble'  # По умолчанию используем ensemble для неизвестных специализаций
 
 
 @require_onboarding
