@@ -48,7 +48,7 @@ function getUserId() {
     
     // Если ID не удается получить, возвращаем стандартный ID
     console.warn('⚠️ Не удалось получить ID пользователя, используем стандартный ID');
-    return '00000000';
+    return '999999999';
 }
 
 // Инициализация приложения
@@ -2676,7 +2676,7 @@ async function loadUserProfile() {
                 // Флаг для показа онбординга после инициализации
                 AppState.needsOnboarding = true;
                 // Если пользователь со стандартным ID, устанавливаем специальный флаг
-                if (userId === '00000000') {
+                if (userId === '999999999') {
                     AppState.isGuestUser = true;
                 }
             }
@@ -2690,7 +2690,7 @@ async function loadUserProfile() {
                 specialization: '',
                 reminder_enabled: true
             };
-            if (userId === '00000000') {
+            if (userId === '999999999') {
                 AppState.isGuestUser = true;
             }
         } else {
@@ -3110,7 +3110,7 @@ async function selectSpecialization(specialization) {
     
     try {
         const userId = getUserId();
-        const isGuestUser = userId === '00000000';
+        const isGuestUser = userId === '999999999';
         
         // Сохраняем профиль с выбранной специализацией
         const response = await fetch(`${CONFIG.API_BASE_URL}/profile/${userId}`, {
