@@ -2632,8 +2632,8 @@ def handle_predefined_question_universal(call):
 # HTTP-сервер для работы с кешем (порт 8007)
 # -----------------------------------------------------------------------------
 
-class CacheAPIHandler(BaseHTTPRequestHandler):
-    """Обрабатывает POST /clear-cache для сброса кеша и /send-message для рассылки."""
+class TelegramBotAPIHandler(BaseHTTPRequestHandler):
+    """Унифицированный HTTP-обработчик для всех API функций telegram бота (порт 8007)"""
 
     def _send_json(self, status: int, payload: dict):
         self.send_response(status)
@@ -2660,29 +2660,35 @@ class CacheAPIHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 logger.error(f"Ошибка /clear-cache-specialization: {e}")
                 self._send_json(500, {"success": False, "error": str(e)})
+        elif self.path == "/reload-questions":
+            try:
+                logger.info("Получен API-запрос на перезагрузку кеша вопросов...")
+                questions_loader.reload_questions()
+                logger.info("Кеш вопросов успешно обновлен по API-запросу.")
+                self._send_json(200, {"success": True, "message": "Кеш вопросов успешно перезагружен"})
+            except Exception as e:
+                logger.error(f"Ошибка при перезагрузке кеша по API: {e}", exc_info=True)
+                self._send_json(500, {"success": False, "error": str(e)})
         elif self.path == "/send-message":
             try:
                 length = int(self.headers.get("Content-Length", 0))
                 body = self.rfile.read(length)
                 data = json.loads(body.decode("utf-8"))
-                text = data.get("message", "")
-                if not text:
-                    self._send_json(400, {"success": False, "error": "Пустое сообщение"})
+                message_text = data.get("message")
+                if not message_text:
+                    self._send_json(400, {"success": False, "error": "Сообщение не указано"})
                     return
-                result = send_message_to_all_users(text)
+                
+                # Запускаем отправку в отдельном потоке, чтобы не блокировать ответ
+                result = send_message_to_all_users(message_text)
                 self._send_json(200 if result["success"] else 500, result)
+            except json.JSONDecodeError:
+                self._send_json(400, {"success": False, "error": "Некорректный JSON"})
             except Exception as e:
-                logger.error(f"Ошибка /send-message: {e}")
-                self._send_json(500, {"success": False, "error": str(e)})
-        elif self.path == "/reload-questions":
-            try:
-                questions_loader.reload_questions()
-                self._send_json(200, {"success": True, "message": "Кеш вопросов успешно перезагружен"})
-            except Exception as e:
-                logger.error(f"Ошибка /reload-questions: {e}")
+                logger.error(f"Ошибка в API /send-message: {e}", exc_info=True)
                 self._send_json(500, {"success": False, "error": str(e)})
         else:
-            self._send_json(404, {"success": False, "error": "Not found"})
+            self._send_json(404, {"success": False, "error": "Эндпоинт не найден. Доступные: /clear-cache, /clear-cache-specialization, /reload-questions, /send-message"})
 
     def do_OPTIONS(self):
         # CORS pre-flight
@@ -2693,10 +2699,10 @@ class CacheAPIHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
 
-def start_cache_api_server():
-    """Запускает вспомогательный HTTP-сервер для управления кешем на 8007."""
-    logger.info("Запускаем Cache-API сервер на http://0.0.0.0:8007 …")
-    HTTPServer(("0.0.0.0", 8007), CacheAPIHandler).serve_forever()
+def start_telegram_bot_api_server():
+    """Запускает унифицированный HTTP-сервер для всех API функций на 8007."""
+    logger.info("Запускаем Telegram Bot API сервер на http://0.0.0.0:8007 …")
+    HTTPServer(("0.0.0.0", 8007), TelegramBotAPIHandler).serve_forever()
 
 def __run_main():
     """Запуск вспомогательного HTTP-сервера и Telegram-бота."""
@@ -2783,78 +2789,16 @@ async def generate_and_show_suggested_questions(chat_id: int,
 if __name__ == "__main__":
     __run_main()
 
-class ControlAPIHandler(BaseHTTPRequestHandler):
-    def _send_json(self, status: int, payload: dict):
-        self.send_response(status)
-        self.send_header('Content-type', 'application/json')
-        self.end_headers()
-        self.wfile.write(json.dumps(payload).encode('utf-8'))
 
-    def do_POST(self):
-        content_length = int(self.headers.get('Content-Length', 0))
-        post_data = self.rfile.read(content_length)
-        
-        if self.path == '/reload-questions':
-            try:
-                logger.info("Получен API-запрос на перезагрузку кеша вопросов...")
-                questions_loader.reload_questions()
-                logger.info("Кеш вопросов успешно обновлен по API-запросу.")
-                self._send_json(200, {'success': True, 'message': 'Кеш вопросов успешно перезагружен'})
-            except Exception as e:
-                logger.error(f"Ошибка при перезагрузке кеша по API: {e}", exc_info=True)
-                self._send_json(500, {'success': False, 'error': str(e)})
-        elif self.path == '/send-message':
-            try:
-                data = json.loads(post_data)
-                message_text = data.get('message')
-                if not message_text:
-                    self._send_json(400, {'success': False, 'error': 'No message provided'})
-                    return
-                
-                # Запускаем отправку в отдельном потоке, чтобы не блокировать ответ
-                threading.Thread(target=send_message_to_all_users, args=(message_text,)).start()
-                
-                self._send_json(200, {'success': True, 'message': 'Отправка сообщений запущена в фоновом режиме'})
-            except json.JSONDecodeError:
-                self._send_json(400, {'success': False, 'error': 'Invalid JSON'})
-            except Exception as e:
-                logger.error(f"Ошибка в API /send-message: {e}", exc_info=True)
-                self._send_json(500, {'success': False, 'error': str(e)})
-        else:
-            self._send_json(404, {'success': False, 'error': 'Endpoint not found'})
-    
-    def do_OPTIONS(self):
-        # CORS pre-flight
-        self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-        self.end_headers()
-
-def start_control_api_server():
-    """Запускает HTTP-сервер для управления ботом"""
-    try:
-        server_address = ('127.0.0.1', 8008)
-        httpd = HTTPServer(server_address, ControlAPIHandler)
-        logger.info(f"Запуск управляющего API-сервера на http://{server_address[0]}:{server_address[1]}")
-        httpd.serve_forever()
-    except Exception as e:
-        logger.error(f"Не удалось запустить управляющий API-сервер: {e}", exc_info=True)
 
 if __name__ == '__main__':
     logger.info("Запуск AI-ассистента...")
     
-    # Запускаем Cache API Server на порту 8007 для синхронизации с веб-приложением
-    logger.info("🚀 Запускаем Cache API Server на порту 8007 для синхронизации с веб-приложением...")
-    cache_api_thread = threading.Thread(target=start_cache_api_server, daemon=True)
-    cache_api_thread.start()
-    logger.info("✅ Cache API Server запущен успешно")
-    
-    # Запускаем Control API Server на порту 8008 для управления ботом
-    logger.info("🚀 Запускаем Control API Server на порту 8008 для управления ботом...")
-    control_api_thread = threading.Thread(target=start_control_api_server, daemon=True)
-    control_api_thread.start()
-    logger.info("✅ Control API Server запущен успешно")
+    # Запускаем унифицированный API Server на порту 8007
+    logger.info("🚀 Запускаем Telegram Bot API Server на порту 8007...")
+    api_thread = threading.Thread(target=start_telegram_bot_api_server, daemon=True)
+    api_thread.start()
+    logger.info("✅ Telegram Bot API Server запущен успешно")
     
     # Запускаем бота
     logger.info("🤖 Запускаем Telegram бот...")

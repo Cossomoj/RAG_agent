@@ -26,7 +26,7 @@ app.config['SESSION_PERMANENT'] = False
 app.config['SESSION_USE_SIGNER'] = True
 
 # Конфигурация URL-ов для продакшн
-TELEGRAM_BOT_URL = 'http://localhost:8007'
+TELEGRAM_BOT_API_URL = 'http://localhost:8007'  # Унифицированный API Server
 WEBAPP_URL = 'http://213.171.25.85:5000'
 
 # Инициализация базы данных и менеджеров
@@ -325,7 +325,7 @@ def clear_cache():
     
     # 1. Очищаем кеш телеграм-бота
     try:
-        response = requests.post(f'{TELEGRAM_BOT_URL}/clear-cache', timeout=10)
+        response = requests.post(f'{TELEGRAM_BOT_API_URL}/clear-cache', timeout=10)
         if response.status_code == 200:
             data = response.json()
             if data.get('success'):
@@ -405,7 +405,7 @@ def send_message():
         
         # Делаем HTTP запрос к API бота
         response = requests.post(
-            f'{TELEGRAM_BOT_URL}/send-message',
+            f'{TELEGRAM_BOT_API_URL}/send-message',
             json={'message': message},
             timeout=30  # Увеличиваем таймаут, так как отправка может занять время
         )
