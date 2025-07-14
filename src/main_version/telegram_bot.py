@@ -2624,20 +2624,9 @@ def handle_predefined_question_universal(call):
         )
 
 # ================================================================
-# Новый блок запуска (должен располагаться **после** определения
-# функции start_cache_api_server, чтобы избежать NameError)
+# Примечание: Блок запуска перенесен в конец файла для правильного
+# порядка определения функций
 # ================================================================
-
-if __name__ == "__main__":
-    # Запускаем вспомогательный HTTP-сервер кеша (порт 8007) в отдельном демоническом потоке
-    logger.info("🚀 Запускаем Cache API Server на порту 8007 для синхронизации с веб-приложением...")
-    api_thread = threading.Thread(target=start_cache_api_server, daemon=True)
-    api_thread.start()
-    logger.info("✅ Cache API Server запущен успешно")
-
-    # Запускаем Telegram-бот
-    logger.info("🤖 Запускаем Telegram бот...")
-    bot.polling(none_stop=False)
 
 # -----------------------------------------------------------------------------
 # HTTP-сервер для работы с кешем (порт 8007)
@@ -2845,7 +2834,7 @@ class ControlAPIHandler(BaseHTTPRequestHandler):
 def start_control_api_server():
     """Запускает HTTP-сервер для управления ботом"""
     try:
-        server_address = ('127.0.0.1', 8007)
+        server_address = ('127.0.0.1', 8008)
         httpd = HTTPServer(server_address, ControlAPIHandler)
         logger.info(f"Запуск управляющего API-сервера на http://{server_address[0]}:{server_address[1]}")
         httpd.serve_forever()
@@ -2855,12 +2844,20 @@ def start_control_api_server():
 if __name__ == '__main__':
     logger.info("Запуск AI-ассистента...")
     
-    # Запускаем управляющий API-сервер в отдельном потоке
-    api_thread = threading.Thread(target=start_control_api_server, daemon=True)
-    api_thread.start()
+    # Запускаем Cache API Server на порту 8007 для синхронизации с веб-приложением
+    logger.info("🚀 Запускаем Cache API Server на порту 8007 для синхронизации с веб-приложением...")
+    cache_api_thread = threading.Thread(target=start_cache_api_server, daemon=True)
+    cache_api_thread.start()
+    logger.info("✅ Cache API Server запущен успешно")
+    
+    # Запускаем Control API Server на порту 8008 для управления ботом
+    logger.info("🚀 Запускаем Control API Server на порту 8008 для управления ботом...")
+    control_api_thread = threading.Thread(target=start_control_api_server, daemon=True)
+    control_api_thread.start()
+    logger.info("✅ Control API Server запущен успешно")
     
     # Запускаем бота
-    logger.info("Запуск бесконечного опроса (polling)...")
+    logger.info("🤖 Запускаем Telegram бот...")
     try:
         bot.infinity_polling(skip_pending=True)
     except Exception as e:
