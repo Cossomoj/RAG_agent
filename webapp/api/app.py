@@ -33,44 +33,42 @@ cache_by_specialization = {}
 
 def get_cache_type_for_question(question_id):
     """
-    Определяет тип кеша для вопроса на основе поля specialization в БД.
+    Определяет тип кеша для вопроса.
+    
+    УНИФИЦИРОВАННАЯ ЛОГИКА (как в телеграм боте):
+    ВСЕ вопросы из библиотеки кешируются по специализации пользователя.
     
     Returns:
-        'by_specialization' - если specialization IS NULL (универсальный вопрос)
-        'general' - если specialization IS NOT NULL (специфичный вопрос)
-        'no_cache' - если вопрос не найден или не должен кешироваться
+        'by_specialization' - для всех вопросов из библиотеки
+        'no_cache' - для системных вопросов (777, 888) которые не кешируются
     """
     try:
-        # Специальные ID которые не кешируются
+        # Системные вопросы не кешируются
         if question_id in [777, 888]:
             return 'no_cache'
         
+        # Проверяем, что вопрос существует в БД
         conn = get_db_connection()
         if not conn:
-            return 'general'
+            logger.warning(f"Нет подключения к БД для question_id {question_id}, отключаем кеш")
+            return 'no_cache'
             
         cursor = conn.cursor()
-        cursor.execute("SELECT specialization FROM Questions WHERE question_id = ?", (question_id,))
+        cursor.execute("SELECT question_id FROM Questions WHERE question_id = ?", (question_id,))
         result = cursor.fetchone()
         conn.close()
         
         if not result:
-            # Если вопрос не найден в БД, используем общий кеш
-            logger.warning(f"Question ID {question_id} не найден в БД, используем общий кеш")
-            return 'general'
+            # Если вопрос не найден в БД, не кешируем
+            logger.warning(f"Question ID {question_id} не найден в БД, кеширование отключено")
+            return 'no_cache'
         
-        specialization = result["specialization"] if hasattr(result, "specialization") else result[0]
-        
-        if specialization is None:
-            # Универсальный вопрос - кешируем по специализации пользователя
-            return 'by_specialization'
-        else:
-            # Специфичный вопрос - используем общий кеш
-            return 'general'
+        # ВСЕ вопросы из библиотеки кешируются по специализации пользователя
+        return 'by_specialization'
             
     except Exception as e:
         logger.error(f"Ошибка при определении типа кеша для question_id {question_id}: {e}")
-        return 'general'  # Fallback к общему кешу
+        return 'no_cache'  # Fallback к отключению кеша
 
 # Функции для работы с базой данных Questions
 def get_db_connection():
@@ -210,41 +208,55 @@ SPECIALIZATIONS = [
 
 
 def clear_all_cache():
-    """Очистка всех кешей в веб-приложении"""
+    """
+    Функция для полной очистки всех кешей веб-приложения.
+    
+    НОВАЯ АРХИТЕКТУРА: cache_by_specialization[specialization][question_id] = answer
+    Очищает cache_dict и cache_by_specialization.
+    """
     global cache_dict, cache_by_specialization
     
-    count = len(cache_dict) + len(cache_by_specialization)
-    cache_dict.clear()
-    cache_by_specialization.clear()
-    
-    logger.info(f"Кеш веб-приложения очищен, удалено {count} записей.")
-    return count
+    try:
+        cache_dict_count = len(cache_dict)
+        spec_count = len(cache_by_specialization)
+        total_questions = sum(len(questions) for questions in cache_by_specialization.values())
+        
+        # Очищаем основной кеш
+        cache_dict.clear()
+        
+        # Очищаем кеш по специализациям
+        cache_by_specialization.clear()
+        
+        logger.info(f"🧹 ВСЕ КЕШИ ВЕБ-ПРИЛОЖЕНИЯ ОЧИЩЕНЫ: cache_dict({cache_dict_count}) + {spec_count} специализаций({total_questions} вопросов)")
+        return cache_dict_count + total_questions
+    except Exception as e:
+        logger.error(f"❌ Ошибка при очистке кешей веб-приложения: {e}")
+        return 0
 
 def clear_cache_for_specialization(specialization):
     """
     Функция для очистки кеша конкретной специализации в веб-приложении.
-    Очищает только записи для указанной специализации из cache_by_specialization.
+    
+    НОВАЯ АРХИТЕКТУРА: cache_by_specialization[specialization][question_id] = answer
+    Теперь очистка стала очень простой - просто удаляем ключ специализации.
     """
     global cache_by_specialization
     
     try:
         cleared_count = 0
         
-        # Проходим по всем question_id в кеше по специализации
-        for question_id in list(cache_by_specialization.keys()):
-            if specialization in cache_by_specialization[question_id]:
-                # Удаляем запись для данной специализации
-                del cache_by_specialization[question_id][specialization]
-                cleared_count += 1
-                
-                # Если для question_id больше нет записей, удаляем весь ключ
-                if not cache_by_specialization[question_id]:
-                    del cache_by_specialization[question_id]
+        if specialization in cache_by_specialization:
+            # Подсчитываем количество вопросов для данной специализации
+            cleared_count = len(cache_by_specialization[specialization])
+            # Удаляем всю специализацию из кэша
+            del cache_by_specialization[specialization]
+            logger.info(f"🧹 Очищен кэш веб-приложения для специализации '{specialization}': удалено {cleared_count} вопросов")
+        else:
+            logger.info(f"✅ Кэш веб-приложения для специализации '{specialization}' уже пуст")
         
-        logger.info(f"Очищено {cleared_count} записей кеша веб-приложения для специализации '{specialization}'")
         return cleared_count
     except Exception as e:
-        logger.error(f"Ошибка при очистке кеша веб-приложения для специализации '{specialization}': {e}")
+        logger.error(f"❌ Ошибка при очистке кеша веб-приложения для специализации '{specialization}': {e}")
         return 0
 
 def sync_clear_cache_with_telegram_bot(specialization):
@@ -296,18 +308,16 @@ async def handle_cached_request(question_id, question, user_id, specialization):
     try:
         cache_type = get_cache_type_for_question(question_id)
         
-        if cache_type == 'general' and question_id in cache_dict:
-            # Используем общий кеш
-            cached_answer_parts = cache_dict[question_id]
-            logger.info(f"Найден ответ в общем кеше для question_id={question_id}")
-        elif cache_type == 'by_specialization' and question_id in cache_by_specialization:
-            if specialization in cache_by_specialization[question_id]:
-                # Используем кеш по специализации
-                cached_answer_parts = cache_by_specialization[question_id][specialization]
-                logger.info(f"Найден ответ в кеше по специализации для question_id={question_id}, specialization={specialization}")
+        if cache_type == 'by_specialization':
+            # НОВАЯ АРХИТЕКТУРА: cache_by_specialization[specialization][question_id] = answer
+            if specialization in cache_by_specialization and question_id in cache_by_specialization[specialization]:
+                cached_answer_parts = cache_by_specialization[specialization][question_id]
+                logger.info(f"✅ Найден кешированный ответ в веб-приложении для specialization='{specialization}', question_id={question_id}")
             else:
+                logger.info(f"❌ Кеш не найден в веб-приложении для specialization='{specialization}', question_id={question_id}")
                 return None
         else:
+            logger.info(f"🚫 Вопрос question_id={question_id} не кешируется (cache_type={cache_type})")
             return None
         
         # Объединяем части ответа (как в телеграм боте)
@@ -496,17 +506,16 @@ async def send_websocket_question(question, user_id, specialization="", question
                 question_id_int = int(question_id)
                 cache_type = get_cache_type_for_question(question_id_int)
                 
-                if cache_type == 'general':
-                    # Общий кеш - используем массив частей ответа
-                    cache_dict[question_id_int] = answer_for_cache
-                    logger.info(f"Ответ закеширован в общем кеше: question_id={question_id_int}")
-                elif cache_type == 'by_specialization':
-                    # Кешируем по специализации - используем массив частей ответа
-                    if question_id_int not in cache_by_specialization:
-                        cache_by_specialization[question_id_int] = {}
-                    cache_by_specialization[question_id_int][specialization] = answer_for_cache
-                    logger.info(f"Ответ закеширован по специализации: question_id={question_id_int}, specialization={specialization}")
-                # cache_type == 'no_cache' - не кешируем (777, 888)
+                if cache_type == 'by_specialization':
+                    # НОВАЯ АРХИТЕКТУРА: cache_by_specialization[specialization][question_id] = answer
+                    if specialization not in cache_by_specialization:
+                        cache_by_specialization[specialization] = {}
+                    cache_by_specialization[specialization][question_id_int] = answer_for_cache
+                    logger.info(f"💾 Ответ сохранен в кэш веб-приложения: specialization='{specialization}', question_id={question_id_int}, фрагментов={len(answer_for_cache)}")
+                elif cache_type == 'no_cache':
+                    logger.info(f"🚫 Вопрос question_id={question_id_int} не кешируется (системный вопрос)")
+                else:
+                    logger.warning(f"⚠️ Неизвестный тип кеша '{cache_type}' для question_id={question_id_int}")
             
             return {
                 "answer": answer_for_continue_dialog.strip(),
@@ -835,22 +844,24 @@ def save_profile(user_id):
             return jsonify({'error': 'Отсутствуют данные для сохранения'}), 400
             
         # Получаем данные из запроса
-        new_specialization = data.get('specialization')
-        reminder_enabled = data.get('reminder_enabled', True)  # По умолчанию включено
+        new_specialization = data.get('specialization', '')
+        reminder_enabled = data.get('reminder_enabled', True)
         
         if not new_specialization:
             return jsonify({'error': 'Специализация обязательна'}), 400
-            
+        
+        # Больше не используем previousSpecialization - кеш не очищается
+        
+        # Сохраняем новые данные в БД
         conn = get_db_connection()
         if not conn:
             return jsonify({'error': 'Ошибка подключения к базе данных'}), 500
             
         cursor = conn.cursor()
         
-        # Получаем текущую специализацию для очистки кеша
+        # Проверяем существование пользователя
         cursor.execute("SELECT Specialization FROM Users WHERE user_id = ?", (user_id,))
         current_user = cursor.fetchone()
-        old_specialization = current_user[0] if current_user else None
         
         # Обновляем или создаем запись пользователя
         cursor.execute("""
@@ -861,18 +872,25 @@ def save_profile(user_id):
         conn.commit()
         conn.close()
         
-        # Очищаем кеш для старой специализации, если она отличается от новой
-        if old_specialization and old_specialization != new_specialization:
-            # Очищаем кеш веб-приложения
-            cleared_count = clear_cache_for_specialization(old_specialization)
-            logger.info(f"Пользователь {user_id} сменил специализацию с '{old_specialization}' на '{new_specialization}'. Очищено {cleared_count} записей кеша веб-приложения.")
-            
-            # Синхронизируем очистку кеша с телеграм-ботом
-            sync_success = sync_clear_cache_with_telegram_bot(old_specialization)
-            if sync_success:
-                logger.info(f"Кеш телеграм-бота для специализации '{old_specialization}' также очищен")
-            else:
-                logger.warning(f"Не удалось синхронизировать очистку кеша телеграм-бота для специализации '{old_specialization}'")
+        # АЛЬТЕРНАТИВНЫЙ ПОДХОД: Не очищаем кеш при смене специализации
+        # Кеш накапливается для всех специализаций и используется автоматически
+        # Раскомментируйте код ниже, если хотите очищать кеш при смене специализации
+        
+        # # Очищаем кеш для старой специализации, если она отличается от новой
+        # if old_specialization and old_specialization != new_specialization:
+        #     logger.info(f"🔄 СМЕНА СПЕЦИАЛИЗАЦИИ В ВЕБ-ПРИЛОЖЕНИИ: '{old_specialization}' → '{new_specialization}' для пользователя {user_id}")
+        #     
+        #     # Очищаем кеш веб-приложения
+        #     cleared_count = clear_cache_for_specialization(old_specialization)
+        #     logger.info(f"🧹 Очищен кеш веб-приложения: {cleared_count} записей для специализации '{old_specialization}'")
+        #     
+        #     # Синхронизируем очистку кеша с телеграм-ботом
+        #     logger.info(f"🔗 Синхронизируем очистку кеша с телеграм-ботом...")
+        #     sync_success = sync_clear_cache_with_telegram_bot(old_specialization)
+        #     if sync_success:
+        #         logger.info(f"✅ Кеш телеграм-бота для специализации '{old_specialization}' также очищен")
+        #     else:
+        #         logger.warning(f"❌ Не удалось синхронизировать очистку кеша телеграм-бота для специализации '{old_specialization}'")
         
         logger.info(f"Профиль пользователя {user_id} успешно сохранен")
         return jsonify({

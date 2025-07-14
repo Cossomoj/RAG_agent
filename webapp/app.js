@@ -1317,6 +1317,8 @@ function renderProfile() {
     
     specializationSelect.addEventListener('change', async function() {
         console.log('🔄 Изменение специализации:', this.value);
+        
+        // Больше не отслеживаем предыдущую специализацию - кеш не очищается
         AppState.profile.specialization = this.value;
         updateProfileInfo();
         
@@ -1357,11 +1359,20 @@ async function autoSaveProfile() {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(AppState.profile)
+            body: JSON.stringify({
+                ...AppState.profile
+                // previousSpecialization больше не передаем - кеш не очищается
+            })
         });
         
         if (response.ok) {
-            console.log('✅ Профиль автоматически сохранен в БД');
+            console.log('✅ Профиль автоматически сохранен');
+            
+            // Больше не обновляем previousSpecialization - кеш не очищается
+            
+            // Перезагружаем историю чатов после сохранения профиля
+            await loadHistory();
+            
             return true;
         } else {
             const errorText = await response.text();
@@ -1414,7 +1425,10 @@ async function saveProfile() {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(AppState.profile)
+            body: JSON.stringify({
+                ...AppState.profile
+                // previousSpecialization больше не передаем - кеш не очищается
+            })
         };
         
         console.log('📤 Отправляем запрос:', requestData);
@@ -1425,6 +1439,8 @@ async function saveProfile() {
         if (response.ok) {
             const responseData = await response.json();
             console.log('✅ Профиль сохранен успешно:', responseData);
+            
+            // Больше не обновляем previousSpecialization - кеш не очищается
             
             console.log('🔄 Перезагружаем вопросы для новой роли...');
             await loadQuestions(); // Перезагружаем вопросы для новой роли
@@ -2617,6 +2633,8 @@ async function loadUserProfile() {
             const profile = await response.json();
             console.log('✅ Профиль загружен из БД:', profile);
             
+            // Больше не сохраняем предыдущую специализацию - кеш не очищается
+            
             AppState.profile = {
                 ...profile
             };
@@ -2861,295 +2879,123 @@ function showConfirmationModal(title, message, onConfirm) {
         z-index: 10000;
         backdrop-filter: blur(4px);
     `;
-    
-    const modalContent = document.createElement('div');
-    modalContent.style.cssText = `
-        background: var(--tg-theme-bg-color);
-        border-radius: 12px;
-        padding: 24px;
-        max-width: 320px;
-        width: 90%;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-        animation: modalSlideIn 0.3s ease-out;
-    `;
-    
-    modalContent.innerHTML = `
-        <h3 style="
-            color: var(--tg-theme-text-color);
-            margin: 0 0 12px 0;
-            font-size: 18px;
-            font-weight: 600;
-            text-align: center;
-        ">${title}</h3>
-        <p style="
-            color: var(--tg-theme-subtitle-text-color);
-            margin: 0 0 24px 0;
-            font-size: 14px;
-            line-height: 1.4;
-            text-align: center;
-        ">${message}</p>
-        <div style="
-            display: flex;
-            gap: 12px;
-            justify-content: center;
-        ">
-            <button id="modal-cancel" style="
-                background: var(--tg-theme-secondary-bg-color);
-                color: var(--tg-theme-text-color);
-                border: none;
-                border-radius: 8px;
-                padding: 12px 24px;
-                font-size: 16px;
-                font-weight: 500;
-                cursor: pointer;
-                transition: all 0.2s ease;
-                min-width: 80px;
-            ">Отмена</button>
-            <button id="modal-confirm" style="
-                background: var(--tg-theme-destructive-text-color, #ff3b30);
-                color: white;
-                border: none;
-                border-radius: 8px;
-                padding: 12px 24px;
-                font-size: 16px;
-                font-weight: 500;
-                cursor: pointer;
-                transition: all 0.2s ease;
-                min-width: 80px;
-            ">Удалить</button>
-        </div>
-    `;
-    
-    modal.appendChild(modalContent);
     document.body.appendChild(modal);
     
-    // Добавляем стили для анимации
-    if (!document.getElementById('modal-animation-styles')) {
-        const style = document.createElement('style');
-        style.id = 'modal-animation-styles';
-        style.textContent = `
-            @keyframes modalSlideIn {
-                from {
-                    opacity: 0;
-                    transform: scale(0.9) translateY(-20px);
-                }
-                to {
-                    opacity: 1;
-                    transform: scale(1) translateY(0);
-                }
-            }
-        `;
-        document.head.appendChild(style);
-    }
+    // Создаем содержимое модального окна
+    const content = document.createElement('div');
+    content.style.cssText = `
+        background: var(--tg-theme-bg-color);
+        border-radius: 16px;
+        max-width: 90%;
+        max-height: 80%;
+        overflow-y: auto;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        padding: 20px;
+    `;
     
-    // Обработчики кнопок
-    const cancelButton = modalContent.querySelector('#modal-cancel');
-    const confirmButton = modalContent.querySelector('#modal-confirm');
+    // Добавляем заголовок
+    const header = document.createElement('div');
+    header.style.cssText = `
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--tg-theme-section-separator-color);
+    `;
     
-    const closeModal = () => {
-        modalContent.style.animation = 'modalSlideIn 0.2s ease-in reverse';
-        setTimeout(() => {
-            if (modal.parentNode) {
-                modal.parentNode.removeChild(modal);
-            }
-        }, 200);
+    const closeBtn = document.createElement('button');
+    closeBtn.innerHTML = '×';
+    closeBtn.style.cssText = `
+        background: none;
+        border: none;
+        font-size: 24px;
+        color: var(--tg-theme-hint-color);
+        cursor: pointer;
+        padding: 0;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+    `;
+    
+    closeBtn.onclick = () => {
+        modal.style.display = 'none';
     };
     
-    cancelButton.onclick = closeModal;
-    confirmButton.onclick = () => {
-        closeModal();
-        if (onConfirm) onConfirm();
+    header.appendChild(closeBtn);
+    
+    const titleElement = document.createElement('h3');
+    titleElement.textContent = title;
+    titleElement.style.cssText = `
+        color: var(--tg-theme-text-color);
+        font-size: 18px;
+        font-weight: 600;
+    `;
+    
+    header.appendChild(titleElement);
+    
+    // Добавляем сообщение
+    const messageElement = document.createElement('p');
+    messageElement.textContent = message;
+    messageElement.style.cssText = `
+        color: var(--tg-theme-text-color);
+        margin: 16px 0;
+    `;
+    
+    content.appendChild(header);
+    content.appendChild(messageElement);
+    
+    // Добавляем кнопки
+    const actions = document.createElement('div');
+    actions.style.cssText = `
+        display: flex;
+        justify-content: space-between;
+        margin-top: 20px;
+    `;
+    
+    const confirmBtn = document.createElement('button');
+    confirmBtn.textContent = 'Да';
+    confirmBtn.style.cssText = `
+        background: var(--tg-theme-button-color);
+        color: var(--tg-theme-button-text-color);
+        border: none;
+        border-radius: 8px;
+        padding: 12px 24px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    `;
+    
+    confirmBtn.onclick = onConfirm;
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Нет';
+    cancelBtn.style.cssText = `
+        background: transparent;
+        color: var(--tg-theme-button-color);
+        border: 1px solid var(--tg-theme-button-color);
+        border-radius: 8px;
+        padding: 12px 24px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    `;
+    
+    cancelBtn.onclick = () => {
+        modal.style.display = 'none';
     };
     
-    // Закрытие по клику на фон
-    modal.onclick = (e) => {
-        if (e.target === modal) {
-            closeModal();
-        }
-    };
+    actions.appendChild(confirmBtn);
+    actions.appendChild(cancelBtn);
     
-    // Hover эффекты для кнопок
-    [cancelButton, confirmButton].forEach(button => {
-        button.addEventListener('mousedown', () => {
-            button.style.transform = 'scale(0.95)';
-        });
-        
-        button.addEventListener('mouseup', () => {
-            button.style.transform = 'scale(1)';
-        });
-        
-        button.addEventListener('mouseleave', () => {
-            button.style.transform = 'scale(1)';
-        });
-    });
-}
-
-// Функция для получения корректного user_id
-function getUserId() {
-    console.log('🔍 Определяем user_id...');
+    content.appendChild(actions);
     
-    // Сначала пытаемся получить ID из Telegram
-    if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.id) {
-        console.log('✅ Используем Telegram user ID:', tg.initDataUnsafe.user.id);
-        console.log('📊 Полные данные пользователя Telegram:', tg.initDataUnsafe.user);
-        return tg.initDataUnsafe.user.id.toString();
-    }
+    modal.appendChild(content);
     
-    // Если есть в AppState
-    if (AppState.user && AppState.user.id) {
-        console.log('✅ Используем AppState user ID:', AppState.user.id);
-        console.log('📊 Полные данные AppState.user:', AppState.user);
-        return AppState.user.id.toString();
-    }
-    
-    // Попробуем получить из URL параметров (если мини-приложение запущено с параметрами)
-    const urlParams = new URLSearchParams(window.location.search);
-    const userIdFromUrl = urlParams.get('user_id');
-    if (userIdFromUrl) {
-        console.log('✅ Используем user ID из URL:', userIdFromUrl);
-        return userIdFromUrl;
-    }
-    
-    // Попробуем получить из localStorage (если ранее сохранили)
-    const savedUserId = localStorage.getItem('telegram_user_id');
-    if (savedUserId) {
-        console.log('✅ Используем сохраненный user ID:', savedUserId);
-        return savedUserId;
-    }
-    
-    // Отладочная информация о доступных данных
-    console.log('❌ Не удалось получить user_id. Отладочная информация:');
-    console.log('- tg объект:', tg);
-    console.log('- tg.initDataUnsafe:', tg?.initDataUnsafe);
-    console.log('- AppState.user:', AppState.user);
-    console.log('- URL параметры:', window.location.search);
-    console.log('- localStorage telegram_user_id:', localStorage.getItem('telegram_user_id'));
-    
-    console.warn('⚠️ Используем fallback: guest');
-    return 'guest';
-}
-
-// Функция для сохранения user_id в localStorage
-function saveUserId(userId) {
-    if (userId && userId !== 'guest') {
-        localStorage.setItem('telegram_user_id', userId);
-        console.log('User ID сохранен в localStorage:', userId);
-    }
-}
-
-
-
-// Функция для постобработки ответа от RAG
-function postProcessAnswer(text) {
-    if (!text || typeof text !== 'string') {
-        return text;
-    }
-    
-    let processed = text;
-    
-    // 1. Исправляем неправильные символы заголовков в середине текста
-    // Заменяем "###" без пробела на обычный текст
-    processed = processed.replace(/([^\n])###([^\s])/g, '$1$2');
-    
-    // Заменяем "##" без пробела на обычный текст  
-    processed = processed.replace(/([^\n])##([^\s])/g, '$1$2');
-    
-    // 2. Исправляем заголовки без пробелов
-    // Добавляем пробел после # если его нет
-    processed = processed.replace(/^(#{1,6})([^\s#])/gm, '$1 $2');
-    
-    // 3. Добавляем пустые строки после заголовков если их нет
-    processed = processed.replace(/^(#{1,6}\s+.+)$/gm, '$1\n');
-    
-    // 4. Исправляем списки без пробелов
-    // Добавляем пробел после цифры с точкой
-    processed = processed.replace(/^(\d+\.)([^\s])/gm, '$1 $2');
-    
-    // Добавляем пробел после тире
-    processed = processed.replace(/^([-*])([^\s])/gm, '$1 $2');
-    
-    // ИСПРАВЛЕНИЕ: Убираем лишние символы -- 
-    // Убираем строки содержащие только --
-    processed = processed.replace(/^--\s*$/gm, '');
-    
-    // Заменяем -- в начале строк на маркеры списков -
-    processed = processed.replace(/^--\s+/gm, '- ');
-    
-    // Убираем символы -- в середине текста (заменяем на обычный текст)
-    processed = processed.replace(/\s--\s/g, ' ');
-    
-    // Убираем -- как разделители между абзацами
-    processed = processed.replace(/\n--\n/g, '\n\n');
-    
-    // 5. Убираем лишние пустые строки (более 2 подряд)
-    processed = processed.replace(/\n{3,}/g, '\n\n');
-    
-    // 6. Исправляем структуру: добавляем пустые строки между разными типами блоков
-    // После заголовков перед списками
-    processed = processed.replace(/^(#{1,6}\s+.+)\n([-*\d])/gm, '$1\n\n$2');
-    
-    // После списков перед заголовками
-    processed = processed.replace(/^([-*\d].+)\n(#{1,6}\s)/gm, '$1\n\n$2');
-    
-    // После обычного текста перед заголовками
-    processed = processed.replace(/^([^#\n-*\d].+)\n(#{1,6}\s)/gm, '$1\n\n$2');
-    
-    return processed.trim();
-}
-
-// Функции для работы с настройками регулярных сообщений
-async function loadReminderSettings() {
-    try {
-        const userId = getUserId();
-        if (!userId || userId === 'guest') {
-            console.warn('⚠️ Не удалось загрузить настройки напоминаний: User ID не определен');
-            return;
-        }
-        
-        const response = await fetch(`${CONFIG.API_BASE_URL}/profile/${userId}/reminder`);
-        if (response.ok) {
-            const data = await response.json();
-            AppState.profile.reminder_enabled = data.reminder_enabled;
-        }
-    } catch (error) {
-        // Тихо обрабатываем ошибки загрузки настроек
-    }
-}
-
-async function updateReminderSettings(reminderEnabled) {
-    try {
-        const userId = getUserId();
-        if (!userId || userId === 'guest') {
-            throw new Error('User ID не определен');
-        }
-        
-        console.log(`🔄 Обновляем настройки напоминаний для пользователя ${userId}:`, reminderEnabled);
-        
-        const response = await fetch(`${CONFIG.API_BASE_URL}/profile/${userId}/reminder`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                reminder_enabled: reminderEnabled
-            })
-        });
-        
-        if (response.ok) {
-            const data = await response.json();
-            console.log('✅ Настройки напоминаний успешно обновлены:', data);
-            
-            // Синхронизируем состояние приложения с ответом сервера
-            AppState.profile.reminder_enabled = data.reminder_enabled;
-            
-            return data;
-        } else {
-            const errorText = await response.text();
-            console.error(`❌ Ошибка API при обновлении настроек: ${response.status} - ${errorText}`);
-            throw new Error(`Ошибка API: ${response.status} - ${errorText}`);
-        }
-    } catch (error) {
-        console.error('❌ Исключение при обновлении настроек напоминаний:', error);
-        throw error;
-    }
+    modal.style.display = 'flex';
 }

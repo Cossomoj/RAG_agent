@@ -94,8 +94,8 @@
             {% for user in users %}
             <tr>
                 <td>{{ user.user_id }}</td>
-                <td>{{ user.username or 'Не указано' }}</td>
-                <td>{{ user.user_fullname or 'Не указано' }}</td>
+                <td>{% if user.username and user.username != 'не указан' and user.username.strip() %}{{ user.username }}{% else %}Не указано{% endif %}</td>
+                <td>{% if user.user_fullname and user.user_fullname.strip() %}{{ user.user_fullname }}{% else %}Не указано{% endif %}</td>
                 <td>{{ user.create_time|datetime or 'Не указано' }}</td>
                 <td>{{ user.last_activity|datetime if user.last_activity else 'Нет активности' }}</td>
                 <td>{{ user.message_count or 0 }}</td>

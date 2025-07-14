@@ -289,8 +289,8 @@ class DatabaseOperations:
                 top_users = [
                     {
                         'user_id': row[0],
-                        'username': row[1] or 'Не указано',
-                        'user_fullname': row[2] or 'Не указано',
+                        'username': row[1] if (row[1] and row[1] != 'не указан' and row[1].strip()) else 'Не указано',
+                        'user_fullname': row[2] if (row[2] and row[2].strip()) else 'Не указано',
                         'message_count': row[3]
                     }
                     for row in cursor.fetchall()

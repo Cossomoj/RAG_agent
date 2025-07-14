@@ -65,88 +65,149 @@ cache_by_specialization = {}
 
 def get_cache_type_for_question(question_id):
     """
-    Определяет тип кеша для вопроса на основе поля specialization в БД.
+    Определяет тип кеша для вопроса.
+    
+    НОВАЯ ЛОГИКА: ВСЕ вопросы из библиотеки кешируются по специализации пользователя,
+    так как RAG система учитывает специализацию при генерации ответов.
     
     Returns:
-        'by_specialization' - если specialization IS NULL (универсальный вопрос)
-        'general' - если specialization IS NOT NULL (специфичный вопрос)
-        'no_cache' - если вопрос не найден или не должен кешироваться
+        'by_specialization' - для всех вопросов из библиотеки
+        'no_cache' - для системных вопросов (777, 888) которые не кешируются
     """
     try:
-        # Специальные ID которые не кешируются
+        # Системные вопросы не кешируются
         if question_id in [777, 888]:
             return 'no_cache'
         
+        # Проверяем, что вопрос существует в БД
         conn = sqlite3.connect(DATABASE_URL)
         cursor = conn.cursor()
-        cursor.execute("SELECT specialization FROM Questions WHERE question_id = ?", (question_id,))
+        cursor.execute("SELECT question_id FROM Questions WHERE question_id = ?", (question_id,))
         result = cursor.fetchone()
         conn.close()
         
         if not result:
-            # Если вопрос не найден в БД, используем общий кеш
-            logger.warning(f"Question ID {question_id} не найден в БД, используем общий кеш")
-            return 'general'
+            # Если вопрос не найден в БД, не кешируем
+            logger.warning(f"Question ID {question_id} не найден в БД, кеширование отключено")
+            return 'no_cache'
         
-        specialization = result[0]
-        
-        if specialization is None:
-            # Универсальный вопрос - кешируем по специализации пользователя
-            return 'by_specialization'
-        else:
-            # Специфичный вопрос - используем общий кеш
-            return 'general'
+        # ВСЕ вопросы из библиотеки кешируются по специализации пользователя
+        return 'by_specialization'
             
     except Exception as e:
         logger.error(f"Ошибка при определении типа кеша для question_id {question_id}: {e}")
-        return 'general'  # Fallback к общему кешу
+        return 'no_cache'  # Fallback к отключению кеша
 
 def clear_all_cache():
     """
     Функция для полной очистки всех кешей.
+    
+    НОВАЯ АРХИТЕКТУРА: cache_by_specialization[specialization][question_id] = answer
     Очищает cache_dict и cache_by_specialization.
     """
     global cache_dict, cache_by_specialization
     
     try:
+        cache_dict_count = len(cache_dict)
+        spec_count = len(cache_by_specialization)
+        total_questions = sum(len(questions) for questions in cache_by_specialization.values())
+        
         # Очищаем основной кеш
         cache_dict.clear()
         
         # Очищаем кеш по специализациям
         cache_by_specialization.clear()
         
-        logger.info("Все кеши успешно очищены")
+        logger.info(f"🧹 ВСЕ КЕШИ ОЧИЩЕНЫ: cache_dict({cache_dict_count}) + {spec_count} специализаций({total_questions} вопросов)")
         return True
     except Exception as e:
-        logger.error(f"Ошибка при очистке кешей: {e}")
+        logger.error(f"❌ Ошибка при очистке кешей: {e}")
         return False
 
 def clear_cache_for_specialization(specialization):
     """
     Функция для очистки кеша конкретной специализации.
-    Очищает только записи для указанной специализации из cache_by_specialization.
+    
+    НОВАЯ АРХИТЕКТУРА: cache_by_specialization[specialization][question_id] = answer
+    Теперь очистка стала очень простой - просто удаляем ключ специализации.
     """
     global cache_by_specialization
     
     try:
         cleared_count = 0
         
-        # Проходим по всем question_id в кеше по специализации
-        for question_id in list(cache_by_specialization.keys()):
-            if specialization in cache_by_specialization[question_id]:
-                # Удаляем запись для данной специализации
-                del cache_by_specialization[question_id][specialization]
-                cleared_count += 1
-                
-                # Если для question_id больше нет записей, удаляем весь ключ
-                if not cache_by_specialization[question_id]:
-                    del cache_by_specialization[question_id]
+        if specialization in cache_by_specialization:
+            # Подсчитываем количество вопросов для данной специализации
+            cleared_count = len(cache_by_specialization[specialization])
+            # Удаляем всю специализацию из кэша
+            del cache_by_specialization[specialization]
+            logger.info(f"🧹 Очищен кэш для специализации '{specialization}': удалено {cleared_count} вопросов")
+        else:
+            logger.info(f"✅ Кэш для специализации '{specialization}' уже пуст")
         
-        logger.info(f"Очищено {cleared_count} записей кеша для специализации '{specialization}'")
         return cleared_count
     except Exception as e:
-        logger.error(f"Ошибка при очистке кеша для специализации '{specialization}': {e}")
+        logger.error(f"❌ Ошибка при очистке кэша для специализации '{specialization}': {e}")
         return 0
+
+def clear_cache_on_specialization_change(old_specialization, new_specialization):
+    """
+    Функция для очистки кеша при смене специализации пользователя.
+    
+    НОВАЯ АРХИТЕКТУРА: cache_by_specialization[specialization][question_id] = answer
+    Теперь очистка стала максимально простой - удаляем старую специализацию.
+    
+    Args:
+        old_specialization: Предыдущая специализация пользователя
+        new_specialization: Новая специализация пользователя
+        
+    Returns:
+        dict: Статистика очистки
+    """
+    global cache_by_specialization, cache_dict
+    
+    try:
+        logger.info(f"🔄 СМЕНА СПЕЦИАЛИЗАЦИИ с '{old_specialization}' на '{new_specialization}'")
+        
+        # Логируем состояние кэша ДО очистки
+        old_spec_count = len(cache_by_specialization.get(old_specialization, {}))
+        cache_dict_count_before = len(cache_dict)
+        
+        logger.info(f"   ДО очистки: специализация '{old_specialization}' имеет {old_spec_count} вопросов в кэше")
+        logger.info(f"   ДО очистки: cache_dict имеет {cache_dict_count_before} записей")
+        
+        # Очищаем кеш для старой специализации (теперь это очень просто!)
+        cleared_by_spec = clear_cache_for_specialization(old_specialization) if old_specialization else 0
+        
+        # КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Принудительно очищаем весь cache_dict
+        if cache_dict:
+            cache_dict_count = len(cache_dict)
+            cache_dict.clear()
+            logger.warning(f"   🧹 ПРИНУДИТЕЛЬНО очищен cache_dict: удалено {cache_dict_count} записей")
+        else:
+            cache_dict_count = 0
+            logger.info(f"   ✅ cache_dict уже пуст")
+        
+        # Логируем состояние кэша ПОСЛЕ очистки
+        total_specs = len(cache_by_specialization)
+        new_spec_count = len(cache_by_specialization.get(new_specialization, {}))
+        
+        logger.info(f"   ПОСЛЕ очистки: всего специализаций в кэше: {total_specs}")
+        logger.info(f"   ПОСЛЕ очистки: новая специализация '{new_specialization}' имеет {new_spec_count} вопросов")
+        logger.info(f"   ПОСЛЕ очистки: cache_dict имеет {len(cache_dict)} записей")
+        
+        result = {
+            'by_specialization_count': cleared_by_spec,
+            'cache_dict_count': cache_dict_count
+        }
+        
+        logger.info(f"✅ СМЕНА СПЕЦИАЛИЗАЦИИ ЗАВЕРШЕНА: очищено {cleared_by_spec} вопросов + {cache_dict_count} из cache_dict")
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка при смене специализации: {e}")
+        return {'by_specialization_count': 0, 'cache_dict_count': 0}
 
 def send_message_to_all_users(message_text):
     """
@@ -279,6 +340,44 @@ def init_db():
 # Вызов функции для инициализации базы данных
 init_db()
 
+def cleanup_user_data():
+    """
+    Функция для очистки некорректных данных пользователей в БД.
+    Заменяет "не указан" и пустые строки на NULL.
+    """
+    try:
+        conn = sqlite3.connect(DATABASE_URL)
+        cursor = conn.cursor()
+        
+        # Заменяем "не указан" на NULL для username
+        cursor.execute('UPDATE Users SET username = NULL WHERE username = "не указан"')
+        username_updated = cursor.rowcount
+        
+        # Заменяем пустые строки на NULL для username
+        cursor.execute('UPDATE Users SET username = NULL WHERE username = ""')
+        username_updated += cursor.rowcount
+        
+        # Заменяем пустые строки на NULL для user_fullname
+        cursor.execute('UPDATE Users SET user_fullname = NULL WHERE user_fullname = ""')
+        fullname_updated = cursor.rowcount
+        
+        # Заменяем пробельные строки на NULL для user_fullname
+        cursor.execute('UPDATE Users SET user_fullname = NULL WHERE TRIM(user_fullname) = ""')
+        fullname_updated += cursor.rowcount
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"🧹 Очистка данных пользователей завершена: username обновлено {username_updated} записей, user_fullname обновлено {fullname_updated} записей")
+        return username_updated + fullname_updated
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка при очистке данных пользователей: {e}")
+        return 0
+
+# Запускаем очистку при старте бота
+cleanup_user_data()
+
 def require_onboarding(func):
     """
     Декоратор для проверки онбординга перед выполнением функции
@@ -349,10 +448,15 @@ def handle_specialization_selection(call):
     ''', (new_specialization, chat_id))
     conn.commit()
     
-    # Очищаем кеш для старой специализации, если она отличается от новой
-    if old_specialization and old_specialization != new_specialization:
-        cleared_count = clear_cache_for_specialization(old_specialization)
-        logger.info(f"Пользователь {chat_id} сменил специализацию с '{old_specialization}' на '{new_specialization}'. Очищено {cleared_count} записей кеша.")
+    # ВАРИАНТ 2: НЕ ОЧИЩАЕМ КЕШ ПРИ СМЕНЕ СПЕЦИАЛИЗАЦИИ
+    # Кеш накапливается для всех специализаций и используется автоматически
+    # Если нужно вернуть очистку кеша - раскомментируйте код ниже
+    
+    # # Очищаем кеш для старой специализации, если она отличается от новой
+    # if old_specialization and old_specialization != new_specialization:
+    #     cache_stats = clear_cache_on_specialization_change(old_specialization, new_specialization)
+    #     logger.info(f"Пользователь {chat_id} сменил специализацию с '{old_specialization}' на '{new_specialization}'. "
+    #                f"Кеш очищен: {cache_stats['by_specialization_count']} записей для старой специализации.")
     
     conn.close()
     
@@ -542,8 +646,15 @@ def redirect_to_onboarding(message):
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     user_id = message.chat.id
-    username = message.from_user.username or "не указан"
+    
+    # ИСПРАВЛЕНО: Правильная обработка данных пользователя из Telegram
+    username = message.from_user.username if message.from_user.username else None
+    
+    # Формируем полное имя и сохраняем NULL если пустое
     user_fullname = f"{message.from_user.first_name or ''} {message.from_user.last_name or ''}".strip()
+    user_fullname = user_fullname if user_fullname else None
+    
+    logger.info(f"👤 Пользователь {user_id}: username='{username}', fullname='{user_fullname}'")
     
     conn = sqlite3.connect(DATABASE_URL)
     cursor = conn.cursor()
@@ -1371,14 +1482,27 @@ def handle_role_specialization(call):
     current_user = cursor.fetchone()
     old_specialization = current_user[0] if current_user else None
     
-    # Обновляем Specialization
-    cursor.execute("UPDATE Users SET Specialization = ? WHERE user_id = ?", (new_specialization, user_id))
+    # Обновляем Specialization и устанавливаем is_onboarding = TRUE
+    cursor.execute("UPDATE Users SET Specialization = ?, is_onboarding = TRUE WHERE user_id = ?", (new_specialization, user_id))
     conn.commit()
     
-    # Очищаем кеш для старой специализации, если она отличается от новой
-    if old_specialization and old_specialization != new_specialization:
-        cleared_count = clear_cache_for_specialization(old_specialization)
-        logger.info(f"Пользователь {user_id} сменил специализацию с '{old_specialization}' на '{new_specialization}'. Очищено {cleared_count} записей кеша.")
+    # Обновляем is_onboarding в пустой строке
+    cursor.execute("UPDATE Users SET is_onboarding = FALSE WHERE user_id = ?", (user_id,))
+    conn.commit()
+    
+    # ВАРИАНТ 2: НЕ ОЧИЩАЕМ КЕШ ПРИ СМЕНЕ СПЕЦИАЛИЗАЦИИ
+    # Кеш накапливается для всех специализаций и используется автоматически
+    # Если нужно вернуть очистку кеша - раскомментируйте код ниже
+    
+    # # Очищаем кеш для старой специализации, если она отличается от новой  
+    # if old_specialization and old_specialization != new_specialization:
+    #     cache_stats = clear_cache_on_specialization_change(old_specialization, new_specialization)
+    #     logger.info(f"Пользователь {chat_id} сменил специализацию с '{old_specialization}' на '{new_specialization}'. "
+    #                f"Кеш очищен: {cache_stats['by_specialization_count']} записей для старой специализации.")
+    
+    conn.close()
+    
+    # Возврат в главное меню
     
     # Синхронизируем user_data с БД (только специализация)
     cursor.execute("SELECT Specialization FROM Users WHERE user_id = ?", (user_id,))
@@ -1469,15 +1593,19 @@ def handle_predefined_question_group_1(call):
 
     cache_type = get_cache_type_for_question(question_id)
     
-    if cache_type == 'general' and question_id in cache_dict:
-        asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
-    elif cache_type == 'by_specialization' and question_id in cache_by_specialization:
-        if specialization in cache_by_specialization[question_id]:
+    if cache_type == 'by_specialization':
+        # НОВАЯ АРХИТЕКТУРА: cache_by_specialization[specialization][question_id] = answer
+        if specialization in cache_by_specialization and question_id in cache_by_specialization[specialization]:
             asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
         else:
             vector_store = get_vector_store_for_specialization(specialization)
             asyncio.run(websocket_question_from_user(question, call.message, specialization, question_id, vector_store=vector_store))
+    elif cache_type == 'no_cache':
+        # Системные вопросы не кешируются, всегда генерируем новый ответ
+        vector_store = get_vector_store_for_specialization(specialization)
+        asyncio.run(websocket_question_from_user(question, call.message, specialization, question_id, vector_store=vector_store))
     else:
+        # Fallback для новых вопросов - генерируем ответ
         vector_store = get_vector_store_for_specialization(specialization)
         asyncio.run(websocket_question_from_user(question, call.message, specialization, question_id, vector_store=vector_store))
 
@@ -1514,15 +1642,19 @@ def handle_predefined_question_group_2(call):
 
     cache_type = get_cache_type_for_question(question_id)
     
-    if cache_type == 'general' and question_id in cache_dict:
-        asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
-    elif cache_type == 'by_specialization' and question_id in cache_by_specialization:
-        if specialization in cache_by_specialization[question_id]:
+    if cache_type == 'by_specialization':
+        # НОВАЯ АРХИТЕКТУРА: cache_by_specialization[specialization][question_id] = answer
+        if specialization in cache_by_specialization and question_id in cache_by_specialization[specialization]:
             asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
         else:
             vector_store = get_vector_store_for_specialization(specialization)
             asyncio.run(websocket_question_from_user(question, call.message, specialization, question_id, vector_store=vector_store))
+    elif cache_type == 'no_cache':
+        # Системные вопросы не кешируются, всегда генерируем новый ответ
+        vector_store = get_vector_store_for_specialization(specialization)
+        asyncio.run(websocket_question_from_user(question, call.message, specialization, question_id, vector_store=vector_store))
     else:
+        # Fallback для новых вопросов - генерируем ответ
         vector_store = get_vector_store_for_specialization(specialization)
         asyncio.run(websocket_question_from_user(question, call.message, specialization, question_id, vector_store=vector_store))
 
@@ -1553,15 +1685,19 @@ def handle_predefined_question_group_2(call):
 
     cache_type = get_cache_type_for_question(question_id)
     
-    if cache_type == 'general' and question_id in cache_dict:
-        asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
-    elif cache_type == 'by_specialization' and question_id in cache_by_specialization:
-        if specialization in cache_by_specialization[question_id]:
+    if cache_type == 'by_specialization':
+        # НОВАЯ АРХИТЕКТУРА: cache_by_specialization[specialization][question_id] = answer
+        if specialization in cache_by_specialization and question_id in cache_by_specialization[specialization]:
             asyncio.run(handling_cached_requests(question_id, call.message, question, specialization))
         else:
             vector_store = get_vector_store_for_specialization(specialization)
             asyncio.run(websocket_question_from_user(question, call.message, specialization, question_id, vector_store=vector_store))
+    elif cache_type == 'no_cache':
+        # Системные вопросы не кешируются, всегда генерируем новый ответ
+        vector_store = get_vector_store_for_specialization(specialization)
+        asyncio.run(websocket_question_from_user(question, call.message, specialization, question_id, vector_store=vector_store))
     else:
+        # Fallback для новых вопросов - генерируем ответ
         vector_store = get_vector_store_for_specialization(specialization)
         asyncio.run(websocket_question_from_user(question, call.message, specialization, question_id, vector_store=vector_store))
 
@@ -1775,17 +1911,22 @@ def process_custom_question(message):
     asyncio.run(websocket_question_from_user(question, message, specialization, question_id, show_suggested_questions=True, vector_store=vector_store))
 
 async def handling_cached_requests(question_id, message, question, specialization):
-    logger.debug("Используется кешированное сообщение")
+    logger.debug("📦 Используется кешированное сообщение")
 
     cache_type = get_cache_type_for_question(question_id)
     
-    if cache_type == 'general':
-        arr = cache_dict[question_id]
-    elif cache_type == 'by_specialization':
-        arr = cache_by_specialization[question_id][specialization]
+    if cache_type == 'by_specialization':
+        # НОВАЯ АРХИТЕКТУРА: cache_by_specialization[specialization][question_id] = answer
+        if specialization in cache_by_specialization and question_id in cache_by_specialization[specialization]:
+            arr = cache_by_specialization[specialization][question_id]
+            logger.info(f"✅ Получен кэшированный ответ для specialization='{specialization}', question_id={question_id}")
+        else:
+            logger.error(f"❌ Кэш не найден для specialization='{specialization}', question_id={question_id}")
+            return
     else:
-        logger.error(f"Попытка получить кеш для некешируемого question_id {question_id}")
+        logger.error(f"❌ Попытка получить кеш для некешируемого question_id {question_id} (cache_type={cache_type})")
         return
+        
     full_ans_for_context = ""
 
     chat_id = message.chat.id
@@ -1963,15 +2104,16 @@ async def websocket_question_from_user(question, message, specialization, questi
                 # Кэшируем ответы на основе типа вопроса из БД
                 cache_type = get_cache_type_for_question(question_id)
                 
-                if cache_type == 'general':
-                    cache_dict[question_id] = answer_for_cache
-                    logger.info(f"Ответ сохранен в общий кеш для question_id={question_id}")
-                elif cache_type == 'by_specialization':
-                    if question_id not in cache_by_specialization:
-                        cache_by_specialization[question_id] = {}
-                    cache_by_specialization[question_id][specialization] = answer_for_cache
-                    logger.info(f"Ответ сохранен в кеш по специализации для question_id={question_id}, specialization={specialization}")
-                # cache_type == 'no_cache' - не кешируем (777, 888)
+                if cache_type == 'by_specialization':
+                    # НОВАЯ АРХИТЕКТУРА: cache_by_specialization[specialization][question_id] = answer
+                    if specialization not in cache_by_specialization:
+                        cache_by_specialization[specialization] = {}
+                    cache_by_specialization[specialization][question_id] = answer_for_cache
+                    logger.info(f"💾 Ответ сохранен в кэш: specialization='{specialization}', question_id={question_id}, фрагментов={len(answer_for_cache)}")
+                elif cache_type == 'no_cache':
+                    logger.info(f"Вопрос question_id={question_id} не кешируется (системный вопрос)")
+                else:
+                    logger.warning(f"Неизвестный тип кеша '{cache_type}' для question_id={question_id}")
                 
             dialogue_context[chat_id].append({"role": "assistant", "content": answer_for_countinue_dialog})
             save_message_in_db(chat_id, "assistant", answer_for_countinue_dialog)
@@ -2028,8 +2170,11 @@ current_timenow = datetime.now(moscow_tz).strftime("%H:%M")
 def handle_feedback(message):
     user_feedback = message.text
     chat_id = message.chat.id
-    username = message.from_user.username or "не указан"
+    
+    # ИСПРАВЛЕНО: Правильная обработка данных для отображения
+    username = message.from_user.username or "не указан"  # Здесь можно оставить для отображения
     user_fullname = f"{message.from_user.first_name or ''} {message.from_user.last_name or ''}".strip()
+    user_fullname = user_fullname if user_fullname else "не указано"  # Для отображения
 
     feedback_text = (
         f"📨 *Новый отзыв от пользователя:*\n"
@@ -2436,22 +2581,27 @@ def handle_predefined_question_universal(call):
     
     # ДОБАВЛЕНО: Проверяем кеш перед отправкой в RAG на основе типа вопроса из БД
     cache_type = get_cache_type_for_question(question_id)
+    logger.info(f"[{chat_id}] 🔍 ПРОВЕРКА КЭША: question_id={question_id}, cache_type='{cache_type}', specialization='{specialization}'")
     
-    if cache_type == 'general' and question_id in cache_dict:
-        logger.info(f"[{chat_id}] Найден ответ в общем кеше для question_id={question_id}")
-        asyncio.run(handling_cached_requests(question_id, call.message, question_text, specialization))
-        return
-    elif cache_type == 'by_specialization' and question_id in cache_by_specialization:
-        if specialization in cache_by_specialization[question_id]:
-            logger.info(f"[{chat_id}] Найден ответ в кеше по специализации для question_id={question_id}, specialization={specialization}")
+    if cache_type == 'by_specialization':
+        # НОВАЯ АРХИТЕКТУРА: cache_by_specialization[specialization][question_id] = answer
+        if specialization in cache_by_specialization and question_id in cache_by_specialization[specialization]:
+            cached_questions = list(cache_by_specialization[specialization].keys())
+            logger.info(f"[{chat_id}] ✅ НАЙДЕН КЭШ для specialization='{specialization}', question_id={question_id}")
+            logger.info(f"[{chat_id}] 📋 В кэше для '{specialization}' всего вопросов: {len(cached_questions)}")
             asyncio.run(handling_cached_requests(question_id, call.message, question_text, specialization))
             return
         else:
-            logger.info(f"[{chat_id}] В кеше по специализации нет данных для question_id={question_id}, specialization={specialization}")
+            spec_questions = len(cache_by_specialization.get(specialization, {}))
+            total_specs = list(cache_by_specialization.keys())
+            logger.info(f"[{chat_id}] ❌ КЭШ НЕ НАЙДЕН для specialization='{specialization}', question_id={question_id}")
+            logger.info(f"[{chat_id}] 📊 В кэше '{specialization}': {spec_questions} вопросов, всего специализаций: {total_specs}")
     elif cache_type == 'no_cache':
-        logger.info(f"[{chat_id}] question_id={question_id} не кешируется, отправляем в RAG")
+        logger.info(f"[{chat_id}] 🚫 question_id={question_id} НЕ кешируется, отправляем в RAG")
     else:
-        logger.info(f"[{chat_id}] Кеш не найден для question_id={question_id}, отправляем в RAG")
+        logger.info(f"[{chat_id}] 📭 Неопределенный тип кэша '{cache_type}' для question_id={question_id}")
+        
+    logger.info(f"[{chat_id}] 🚀 Отправляем в RAG для генерации нового ответа")
     
     # Если кеш не найден, отправляем в RAG
     typing_message = bot.send_message(chat_id, "<i>Печатаю...</i>", parse_mode='HTML')
@@ -2478,12 +2628,15 @@ def handle_predefined_question_universal(call):
 # функции start_cache_api_server, чтобы избежать NameError)
 # ================================================================
 
-if False and __name__ == "__main__":
+if __name__ == "__main__":
     # Запускаем вспомогательный HTTP-сервер кеша (порт 8007) в отдельном демоническом потоке
+    logger.info("🚀 Запускаем Cache API Server на порту 8007 для синхронизации с веб-приложением...")
     api_thread = threading.Thread(target=start_cache_api_server, daemon=True)
     api_thread.start()
+    logger.info("✅ Cache API Server запущен успешно")
 
     # Запускаем Telegram-бот
+    logger.info("🤖 Запускаем Telegram бот...")
     bot.polling(none_stop=False)
 
 # -----------------------------------------------------------------------------
