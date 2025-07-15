@@ -850,6 +850,8 @@ def save_profile(user_id):
         new_specialization = data.get('specialization', '')
         reminder_enabled = data.get('reminder_enabled', True)
         is_onboarding = data.get('is_onboarding', None)
+        username = data.get('username', '')
+        user_fullname = data.get('user_fullname', '')
         
         if not new_specialization:
             return jsonify({'error': 'Специализация обязательна'}), 400
@@ -860,7 +862,7 @@ def save_profile(user_id):
         conn = get_db_connection()
         if not conn:
             return jsonify({'error': 'Ошибка подключения к базе данных'}), 500
-            
+        
         cursor = conn.cursor()
         
         # Проверяем существование пользователя
@@ -873,21 +875,21 @@ def save_profile(user_id):
             if is_onboarding is not None:
                 cursor.execute("""
                     UPDATE Users 
-                    SET Specialization = ?, reminder = ?, is_onboarding = ?
+                    SET Specialization = ?, reminder = ?, is_onboarding = ?, username = ?, user_fullname = ?
                     WHERE user_id = ?
-                """, (new_specialization, reminder_enabled, is_onboarding, user_id))
+                """, (new_specialization, reminder_enabled, is_onboarding, username, user_fullname, user_id))
             else:
                 cursor.execute("""
                     UPDATE Users 
-                    SET Specialization = ?, reminder = ?
+                    SET Specialization = ?, reminder = ?, username = ?, user_fullname = ?
                     WHERE user_id = ?
-                """, (new_specialization, reminder_enabled, user_id))
+                """, (new_specialization, reminder_enabled, username, user_fullname, user_id))
         else:
             # Создаем нового пользователя
             cursor.execute("""
-                INSERT INTO Users (user_id, Specialization, reminder, create_time, is_onboarding)
-                VALUES (?, ?, ?, ?, ?)
-            """, (user_id, new_specialization, reminder_enabled, datetime.now(), is_onboarding if is_onboarding is not None else 1))
+                INSERT INTO Users (user_id, Specialization, reminder, create_time, is_onboarding, username, user_fullname)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (user_id, new_specialization, reminder_enabled, datetime.now(), is_onboarding if is_onboarding is not None else 1, username, user_fullname))
         
         conn.commit()
         conn.close()

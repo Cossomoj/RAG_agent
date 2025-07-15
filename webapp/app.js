@@ -3053,8 +3053,14 @@ function createOnboardingScreen() {
     
     specializationSelection.innerHTML = '';
     
+    // Добавляем приветствие и объяснение
+    const welcome = document.createElement('div');
+    welcome.style.cssText = 'margin-bottom: 24px; text-align: center;';
+    specializationSelection.appendChild(welcome);
+    
     // Создаем кнопки для каждой специализации
     specializations.forEach(spec => {
+        const specName = spec.label;
         const button = document.createElement('button');
         button.className = 'specialization-button';
         button.style.cssText = `
@@ -3075,19 +3081,19 @@ function createOnboardingScreen() {
         
         // Добавляем эмодзи для каждой специализации
         const emojis = {
-            'Python-разработчик': '🐍',
-            'Java-разработчик': '☕',
-            'Web-разработчик': '🌐',
-            'Системный аналитик': '📊',
-            'QA-инженер': '🧪'
+            'Python': '🐍',
+            'Java': '☕',
+            'WEB': '🌐',
+            'Аналитик': '📊',
+            'Тестировщик': '🧪'
         };
         
         button.innerHTML = `
-            <span style="font-size: 24px;">${emojis[spec] || '💼'}</span>
-            <span>${spec}</span>
+            <span style=\"font-size: 24px;\">${emojis[specName] || '💼'}</span>
+            <span>${specName}</span>
         `;
         
-        button.addEventListener('click', () => selectSpecialization(spec));
+        button.addEventListener('click', () => selectSpecialization(spec.value));
         
         button.addEventListener('mouseenter', () => {
             button.style.borderColor = 'var(--tg-theme-button-color)';
@@ -3111,8 +3117,14 @@ async function selectSpecialization(specialization) {
     try {
         const userId = getUserId();
         const isGuestUser = userId === '999999999';
-        
-        // Сохраняем профиль с выбранной специализацией
+        // Получаем имя пользователя и username из Telegram WebApp API
+        let username = '';
+        let user_fullname = '';
+        if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
+            username = tg.initDataUnsafe.user.username || '';
+            user_fullname = ((tg.initDataUnsafe.user.first_name || '') + ' ' + (tg.initDataUnsafe.user.last_name || '')).trim();
+        }
+        // Сохраняем профиль с выбранной специализацией и именем
         const response = await fetch(`${CONFIG.API_BASE_URL}/profile/${userId}`, {
             method: 'POST',
             headers: {
@@ -3121,7 +3133,9 @@ async function selectSpecialization(specialization) {
             body: JSON.stringify({
                 specialization: specialization,
                 reminder_enabled: true,
-                is_onboarding: isGuestUser ? 0 : 1  // Для гостевых пользователей is_onboarding остается 0
+                is_onboarding: isGuestUser ? 0 : 1,  // Для гостевых пользователей is_onboarding остается 0
+                username: username,
+                user_fullname: user_fullname
             })
         });
         
