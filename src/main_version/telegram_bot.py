@@ -120,7 +120,7 @@ def message_sender_worker():
     
     РЕШЕНИЕ ПРОБЛЕМЫ ERROR 409:
     - Использует отдельный объект newsletter_bot для отправки сообщений
-    - Не конфликтует с bot.infinity_polling() в основном потоке
+    - Не конфликтует с newsletter_bot.infinity_polling() в основном потоке
     - Обрабатывает сообщения последовательно из thread-safe очереди
     - Включает мониторинг и статистику
     """
@@ -147,7 +147,7 @@ def message_sender_worker():
             
             try:
                 # КРИТИЧНО: Используем отдельный объект бота для отправки
-                newsletter_bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup)
+                newsletter_newsletter_bot.send_message(chat_id=chat_id, text=text, reply_markup=reply_markup)
                 logger.info(f"✅ Сообщение успешно отправлено пользователю {chat_id} через очередь")
                 message_stats.increment_sent()
                 
@@ -184,7 +184,7 @@ def safe_send_message(chat_id, text, reply_markup=None, priority=False):
     
     РЕШЕНИЕ ПРОБЛЕМЫ ERROR 409:
     - Все сообщения (включая рассылку) отправляются через эту функцию
-    - Предотвращает конфликт с bot.infinity_polling()
+    - Предотвращает конфликт с newsletter_bot.infinity_polling()
     - Обеспечивает последовательную отправку сообщений
     
     Args:
@@ -574,7 +574,7 @@ def require_onboarding(func):
         return func(message, *args, **kwargs)
     return wrapper
 
-@bot.message_handler(commands=['onboarding'])
+@newsletter_bot.message_handler(commands=['onboarding'])
 def start_onboarding(message):
     chat_id = message.chat.id
     
@@ -593,11 +593,11 @@ def start_onboarding(message):
     # Добавляем кнопку "В начало"
     keyboard.add(types.InlineKeyboardButton(text="В начало", callback_data="start"))
     
-    bot.send_message(chat_id, "Выберите вашу специализацию:", reply_markup=keyboard)
+    newsletter_bot.send_message(chat_id, "Выберите вашу специализацию:", reply_markup=keyboard)
 
 # Обработчик выбора роли удален, так как роль больше не используется
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith("spec_for_db_"))
+@newsletter_bot.callback_query_handler(func=lambda call: call.data.startswith("spec_for_db_"))
 def handle_specialization_selection(call):
     chat_id = call.message.chat.id
     selected_spec = call.data.replace("spec_for_db_", "")
@@ -641,7 +641,7 @@ def handle_specialization_selection(call):
     conn.close()
     
     # Показываем сообщение об успешном завершении онбординга
-    bot.edit_message_text(
+    newsletter_bot.edit_message_text(
         chat_id=chat_id,
         message_id=call.message.message_id,
         text=f"Отлично! Ваша специализация: {new_specialization}"
@@ -854,13 +854,13 @@ def redirect_to_onboarding(message):
     else:
         chat_id = message.chat.id
         
-    bot.send_message(
+    newsletter_bot.send_message(
         chat_id,
         "Для использования бота необходимо пройти онбординг. Используйте команду /onboarding"
     )
 
 # Обработчик команды /start
-@bot.message_handler(commands=['start'])
+@newsletter_bot.message_handler(commands=['start'])
 def send_welcome(message):
     user_id = message.chat.id
     
@@ -911,7 +911,7 @@ def send_welcome(message):
     button = types.InlineKeyboardButton(text="Начать", callback_data="start")
     markup.add(button)
     
-    bot.send_message(
+    newsletter_bot.send_message(
         message.chat.id, 
         f"Добро пожаловать в GigaMentor, {user_fullname}! 🤖\n\n"
         f"Я - ваш персональный ИИ-ассистент. Для взаимодействия со мной:\n\n"
@@ -922,7 +922,7 @@ def send_welcome(message):
     )
 
 # Обработчик нажатия кнопки Start
-@bot.callback_query_handler(func=lambda call: call.data == "start")
+@newsletter_bot.callback_query_handler(func=lambda call: call.data == "start")
 def handle_start(call):
     chat_id = call.message.chat.id
     
@@ -942,10 +942,10 @@ def handle_start(call):
     markup.add(*roles)
     
     # Отправляем новое сообщение с главным меню 
-    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Меню", reply_markup=markup)
+    newsletter_bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Меню", reply_markup=markup)
 
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data == "giga_mentor")
+@newsletter_bot.callback_query_handler(func=lambda call: call.data == "giga_mentor")
 def handle_giga_mentor(call):
     chat_id = call.message.chat.id
     if not check_onboarding(chat_id):
@@ -965,14 +965,14 @@ def handle_giga_mentor(call):
     ]
     markup.add(*roles)
 
-    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=(
+    newsletter_bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=(
         "'Как пользоваться' - для просмотра краткой инструкции по использованию\n"
         "'Обратная связь' - для отправки обратной связи\n"
         "'Команда' - для просмотра контактов команды разработки"
     ), reply_markup=markup)
 
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data == "restart_onboarding")
+@newsletter_bot.callback_query_handler(func=lambda call: call.data == "restart_onboarding")
 def handle_restart_onboarding(call):
     chat_id = call.message.chat.id
     
@@ -993,7 +993,7 @@ def handle_restart_onboarding(call):
     )
     
     # Отправляем сообщение с текущими данными и кнопками
-    bot.edit_message_text(
+    newsletter_bot.edit_message_text(
         chat_id=chat_id,
         message_id=call.message.message_id,
         text=f"Ваша специализация: {specialization}\n\n"
@@ -1003,13 +1003,13 @@ def handle_restart_onboarding(call):
         reply_markup=markup
     )
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data == "onboarding")
+@newsletter_bot.callback_query_handler(func=lambda call: call.data == "onboarding")
 def handle_pop_up_onboarding(call):
     start_onboarding(call.message)
 
 
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data == "personal_account")
+@newsletter_bot.callback_query_handler(func=lambda call: call.data == "personal_account")
 def handle_personal_account(call):
     chat_id = call.message.chat.id
     # Проверяем статус онбординга
@@ -1027,7 +1027,7 @@ def handle_personal_account(call):
     markup.add(*roles)
     
     # Отправляем сообщение с кнопками
-    bot.edit_message_text(
+    newsletter_bot.edit_message_text(
         chat_id=chat_id,
         message_id=call.message.message_id,
         text="Личный кабинет\nВыберите действие:",
@@ -1036,7 +1036,7 @@ def handle_personal_account(call):
 
 # Обработчик нажатия кнопки "Поставьте напоминание"
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data == "menu_rem")
+@newsletter_bot.callback_query_handler(func=lambda call: call.data == "menu_rem")
 def handle_reminder(call):
     markup = types.InlineKeyboardMarkup(row_width=1)
     back_button = ([types.InlineKeyboardButton(text="Запланировать сообщение на тему", callback_data="rem_by_user"),
@@ -1044,15 +1044,15 @@ def handle_reminder(call):
                    types.InlineKeyboardButton(text="Мои уведомления", callback_data="my_reminders"),
                    types.InlineKeyboardButton(text="В начало", callback_data="start")])
     markup.add(*back_button)
-    bot.edit_message_text(chat_id = call.message.chat.id, message_id=call.message.message_id, text="Вы находитесь в разделе напоминания\nВыберите дальнейшие действия:", reply_markup=markup)
+    newsletter_bot.edit_message_text(chat_id = call.message.chat.id, message_id=call.message.message_id, text="Вы находитесь в разделе напоминания\nВыберите дальнейшие действия:", reply_markup=markup)
 
 
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data.startswith("whatido"))
+@newsletter_bot.callback_query_handler(func=lambda call: call.data.startswith("whatido"))
 def handle_other(call):
     bot.clear_step_handler_by_chat_id(call.message.chat.id)
 
-    bot.edit_message_text(
+    newsletter_bot.edit_message_text(
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         text=(
@@ -1068,23 +1068,23 @@ def handle_other(call):
     )
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton(text="В начало", callback_data="start"))
-    bot.send_message(call.message.chat.id, "Вы можете продолжить работу, вернувшись в начало:", reply_markup=markup)
+    newsletter_bot.send_message(call.message.chat.id, "Вы можете продолжить работу, вернувшись в начало:", reply_markup=markup)
 
 
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data.startswith("feedback"))
+@newsletter_bot.callback_query_handler(func=lambda call: call.data.startswith("feedback"))
 def handle_other_buttons(call):
     if call.data == "feedback":
-        bot.send_message(call.message.chat.id, "📝 *Оставить ОС*\n\nНапишите, о чем хотите оставить ОС — начнём! 🌟",
+        newsletter_bot.send_message(call.message.chat.id, "📝 *Оставить ОС*\n\nНапишите, о чем хотите оставить ОС — начнём! 🌟",
                          parse_mode="Markdown")
         bot.register_next_step_handler(call.message, handle_feedback)
 
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data == "team")
+@newsletter_bot.callback_query_handler(func=lambda call: call.data == "team")
 def handle_team(call):
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton(text="В начало", callback_data="start"))
-    bot.edit_message_text(
+    newsletter_bot.edit_message_text(
         chat_id = call.message.chat.id,
         message_id=call.message.message_id,
         text = "@dradns \n@betonnnnnnnn \n@latexala \n@alexr_home \n@leanorac \n@kathlynw \n@grahamchik \n@biryukovaoly \n@Mplusk \nПриглашаем работать над ИИ-агентом вместе с нами! Напиши @biryukovaoly, чтобы присоединиться.",
@@ -1092,7 +1092,7 @@ def handle_team(call):
 
 
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data == "my_reminders")
+@newsletter_bot.callback_query_handler(func=lambda call: call.data == "my_reminders")
 def handle_print_reminders(call):
     user_id = call.from_user.id
     current_status = get_reminder_status(user_id)
@@ -1107,10 +1107,10 @@ def handle_print_reminders(call):
     markup = types.InlineKeyboardMarkup(row_width=1)
     back_button = ([types.InlineKeyboardButton(text="В начало", callback_data="start")])
     markup.add(*back_button)
-    bot.edit_message_text(chat_id = call.message.chat.id, message_id=call.message.message_id, text=f"➕ Запланированные сообщения, настроенные вами:\n{reminder_text}\n⏰ Регулярные сообщения от ИИ-агента:\n📅 Каждую пятницу в 19:00 вы будете получатьсообщение с анализом вашей истории диалога\n{'✅ Вкл' if current_status else '❌ Выкл'}", parse_mode="Markdown", reply_markup=markup)
+    newsletter_bot.edit_message_text(chat_id = call.message.chat.id, message_id=call.message.message_id, text=f"➕ Запланированные сообщения, настроенные вами:\n{reminder_text}\n⏰ Регулярные сообщения от ИИ-агента:\n📅 Каждую пятницу в 19:00 вы будете получатьсообщение с анализом вашей истории диалога\n{'✅ Вкл' if current_status else '❌ Выкл'}", parse_mode="Markdown", reply_markup=markup)
 
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data == "on_reminder")
+@newsletter_bot.callback_query_handler(func=lambda call: call.data == "on_reminder")
 def handle_on_reminder(call):
     user_id = call.from_user.id
     # Получаем текущий статус уведомлений
@@ -1127,7 +1127,7 @@ def handle_on_reminder(call):
     markup.add(*other_buttons)
 
     # Редактируем сообщение с новым текстом и клавиатурой
-    bot.edit_message_text(
+    newsletter_bot.edit_message_text(
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         text=f"Вы находитесь в разделе управления уведомлениями.\n{status_text}\nВыберите действие:",
@@ -1135,7 +1135,7 @@ def handle_on_reminder(call):
     )
 
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data in ["rem_on", "rem_of"])
+@newsletter_bot.callback_query_handler(func=lambda call: call.data in ["rem_on", "rem_of"])
 def handle_reminder_toggle(call):
     user_id = call.from_user.id
     if call.data == "rem_on":
@@ -1159,7 +1159,7 @@ def handle_reminder_toggle(call):
     markup.add(*other_buttons)
 
     # Редактируем сообщение с новым текстом и клавиатурой
-    bot.edit_message_text(
+    newsletter_bot.edit_message_text(
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         text=status_text,
@@ -1167,9 +1167,9 @@ def handle_reminder_toggle(call):
     )
 
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data == "rem_by_user")
+@newsletter_bot.callback_query_handler(func=lambda call: call.data == "rem_by_user")
 def handle_reminder_by_user(call):
-    msg = bot.send_message(call.message.chat.id, "Введите дату сообщения в формате ГГГГ-ММ-ДД время сообщения в формате HH:MM и тему сообщения через пробел.\nНапример:\n 2025-03-29 14:30 Рассказать про UC")
+    msg = newsletter_bot.send_message(call.message.chat.id, "Введите дату сообщения в формате ГГГГ-ММ-ДД время сообщения в формате HH:MM и тему сообщения через пробел.\nНапример:\n 2025-03-29 14:30 Рассказать про UC")
     bot.register_next_step_handler(msg, lambda message: process_reminder_input(message))
 
 def process_reminder_input(message):
@@ -1223,7 +1223,7 @@ def process_reminder_input(message):
         markup.add(*buttons)
         # Форматируем для ответа
         user_time = dt_obj.strftime("%Y-%m-%d %H:%M")
-        bot.send_message(
+        newsletter_bot.send_message(
             message.chat.id,
             f"✅ Напоминание сохранено:\n"
             f"📅 {user_time}\n"
@@ -1233,13 +1233,13 @@ def process_reminder_input(message):
         
     except ValueError as ve:
         error_msg = f"Ошибка ввода: {ve}\n\nПример правильного формата:\n2024-12-31 23:59 Ваш текст"
-        bot.send_message(message.chat.id, error_msg, reply_markup=markup)
+        newsletter_bot.send_message(message.chat.id, error_msg, reply_markup=markup)
     except sqlite3.IntegrityError:
-        bot.send_message(message.chat.id, "⛔ Ошибка: Пользователь не найден в системе", reply_markup=markup)
+        newsletter_bot.send_message(message.chat.id, "⛔ Ошибка: Пользователь не найден в системе", reply_markup=markup)
     except sqlite3.Error as e:
-        bot.send_message(message.chat.id, f"⛔ Ошибка базы данных: {str(e)}", reply_markup=markup)
+        newsletter_bot.send_message(message.chat.id, f"⛔ Ошибка базы данных: {str(e)}", reply_markup=markup)
     except Exception as e:
-        bot.send_message(message.chat.id, f"⛔ Непредвиденная ошибка: {str(e)}", reply_markup=markup)
+        newsletter_bot.send_message(message.chat.id, f"⛔ Непредвиденная ошибка: {str(e)}", reply_markup=markup)
     finally:
         if conn:
             conn.close()
@@ -1644,7 +1644,7 @@ threading.Thread(target=run_async_task_for_hack, daemon=True).start()
 
 # Обработчик нажатия кнопки Выбор вопросов
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data == "menu_qr")
+@newsletter_bot.callback_query_handler(func=lambda call: call.data == "menu_qr")
 def handle_questions(call):
     bot.clear_step_handler_by_chat_id(call.message.chat.id)
     chat_id = call.message.chat.id
@@ -1693,7 +1693,7 @@ def handle_questions(call):
     questions.append(types.InlineKeyboardButton(text="В начало", callback_data="start"))
     
     markup.add(*questions)
-    bot.edit_message_text(
+    newsletter_bot.edit_message_text(
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         text=(f"Вы выбрали роль: {role}\nСпециализация: {specialization}\n\n"
@@ -1711,7 +1711,7 @@ def clear_dialog_context(chat_id):
 
 # Обработчик выбора специализации
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data == "menu_r")
+@newsletter_bot.callback_query_handler(func=lambda call: call.data == "menu_r")
 def choose_menu(call):
     bot.clear_step_handler_by_chat_id(call.message.chat.id)
     markup = types.InlineKeyboardMarkup(row_width=1)
@@ -1724,11 +1724,11 @@ def choose_menu(call):
         types.InlineKeyboardButton(text="В начало", callback_data="start"),
     ]
     markup.add(*specializations)
-    bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Выберите специализацию:", reply_markup=markup)
+    newsletter_bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="Выберите специализацию:", reply_markup=markup)
 
  # Обработка выбора специализации
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data.startswith("specsql_"))
+@newsletter_bot.callback_query_handler(func=lambda call: call.data.startswith("specsql_"))
 def handle_role_specialization(call):
     bot.clear_step_handler_by_chat_id(call.message.chat.id)
     user_id = call.message.chat.id
@@ -1779,7 +1779,7 @@ def handle_role_specialization(call):
             user_data[user_id] = {}
         user_data[user_id]["specialization"] = user_db_data[0]
     
-    bot.answer_callback_query(call.id, f"Специализация '{new_specialization}' успешно сохранена!")
+    newsletter_bot.answer_callback_query(call.id, f"Специализация '{new_specialization}' успешно сохранена!")
     cursor.execute("SELECT user_id, Specialization FROM Users WHERE user_id = ?", (user_id,))
     users = cursor.fetchone()
 
@@ -1796,7 +1796,7 @@ def handle_role_specialization(call):
 
 # Обработчик предопределенных вопросов
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data.startswith("questions_group"))
+@newsletter_bot.callback_query_handler(func=lambda call: call.data.startswith("questions_group"))
 def handle_predefined_question_group(call):
     switcher = 0
     chat_id = call.message.chat.id
@@ -1815,7 +1815,7 @@ def handle_predefined_question_group(call):
             types.InlineKeyboardButton(text="В начало", callback_data="start")
         ]
         markup.add(*questions)
-        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=f"Вы выбрали категорию: \nТеперь выберите вопрос:", reply_markup=markup)
+        newsletter_bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=f"Вы выбрали категорию: \nТеперь выберите вопрос:", reply_markup=markup)
     elif switcher == 1:
         questions = [
             types.InlineKeyboardButton(text="Построение структуры компетенции", callback_data="qid_11"),
@@ -1826,10 +1826,10 @@ def handle_predefined_question_group(call):
             types.InlineKeyboardButton(text="В начало", callback_data="start")
         ]
         markup.add(*questions)
-        bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=f"Вы выбрали категорию: \nТеперь выберите вопрос:", reply_markup=markup)
+        newsletter_bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=f"Вы выбрали категорию: \nТеперь выберите вопрос:", reply_markup=markup)
     
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data.startswith("group_1"))
+@newsletter_bot.callback_query_handler(func=lambda call: call.data.startswith("group_1"))
 def handle_predefined_question_group_1(call):
     chat_id = call.message.chat.id
     clear_dialog_context(chat_id)
@@ -1878,7 +1878,7 @@ def handle_predefined_question_group_1(call):
 
 
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data.startswith("group_2"))
+@newsletter_bot.callback_query_handler(func=lambda call: call.data.startswith("group_2"))
 def handle_predefined_question_group_2(call):
     chat_id = call.message.chat.id
     clear_dialog_context(chat_id)
@@ -1926,7 +1926,7 @@ def handle_predefined_question_group_2(call):
         asyncio.run(websocket_question_from_user(question, call.message, specialization, question_id, vector_store=vector_store))
 
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data.startswith("po_question"))
+@newsletter_bot.callback_query_handler(func=lambda call: call.data.startswith("po_question"))
 def handle_predefined_question_group_2(call):
     chat_id = call.message.chat.id
     clear_dialog_context(chat_id)
@@ -1971,7 +1971,7 @@ def handle_predefined_question_group_2(call):
 
 
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data in ["question_1", "question_2", "question_3", "question_4", "question_5", "question_18", "question_19", "question_20", "question_21"])
+@newsletter_bot.callback_query_handler(func=lambda call: call.data in ["question_1", "question_2", "question_3", "question_4", "question_5", "question_18", "question_19", "question_20", "question_21"])
 def handle_predefined_question(call):
     """
     Универсальный обработчик для старых «жестко заданных» вопросов.
@@ -1985,7 +1985,7 @@ def handle_predefined_question(call):
     # Получаем профиль пользователя
     role, specialization = get_user_profile_from_db(chat_id)
     if not specialization:
-        bot.send_message(chat_id, "Не удалось получить ваш профиль. Пожалуйста, пройдите онбординг заново через /start.")
+        newsletter_bot.send_message(chat_id, "Не удалось получить ваш профиль. Пожалуйста, пройдите онбординг заново через /start.")
         logger.warning(f"[{chat_id}] Профиль не найден при обработке {callback_data}")
         return
 
@@ -1998,7 +1998,7 @@ def handle_predefined_question(call):
         conn.close()
         
         if not row:
-            bot.send_message(chat_id, "Извините, этот вопрос больше не актуален.")
+            newsletter_bot.send_message(chat_id, "Извините, этот вопрос больше не актуален.")
             logger.warning(f"[{chat_id}] Вопрос ID={question_id} не найден в Questions.")
             return
             
@@ -2011,13 +2011,13 @@ def handle_predefined_question(call):
         
     except Exception as e:
         logger.error(f"[{chat_id}] DB error while fetching question {question_id}: {e}")
-        bot.send_message(chat_id, "Произошла ошибка при обработке запроса. Попробуйте позже.")
+        newsletter_bot.send_message(chat_id, "Произошла ошибка при обработке запроса. Попробуйте позже.")
         return
 
     logger.info(f"[{chat_id}] Handling question. RAG_ID={rag_id}, VS='{vector_store_setting}', Spec='{specialization}'")
 
     # Сообщение «Формирую ответ»
-    typing_msg = bot.send_message(chat_id, "Формирую ответ... ⏳", parse_mode='Markdown')
+    typing_msg = newsletter_bot.send_message(chat_id, "Формирую ответ... ⏳", parse_mode='Markdown')
 
     # Запуск асинхронного запроса в RAG
     asyncio.run(websocket_question_from_user(
@@ -2030,7 +2030,7 @@ def handle_predefined_question(call):
     ))
 
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data == "question_777")
+@newsletter_bot.callback_query_handler(func=lambda call: call.data == "question_777")
 def handle_message_history(call):
     chat_id = call.message.chat.id
     
@@ -2057,7 +2057,7 @@ def handle_message_history(call):
             back_button = types.InlineKeyboardButton(text="◀️ Назад в меню", callback_data="personal_account")
             markup.add(back_button)
             
-            bot.edit_message_text(
+            newsletter_bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=call.message.message_id,
                 text="📭 История сообщений пуста\n\nВы еще не задавали вопросы боту.",
@@ -2124,7 +2124,7 @@ def handle_message_history(call):
             markup.add(*buttons)
         
         # Отправляем сообщение с историей
-        bot.edit_message_text(
+        newsletter_bot.edit_message_text(
             chat_id=chat_id,
             message_id=call.message.message_id,
             text=history_text,
@@ -2140,19 +2140,19 @@ def handle_message_history(call):
         back_button = types.InlineKeyboardButton(text="◀️ Назад в меню", callback_data="personal_account")
         markup.add(back_button)
         
-        bot.edit_message_text(
+        newsletter_bot.edit_message_text(
             chat_id=chat_id,
             message_id=call.message.message_id,
             text="❌ Произошла ошибка при загрузке истории сообщений.\n\nПопробуйте позже.",
             reply_markup=markup
         )
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data == "question_custom")
+@newsletter_bot.callback_query_handler(func=lambda call: call.data == "question_custom")
 def ask_custom_question(call):
     chat_id = call.message.chat.id
     # ИСПРАВЛЕНО: Очищаем контекст диалога при переходе в "Задать вопрос"
     clear_dialog_context(chat_id)
-    bot.send_message(call.message.chat.id, "Введите ваш вопрос:")
+    newsletter_bot.send_message(call.message.chat.id, "Введите ваш вопрос:")
     bot.register_next_step_handler(call.message, process_custom_question)
 
 
@@ -2168,7 +2168,7 @@ def process_custom_question(message):
     _, specialization = get_user_profile_from_db(message.chat.id)
     
     if not specialization:
-        bot.send_message(message.chat.id, "Не удалось получить ваш профиль. Пожалуйста, пройдите онбординг заново через /start.")
+        newsletter_bot.send_message(message.chat.id, "Не удалось получить ваш профиль. Пожалуйста, пройдите онбординг заново через /start.")
         logger.warning(f"Не найден профиль для пользователя {message.chat.id} при обработке кастомного вопроса.")
         return
 
@@ -2207,7 +2207,7 @@ async def handling_cached_requests(question_id, message, question, specializatio
     #mplusk1
     # Отправляем каждую часть с задержкой
     for i in arr:
-        message_2 = bot.send_message(chat_id=message.chat.id, text=i)
+        message_2 = newsletter_bot.send_message(chat_id=message.chat.id, text=i)
         full_ans_for_context += i
         time.sleep(1)
     
@@ -2234,7 +2234,7 @@ async def handling_cached_requests(question_id, message, question, specializatio
                     types.InlineKeyboardButton(text="В начало", callback_data="start")
                 ]
     markup.add(*button)
-    bot.send_message(chat_id=message_2.chat.id, text = "Пожалуйста, выберите дальнейшее действие", reply_markup=markup)
+    newsletter_bot.send_message(chat_id=message_2.chat.id, text = "Пожалуйста, выберите дальнейшее действие", reply_markup=markup)
 
 
     #mplusk2
@@ -2276,7 +2276,7 @@ async def websocket_question_from_user(question, message, specialization, questi
             logger.info(f"Данные отправлены в RAG сервис для пользователя {chat_id}, ожидаем ответ")
 
             try:
-                message_2 = bot.send_message(message.chat.id, "Ожидайте ответа...")
+                message_2 = newsletter_bot.send_message(message.chat.id, "Ожидайте ответа...")
                 full_answer = ""
                 last_send_time = time.time()
                 answer_for_cache = []
@@ -2297,7 +2297,7 @@ async def websocket_question_from_user(question, message, specialization, questi
                         # ИСПРАВЛЕНО: Отправляем ответ каждые 0.5 секунды вместо 1 секунды для более быстрого отображения
                         if time.time() - last_send_time >= 0.5:
                             try:
-                                message_2 = bot.send_message(chat_id=message_2.chat.id, text=full_answer, parse_mode="Markdown")
+                                message_2 = newsletter_bot.send_message(chat_id=message_2.chat.id, text=full_answer, parse_mode="Markdown")
                                 answer_for_cache.append(full_answer)
                                 answer_for_countinue_dialog += full_answer
                                 full_answer = ""
@@ -2309,7 +2309,7 @@ async def websocket_question_from_user(question, message, specialization, questi
                                     retry_after = int(e.result.headers.get('Retry-After', 1))
                                     logger.warning(f"Rate limit exceeded. Retrying after {retry_after} seconds...")
                                     time.sleep(retry_after)
-                                    message_2 = bot.send_message(chat_id=message_2.chat.id, text=full_answer, parse_mode="Markdown")
+                                    message_2 = newsletter_bot.send_message(chat_id=message_2.chat.id, text=full_answer, parse_mode="Markdown")
                                     answer_for_countinue_dialog += full_answer
                                     answer_for_cache.append(full_answer)
                                     last_send_time = time.time()
@@ -2318,7 +2318,7 @@ async def websocket_question_from_user(question, message, specialization, questi
                                     # Для других ошибок (например, неправильный Markdown) пробуем без форматирования
                                     logger.warning(f"Ошибка отправки сообщения с Markdown для пользователя {chat_id}: {e}. Отправляем без форматирования.")
                                     try:
-                                        message_2 = bot.send_message(chat_id=message_2.chat.id, text=full_answer)
+                                        message_2 = newsletter_bot.send_message(chat_id=message_2.chat.id, text=full_answer)
                                         answer_for_countinue_dialog += full_answer
                                         answer_for_cache.append(full_answer)
                                         last_send_time = time.time()
@@ -2348,7 +2348,7 @@ async def websocket_question_from_user(question, message, specialization, questi
                 # ИСПРАВЛЕНО: Всегда отправляем финальный ответ, даже если он пустой
                 if full_answer:
                     try:
-                        message_2 = bot.send_message(chat_id=message_2.chat.id, text=full_answer)
+                        message_2 = newsletter_bot.send_message(chat_id=message_2.chat.id, text=full_answer)
                         answer_for_cache.append(full_answer)
                         answer_for_countinue_dialog += full_answer
                         logger.info(f"Отправлен финальный ответ пользователю {chat_id}")
@@ -2356,13 +2356,13 @@ async def websocket_question_from_user(question, message, specialization, questi
                         logger.error(f"Ошибка отправки финального ответа для пользователя {chat_id}: {e}")
                         # Пробуем отправить хотя бы уведомление об ошибке
                         try:
-                            bot.send_message(chat_id, "❌ Произошла ошибка при отображении ответа. Ответ сохранен в истории.")
+                            newsletter_bot.send_message(chat_id, "❌ Произошла ошибка при отображении ответа. Ответ сохранен в истории.")
                         except:
                             pass
                 elif not answer_for_countinue_dialog:
                     # Если вообще нет ответа, отправляем сообщение об ошибке
                     try:
-                        bot.send_message(chat_id, "❌ Не удалось получить ответ от AI. Попробуйте еще раз.")
+                        newsletter_bot.send_message(chat_id, "❌ Не удалось получить ответ от AI. Попробуйте еще раз.")
                         logger.warning(f"Пустой ответ от RAG для пользователя {chat_id}")
                     except Exception as e:
                         logger.error(f"Ошибка отправки сообщения об ошибке для пользователя {chat_id}: {e}")
@@ -2416,19 +2416,19 @@ async def websocket_question_from_user(question, message, specialization, questi
 
             # Разные сообщения для разных типов вопросов
             if question_id == 888:
-                bot.send_message(chat_id=message_2.chat.id, text = "💬 Вы можете продолжить диалог, просто написав следующий вопрос", reply_markup=markup)
+                newsletter_bot.send_message(chat_id=message_2.chat.id, text = "💬 Вы можете продолжить диалог, просто написав следующий вопрос", reply_markup=markup)
             else:
-                bot.send_message(chat_id=message_2.chat.id, text = "Выберите дальнейшее действие", reply_markup=markup)
+                newsletter_bot.send_message(chat_id=message_2.chat.id, text = "Выберите дальнейшее действие", reply_markup=markup)
             
             logger.info(f"websocket_question_from_user завершена для пользователя {chat_id}")
 
     except Exception as e:
         logger.error(f"Ошибка в websocket_question_from_user для пользователя {chat_id}: {e}")
-        bot.send_message(chat_id, f"❌ Произошла ошибка при обработке вопроса: {str(e)}")
+        newsletter_bot.send_message(chat_id, f"❌ Произошла ошибка при обработке вопроса: {str(e)}")
         # Все равно создаем кнопку "В начало" для возврата
         markup = types.InlineKeyboardMarkup()
         markup.add(types.InlineKeyboardButton(text="В начало", callback_data="start"))
-        bot.send_message(chat_id, "Попробуйте позже или вернитесь в начало", reply_markup=markup)
+        newsletter_bot.send_message(chat_id, "Попробуйте позже или вернитесь в начало", reply_markup=markup)
 
 current_timezone = time.tzname
 current_timenow = datetime.now(moscow_tz).strftime("%H:%M")
@@ -2451,26 +2451,26 @@ def handle_feedback(message):
     )
 
     try:
-        feedback_bot.send_message(FEEDBACK_CHAT_ID, feedback_text, parse_mode="Markdown")
-        bot.send_message(chat_id, "Спасибо! Ваш отзыв принят! 🎉")
+        feedback_newsletter_bot.send_message(FEEDBACK_CHAT_ID, feedback_text, parse_mode="Markdown")
+        newsletter_bot.send_message(chat_id, "Спасибо! Ваш отзыв принят! 🎉")
     except Exception as e:
-        bot.send_message(chat_id, "❌ Ошибка при отправке отзыва. Попробуйте позже.")
+        newsletter_bot.send_message(chat_id, "❌ Ошибка при отправке отзыва. Попробуйте позже.")
         logger.error(f"Ошибка при отправке отзыва: {e}")
 
     markup = types.InlineKeyboardMarkup()
     markup.add(types.InlineKeyboardButton(text="В начало", callback_data="start"))
-    bot.send_message(chat_id, "Вы можете продолжить работу, вернувшись в начало:", reply_markup=markup)
+    newsletter_bot.send_message(chat_id, "Вы можете продолжить работу, вернувшись в начало:", reply_markup=markup)
 
 @require_onboarding
 def hadl_print_in_development_2(message):
     markup = types.InlineKeyboardMarkup(row_width=1)
     question = types.InlineKeyboardButton(text="В начало", callback_data="start")
     markup.add(question)
-    bot.edit_message_text(chat_id=message.chat.id, message_id=message.message_id, text="Мы активно работаем над этой функцией, ждите в ближайшем будующем!\n Ваша команда разработки <3", reply_markup=markup)
+    newsletter_bot.edit_message_text(chat_id=message.chat.id, message_id=message.message_id, text="Мы активно работаем над этой функцией, ждите в ближайшем будующем!\n Ваша команда разработки <3", reply_markup=markup)
 
 
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data == "intern_questions_group")
+@newsletter_bot.callback_query_handler(func=lambda call: call.data == "intern_questions_group")
 def handle_intern_questions_group(call):
     markup = types.InlineKeyboardMarkup(row_width=1)
     questions = [
@@ -2480,7 +2480,7 @@ def handle_intern_questions_group(call):
         types.InlineKeyboardButton(text="В начало", callback_data="start")
     ]
     markup.add(*questions)
-    bot.edit_message_text(
+    newsletter_bot.edit_message_text(
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         text="Выберите интересующий вас вопрос:",
@@ -2488,7 +2488,7 @@ def handle_intern_questions_group(call):
     )
 
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data.startswith("suggested_question_"))
+@newsletter_bot.callback_query_handler(func=lambda call: call.data.startswith("suggested_question_"))
 def handle_suggested_question(call):
     chat_id = call.message.chat.id
     question_index = int(call.data.split("_")[-1])
@@ -2508,7 +2508,7 @@ def handle_suggested_question(call):
         
         specialization = user_info[0] if user_info else "Не указана"
         
-        bot.send_message(chat_id, f"Вы выбрали вопрос: {question}")
+        newsletter_bot.send_message(chat_id, f"Вы выбрали вопрос: {question}")
         
         # Отправляем вопрос на обработку (с предложенными вопросами)
         # ID=777 для выбранных предложенных вопросов
@@ -2522,7 +2522,7 @@ def handle_suggested_question(call):
         # Убираем кнопки с вопросами
         bot.edit_message_reply_markup(chat_id=call.message.chat.id, message_id=call.message.message_id, reply_markup=None)
     else:
-        bot.answer_callback_query(call.id, "Не удалось найти вопрос. Пожалуйста, попробуйте снова.")
+        newsletter_bot.answer_callback_query(call.id, "Не удалось найти вопрос. Пожалуйста, попробуйте снова.")
 
 def get_dialog_history_context(chat_id):
     """
@@ -2567,7 +2567,7 @@ def get_dialog_history_context(chat_id):
 #mplusk2
 # Универсальный обработчик для всех текстовых сообщений
 @require_onboarding
-@bot.message_handler(func=lambda message: True, content_types=['text'])
+@newsletter_bot.message_handler(func=lambda message: True, content_types=['text'])
 def handle_text_message(message):
     """
     Обрабатывает любое текстовое сообщение как вопрос к RAG системе с учетом истории диалога
@@ -2612,7 +2612,7 @@ def handle_text_message(message):
     logger.info(f"Обрабатываем свободный вопрос от пользователя {chat_id}: {question[:50]}...")
     
     # Отправляем подтверждение получения вопроса
-    bot.send_message(chat_id, f"🤖 Обрабатываю ваш вопрос: {question}")
+    newsletter_bot.send_message(chat_id, f"🤖 Обрабатываю ваш вопрос: {question}")
     
     # Отправляем вопрос на обработку в RAG систему (с предложенными вопросами)
     question_id = 888  # ID для свободного ввода текста (отдельный промпт)
@@ -2621,7 +2621,7 @@ def handle_text_message(message):
 
 # Обработчик для показа полной истории сообщений
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data == "history_full")
+@newsletter_bot.callback_query_handler(func=lambda call: call.data == "history_full")
 def handle_full_history(call):
     print("!!! HISTORY_FULL HANDLER CALLED !!!")
     chat_id = call.message.chat.id
@@ -2646,7 +2646,7 @@ def handle_full_history(call):
         conn.close()
         
         if not messages:
-            bot.answer_callback_query(call.id, "История сообщений пуста")
+            newsletter_bot.answer_callback_query(call.id, "История сообщений пуста")
             return
         
         # Формируем полную историю (более компактно)
@@ -2688,7 +2688,7 @@ def handle_full_history(call):
         ]
         markup.add(*buttons)
         
-        bot.edit_message_text(
+        newsletter_bot.edit_message_text(
             chat_id=chat_id,
             message_id=call.message.message_id,
             text=history_text,
@@ -2698,11 +2698,11 @@ def handle_full_history(call):
         
     except Exception as e:
         logger.error(f"Ошибка при получении полной истории для пользователя {chat_id}: {e}")
-        bot.answer_callback_query(call.id, "Ошибка при загрузке истории")
+        newsletter_bot.answer_callback_query(call.id, "Ошибка при загрузке истории")
 
 # Обработчик для очистки истории сообщений
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data == "history_clear")
+@newsletter_bot.callback_query_handler(func=lambda call: call.data == "history_clear")
 def handle_clear_history(call):
     chat_id = call.message.chat.id
     logger.info(f"Обработчик history_clear вызван для пользователя {chat_id}")
@@ -2715,7 +2715,7 @@ def handle_clear_history(call):
     ]
     markup.add(*buttons)
     
-    bot.edit_message_text(
+    newsletter_bot.edit_message_text(
         chat_id=chat_id,
         message_id=call.message.message_id,
         text="⚠️ **Подтверждение очистки истории**\n\nВы уверены, что хотите удалить всю историю сообщений?\n\n*Это действие нельзя отменить.*",
@@ -2725,7 +2725,7 @@ def handle_clear_history(call):
 
 # Обработчик подтверждения очистки истории
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data == "history_clear_confirm")
+@newsletter_bot.callback_query_handler(func=lambda call: call.data == "history_clear_confirm")
 def handle_clear_history_confirm(call):
     chat_id = call.message.chat.id
     
@@ -2747,7 +2747,7 @@ def handle_clear_history_confirm(call):
         back_button = types.InlineKeyboardButton(text="◀️ Назад в меню", callback_data="personal_account")
         markup.add(back_button)
         
-        bot.edit_message_text(
+        newsletter_bot.edit_message_text(
             chat_id=chat_id,
             message_id=call.message.message_id,
             text=f"✅ **История очищена**\n\nУдалено {deleted_count} сообщений.\n\nВаша история сообщений теперь пуста.",
@@ -2764,7 +2764,7 @@ def handle_clear_history_confirm(call):
         back_button = types.InlineKeyboardButton(text="◀️ Назад", callback_data="question_777")
         markup.add(back_button)
         
-        bot.edit_message_text(
+        newsletter_bot.edit_message_text(
             chat_id=chat_id,
             message_id=call.message.message_id,
             text="❌ **Ошибка при очистке истории**\n\nПопробуйте позже или обратитесь к администратору.",
@@ -2813,7 +2813,7 @@ def get_vector_store_for_specialization(specialization):
 
 
 @require_onboarding
-@bot.callback_query_handler(func=lambda call: call.data.startswith("qid_") or questions_loader.get_question_by_callback(call.data) is not None)
+@newsletter_bot.callback_query_handler(func=lambda call: call.data.startswith("qid_") or questions_loader.get_question_by_callback(call.data) is not None)
 def handle_predefined_question_universal(call):
     """
     Универсальный обработчик для всех кнопок с вопросами.
@@ -2827,7 +2827,7 @@ def handle_predefined_question_universal(call):
     
     if not question_info:
         logger.warning(f"[{chat_id}] Question with callback '{callback_data}' not found.")
-        bot.answer_callback_query(call.id, "Извините, этот вопрос больше не актуален.")
+        newsletter_bot.answer_callback_query(call.id, "Извините, этот вопрос больше не актуален.")
         return
         
     question_id = question_info['question_id']
@@ -2871,7 +2871,7 @@ def handle_predefined_question_universal(call):
     logger.info(f"[{chat_id}] 🚀 Отправляем в RAG для генерации нового ответа")
     
     # Если кеш не найден, отправляем в RAG
-    typing_message = bot.send_message(chat_id, "<i>Печатаю...</i>", parse_mode='HTML')
+    typing_message = newsletter_bot.send_message(chat_id, "<i>Печатаю...</i>", parse_mode='HTML')
     
     try:
         asyncio.run(websocket_question_from_user(
@@ -2884,7 +2884,7 @@ def handle_predefined_question_universal(call):
         ))
     except Exception as e:
         logger.error(f"[{chat_id}] Error in universal handler for question_id={rag_id}: {e}")
-        bot.edit_message_text(
+        newsletter_bot.edit_message_text(
             chat_id=chat_id,
             message_id=typing_message.message_id,
             text="Произошла ошибка при обработке вашего запроса. Попробуйте позже."
@@ -3029,7 +3029,7 @@ async def generate_and_show_suggested_questions(chat_id: int,
             markup.add(*buttons)
 
             preview_text = "\n".join([f"{i + 1}. {q}" for i, q in enumerate(suggestions[:3])])
-            bot.send_message(chat_id,
+            newsletter_bot.send_message(chat_id,
                              f"💡 Возможно, вас заинтересует:\n{preview_text}",
                              reply_markup=markup)
 
@@ -3058,11 +3058,10 @@ if __name__ == "__main__":
     # Запускаем бота
     logger.info("🤖 Запускаем Telegram бот...")
     try:
-        bot.infinity_polling(skip_pending=True)
+        newsletter_bot.infinity_polling(skip_pending=True)
     except Exception as e:
         logger.critical(f"Критическая ошибка в главном цикле бота: {e}", exc_info=True)
         # Корректное завершение message_sender_worker
-        global message_sender_active
         message_sender_active = False
         message_queue.put(None)  # Сигнал для завершения
         # В реальной системе здесь может быть логика для перезапуска
