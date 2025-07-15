@@ -1301,6 +1301,11 @@ async def check_for_daily_msg():
                     logger.info(f"Обработка пользователя {chat_id}")
                     
                     try:
+                        # Получаем реальную специализацию пользователя из базы данных СНАЧАЛА
+                        _, specialization = get_user_profile_from_db(chat_id)
+                        if not specialization:
+                            specialization = 'Аналитик'  # Значение по умолчанию
+                        
                         # Получаем персонализированный контекст для рассылки
                         context_str = get_personalized_context_for_newsletter(chat_id)
                         
@@ -1317,11 +1322,6 @@ async def check_for_daily_msg():
                             logger.debug(f"Контекст обрезан до 800 символов для пользователя {chat_id}")
                         
                         question_id = 775  # Специальный промпт для рассылки персональных советов
-                        
-                        # Получаем реальную специализацию пользователя из базы данных
-                        _, specialization = get_user_profile_from_db(chat_id)
-                        if not specialization:
-                            specialization = 'Аналитик'  # Значение по умолчанию
                         
                         # Определяем vector_store на основе специализации
                         vector_store = get_vector_store_for_specialization(specialization)
@@ -1353,32 +1353,43 @@ async def check_for_daily_msg():
                                 timeout_count = 0
                                 max_timeout_count = 3
                                 
-                                try:
-                                    while timeout_count < max_timeout_count:
-                                        try:
-                                            # Получаем ответ с тайм-аутом (10 секунд)
-                                            answer_part = await asyncio.wait_for(websocket.recv(), timeout=10.0)
-                                            if answer_part:
-                                                full_answer += answer_part
-                                                timeout_count = 0  # Сбрасываем счетчик при получении данных
-                                            else:
-                                                logger.warning(f"Получено пустое сообщение от WebSocket для пользователя {chat_id}")
-                                                timeout_count += 1
-                                        except asyncio.TimeoutError:
-                                            logger.warning(f"Тайм-аут при получении данных от WebSocket для пользователя {chat_id}, попытка {timeout_count + 1}")
+                                # ИСПРАВЛЕНИЕ: Перенос обработки ConnectionClosed на правильный уровень
+                                while timeout_count < max_timeout_count:
+                                    try:
+                                        # Получаем ответ с тайм-аутом (10 секунд)
+                                        answer_part = await asyncio.wait_for(websocket.recv(), timeout=10.0)
+                                        if answer_part:
+                                            full_answer += answer_part
+                                            timeout_count = 0  # Сбрасываем счетчик при получении данных
+                                            logger.debug(f"Получен фрагмент ответа для пользователя {chat_id}: {len(answer_part)} символов")
+                                        else:
+                                            logger.warning(f"Получено пустое сообщение от WebSocket для пользователя {chat_id}")
                                             timeout_count += 1
-                                            if timeout_count >= max_timeout_count:
-                                                logger.error(f"Превышено максимальное количество тайм-аутов для пользователя {chat_id}")
-                                                break
-                                except websockets.exceptions.ConnectionClosed:
-                                    logger.info(f"WebSocket соединение закрыто для пользователя {chat_id}")
+                                    except asyncio.TimeoutError:
+                                        logger.warning(f"Тайм-аут при получении данных от WebSocket для пользователя {chat_id}, попытка {timeout_count + 1}")
+                                        timeout_count += 1
+                                        if timeout_count >= max_timeout_count:
+                                            logger.error(f"Превышено максимальное количество тайм-аутов для пользователя {chat_id}")
+                                            break
+                                    except websockets.exceptions.ConnectionClosed as e:
+                                        logger.info(f"WebSocket соединение закрыто для пользователя {chat_id}: {e}")
+                                        # Нормальное закрытие соединения (код 1000) - это OK
+                                        if e.code == 1000:
+                                            logger.info(f"Нормальное завершение WebSocket соединения для пользователя {chat_id}")
+                                            break
+                                        else:
+                                            logger.error(f"Неожиданное закрытие WebSocket соединения для пользователя {chat_id}: код {e.code}")
+                                            break
+                                
+                                logger.info(f"Получен полный ответ для пользователя {chat_id}: {len(full_answer)} символов")
                                 
                                 # Проверяем, получили ли мы ответ
-                                if full_answer is None or full_answer == "":
-                                    full_answer = "История сообщений пустая. Попробуйте позже."
+                                if not full_answer or full_answer.strip() == "":
+                                    full_answer = "Не удалось получить персональный совет. Попробуйте позже."
                                     logger.warning(f"Пустой ответ от AI для пользователя {chat_id}")
                                 
                                 # Создаем клавиатуру
+                                logger.debug(f"Создаем клавиатуру для пользователя {chat_id}")
                                 markup = types.InlineKeyboardMarkup(row_width=1)
                                 buttons = [
                                     types.InlineKeyboardButton(text="В начало", callback_data="start"),
@@ -1388,14 +1399,18 @@ async def check_for_daily_msg():
                                 
                                 try:
                                     # Отправляем сообщение
+                                    logger.info(f"Отправляем регулярное сообщение пользователю {chat_id} (длина: {len(full_answer)} символов)")
                                     bot.send_message(chat_id=chat_id, text=full_answer, reply_markup=markup)
-                                    logger.info(f"Регулярное сообщение успешно отправлено пользователю {chat_id}")
+                                    logger.info(f"✅ Регулярное сообщение успешно отправлено пользователю {chat_id}")
                                     successful_sends += 1
                                 except telebot.apihelper.ApiException as e:
                                     if "Forbidden: bot was blocked by the user" in str(e):
-                                        logger.warning(f"Пользователь {chat_id} заблокировал бота")
+                                        logger.warning(f"❌ Пользователь {chat_id} заблокировал бота")
                                     else:
-                                        logger.error(f"Ошибка при отправке сообщения пользователю {chat_id}: {e}")
+                                        logger.error(f"❌ Ошибка Telegram API при отправке сообщения пользователю {chat_id}: {e}")
+                                    failed_sends += 1
+                                except Exception as e:
+                                    logger.error(f"❌ Неожиданная ошибка при отправке сообщения пользователю {chat_id}: {e}")
                                     failed_sends += 1
                                     
                         except asyncio.TimeoutError:
