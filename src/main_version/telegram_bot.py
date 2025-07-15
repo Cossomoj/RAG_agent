@@ -932,7 +932,7 @@ def handle_start(call):
         return
 
     # Отменяем текущий обработчик следующего шага
-    bot.clear_step_handler_by_chat_id(chat_id)
+    newsletter_bot.clear_step_handler_by_chat_id(chat_id)
     
     # Создаем клавиатуру с кнопками
     markup = types.InlineKeyboardMarkup(row_width=1)
@@ -953,7 +953,7 @@ def handle_giga_mentor(call):
         return
 
     # Отменяем текущий обработчик следующего шага
-    bot.clear_step_handler_by_chat_id(chat_id)
+    newsletter_bot.clear_step_handler_by_chat_id(chat_id)
     
     # Создаем клавиатуру с кнопками
     markup = types.InlineKeyboardMarkup(row_width=1)
@@ -1050,7 +1050,7 @@ def handle_reminder(call):
 @require_onboarding
 @newsletter_bot.callback_query_handler(func=lambda call: call.data.startswith("whatido"))
 def handle_other(call):
-    bot.clear_step_handler_by_chat_id(call.message.chat.id)
+    newsletter_bot.clear_step_handler_by_chat_id(call.message.chat.id)
 
     newsletter_bot.edit_message_text(
         chat_id=call.message.chat.id,
@@ -1646,7 +1646,7 @@ threading.Thread(target=run_async_task_for_hack, daemon=True).start()
 @require_onboarding
 @newsletter_bot.callback_query_handler(func=lambda call: call.data == "menu_qr")
 def handle_questions(call):
-    bot.clear_step_handler_by_chat_id(call.message.chat.id)
+    newsletter_bot.clear_step_handler_by_chat_id(call.message.chat.id)
     chat_id = call.message.chat.id
     clear_dialog_context(chat_id)
     
@@ -1713,7 +1713,7 @@ def clear_dialog_context(chat_id):
 @require_onboarding
 @newsletter_bot.callback_query_handler(func=lambda call: call.data == "menu_r")
 def choose_menu(call):
-    bot.clear_step_handler_by_chat_id(call.message.chat.id)
+    newsletter_bot.clear_step_handler_by_chat_id(call.message.chat.id)
     markup = types.InlineKeyboardMarkup(row_width=1)
     specializations = [
         types.InlineKeyboardButton(text="Аналитик", callback_data="specsql_analyst"),
@@ -1730,7 +1730,7 @@ def choose_menu(call):
 @require_onboarding
 @newsletter_bot.callback_query_handler(func=lambda call: call.data.startswith("specsql_"))
 def handle_role_specialization(call):
-    bot.clear_step_handler_by_chat_id(call.message.chat.id)
+    newsletter_bot.clear_step_handler_by_chat_id(call.message.chat.id)
     user_id = call.message.chat.id
     data = call.data
     conn = sqlite3.connect(DATABASE_URL)
