@@ -76,7 +76,7 @@ def get_cache_type_for_question(question_id):
     """
     try:
         # Системные вопросы не кешируются
-        if question_id in [777, 888]:
+        if question_id in [775, 777, 888]:
             return 'no_cache'
         
         # Проверяем, что вопрос существует в БД
@@ -608,6 +608,43 @@ def take_history_dialog_from_db(chat_id):
     except Exception as e:
         logger.error(f"Ошибка при получении истории диалога для пользователя {chat_id}: {e}")
         return "История сообщений недоступна"
+
+def get_personalized_context_for_newsletter(chat_id):
+    """
+    Получает персонализированный контекст для рассылки
+    Форматирует историю диалогов для лучшего восприятия LLM
+    """
+    try:
+        conn = sqlite3.connect(DATABASE_URL)
+        cursor = conn.cursor()
+        
+        # Получаем последние 5 вопросов пользователя (без системных сообщений)
+        query = '''
+        SELECT message, time 
+        FROM Message_history 
+        WHERE user_id = ? AND role = 'user' 
+        ORDER BY time DESC 
+        LIMIT 5
+        '''
+        
+        cursor.execute(query, (chat_id,))
+        user_messages = cursor.fetchall()
+        
+        if not user_messages:
+            return None
+        
+        # Форматируем для LLM
+        formatted_context = "Последние вопросы пользователя:\n"
+        for i, (message, time) in enumerate(user_messages, 1):
+            # Обрезаем слишком длинные сообщения
+            clean_message = message[:200] + "..." if len(message) > 200 else message
+            formatted_context += f"{i}. {clean_message}\n"
+        
+        return formatted_context
+        
+    except Exception as e:
+        logger.error(f"Ошибка при получении персонализированного контекста для {chat_id}: {e}")
+        return None
     finally:
         if conn:
             conn.close()
@@ -1220,6 +1257,26 @@ async def check_for_daily_msg():
             
             # Проверяем соответствие настроенному расписанию
             if current_day == schedule['day'] and current_time == schedule['time']:
+                # Проверяем, не отправляли ли мы уже рассылку сегодня
+                try:
+                    conn = sqlite3.connect(DATABASE_URL)
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT value FROM system_settings WHERE key = 'last_newsletter_sent'")
+                    last_sent = cursor.fetchone()
+                    conn.close()
+                    
+                    if last_sent:
+                        last_sent_time = datetime.strptime(last_sent[0], '%Y-%m-%d %H:%M')
+                        today = now.strftime('%Y-%m-%d')
+                        last_sent_day = last_sent_time.strftime('%Y-%m-%d')
+                        
+                        if today == last_sent_day:
+                            logger.info(f"Рассылка уже отправлена сегодня ({last_sent[0]}), пропускаем")
+                            await asyncio.sleep(60)  # Проверим через минуту
+                            continue
+                except Exception as e:
+                    logger.error(f"Ошибка при проверке последней рассылки: {e}")
+                
                 days_names = ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье']
                 logger.info(f"Наступило время для отправки регулярных сообщений: {days_names[schedule['day']]} в {schedule['time']} ({schedule['timezone']})")
                 conn = sqlite3.connect(DATABASE_URL)
@@ -1244,18 +1301,22 @@ async def check_for_daily_msg():
                     logger.info(f"Обработка пользователя {chat_id}")
                     
                     try:
-                        # Получаем историю диалога пользователя
-                        context_str = take_history_dialog_from_db(chat_id)
-                        logger.debug(f"Тип context_str для пользователя {chat_id}: {type(context_str)}")
+                        # Получаем персонализированный контекст для рассылки
+                        context_str = get_personalized_context_for_newsletter(chat_id)
                         
                         if context_str is None:
-                            context_str = "История сообщений пустая"
-                            logger.warning(f"История сообщений пуста для пользователя {chat_id}")
-                        elif not isinstance(context_str, str):
-                            context_str = str(context_str)  # преобразуем в строку
-                            logger.warning(f"Преобразован тип context_str в строку для пользователя {chat_id}")
+                            # Если нет персональной истории, создаем контекст для общего совета
+                            context_str = f"Пользователь еще не задавал вопросы. Дайте полезный совет начинающему {specialization.lower()}у."
+                            logger.info(f"Нет персональной истории для {chat_id}, будет дан общий совет по {specialization}")
+                        else:
+                            logger.debug(f"Получен персонализированный контекст для пользователя {chat_id}")
+                            
+                        # Ограничиваем длину контекста для рассылки
+                        if len(context_str) > 800:
+                            context_str = context_str[:800] + "..."
+                            logger.debug(f"Контекст обрезан до 800 символов для пользователя {chat_id}")
                         
-                        question_id = 777  # Изменено с 666 на 777 для корректной обработки
+                        question_id = 775  # Специальный промпт для рассылки персональных советов
                         
                         # Получаем реальную специализацию пользователя из базы данных
                         _, specialization = get_user_profile_from_db(chat_id)
@@ -1266,9 +1327,15 @@ async def check_for_daily_msg():
                         vector_store = get_vector_store_for_specialization(specialization)
                         
                         count_for_pro_activity = 101
-                        question = 'without'
+                        # Формируем персонализированный вопрос в зависимости от наличия истории
+                        if "еще не задавал вопросы" in context_str:
+                            question = f'Дайте полезный совет начинающему {specialization.lower()}у для профессионального развития'
+                        else:
+                            question = f'На основе истории вопросов дайте персональный совет {specialization.lower()}у для дальнейшего развития'
                         
-                        logger.debug(f"Подключение к WebSocket для пользователя {chat_id}")
+                        logger.info(f"📧 Отправка персонального совета пользователю {chat_id} ({specialization})")
+                        logger.debug(f"Контекст: {context_str[:100]}...")
+                        logger.debug(f"Вопрос: {question}")
                         
                         # Добавляем тайм-аут для WebSocket соединения (30 секунд)
                         try:
@@ -1345,10 +1412,23 @@ async def check_for_daily_msg():
                 # Логируем статистику
                 logger.info(f"Отправка регулярных сообщений завершена. Успешно: {successful_sends}, Ошибки: {failed_sends}")
                 
-                # После отправки всем пользователям ждем до следующего дня, 
-                # чтобы не отправить сообщения дважды (спим 23 часа)
-                logger.info("Все регулярные сообщения обработаны, ожидание до следующей проверки (23 часа)")
-                await asyncio.sleep(23 * 60 * 60)  # 23 часа
+                # Сохраняем время последней отправки в БД для избежания дублирования
+                try:
+                    conn = sqlite3.connect(DATABASE_URL)
+                    cursor = conn.cursor()
+                    cursor.execute('''
+                        INSERT OR REPLACE INTO system_settings (key, value) 
+                        VALUES ('last_newsletter_sent', ?)
+                    ''', (now.strftime('%Y-%m-%d %H:%M'),))
+                    conn.commit()
+                    conn.close()
+                    logger.info("Время последней рассылки сохранено в БД")
+                except Exception as e:
+                    logger.error(f"Ошибка при сохранении времени рассылки: {e}")
+                
+                # Ждем до следующей проверки (1 час вместо 23 часов)
+                logger.info("Рассылка завершена, ожидание до следующей проверки (1 час)")
+                await asyncio.sleep(60 * 60)  # 1 час
                 
             # Проверяем время каждую минуту
             await asyncio.sleep(60)
