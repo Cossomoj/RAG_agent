@@ -2908,6 +2908,22 @@ function hideLoader() {
     }
 }
 
+// Функция плавного закрытия модального окна
+function closeModalWithAnimation(modal) {
+    modal.style.opacity = '0';
+    const content = modal.querySelector('div');
+    if (content) {
+        content.style.transform = 'scale(0.9)';
+    }
+    
+    setTimeout(() => {
+        modal.style.display = 'none';
+        if (modal.parentNode) {
+            modal.parentNode.removeChild(modal);
+        }
+    }, 300);
+}
+
 // Функция показа кастомного модального окна подтверждения
 function showConfirmationModal(title, message, onConfirm) {
     // Создаем модальное окно
@@ -2924,8 +2940,26 @@ function showConfirmationModal(title, message, onConfirm) {
         align-items: center;
         z-index: 10000;
         backdrop-filter: blur(4px);
+        opacity: 0;
+        transition: opacity 0.3s ease;
     `;
     document.body.appendChild(modal);
+    
+    // Закрытие модального окна при клике на backdrop
+    modal.onclick = (e) => {
+        if (e.target === modal) {
+            closeModalWithAnimation(modal);
+        }
+    };
+    
+    // Закрытие модального окна при нажатии Escape
+    const escapeHandler = (e) => {
+        if (e.key === 'Escape') {
+            closeModalWithAnimation(modal);
+            document.removeEventListener('keydown', escapeHandler);
+        }
+    };
+    document.addEventListener('keydown', escapeHandler);
     
     // Создаем содержимое модального окна
     const content = document.createElement('div');
@@ -2937,6 +2971,8 @@ function showConfirmationModal(title, message, onConfirm) {
         overflow-y: auto;
         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
         padding: 20px;
+        transform: scale(0.9);
+        transition: transform 0.3s ease;
     `;
     
     // Добавляем заголовок
@@ -2968,7 +3004,7 @@ function showConfirmationModal(title, message, onConfirm) {
     `;
     
     closeBtn.onclick = () => {
-        modal.style.display = 'none';
+        closeModalWithAnimation(modal);
     };
     
     header.appendChild(closeBtn);
@@ -3016,7 +3052,10 @@ function showConfirmationModal(title, message, onConfirm) {
         transition: all 0.2s ease;
     `;
     
-    confirmBtn.onclick = onConfirm;
+    confirmBtn.onclick = async () => {
+        await onConfirm();
+        closeModalWithAnimation(modal);
+    };
     
     const cancelBtn = document.createElement('button');
     cancelBtn.textContent = 'Нет';
@@ -3033,7 +3072,7 @@ function showConfirmationModal(title, message, onConfirm) {
     `;
     
     cancelBtn.onclick = () => {
-        modal.style.display = 'none';
+        closeModalWithAnimation(modal);
     };
     
     actions.appendChild(confirmBtn);
@@ -3043,7 +3082,14 @@ function showConfirmationModal(title, message, onConfirm) {
     
     modal.appendChild(content);
     
+    // Показываем модальное окно с анимацией
     modal.style.display = 'flex';
+    
+    // Добавляем анимацию появления
+    setTimeout(() => {
+        modal.style.opacity = '1';
+        content.style.transform = 'scale(1)';
+    }, 10);
 }
 
 // Функции для онбординга
