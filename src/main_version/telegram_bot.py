@@ -289,6 +289,45 @@ def clear_all_cache():
         logger.error(f"❌ Ошибка при очистке кешей: {e}")
         return False
 
+def get_cache_type_for_question(question_id):
+    """
+    Определяет тип кеша для вопроса.
+    
+    УНИФИЦИРОВАННАЯ ЛОГИКА (как в веб API):
+    ВСЕ вопросы из библиотеки кешируются по специализации пользователя.
+    
+    Returns:
+        'by_specialization' - для всех вопросов из библиотеки
+        'no_cache' - для системных вопросов (777, 888) которые не кешируются
+    """
+    try:
+        # Системные вопросы не кешируются
+        if question_id in [777, 888]:
+            return 'no_cache'
+        
+        # Проверяем, что вопрос существует в БД
+        conn = sqlite3.connect(DATABASE_URL)
+        if not conn:
+            logger.warning(f"Нет подключения к БД для question_id {question_id}, отключаем кеш")
+            return 'no_cache'
+            
+        cursor = conn.cursor()
+        cursor.execute("SELECT question_id FROM Questions WHERE question_id = ?", (question_id,))
+        result = cursor.fetchone()
+        conn.close()
+        
+        if not result:
+            # Если вопрос не найден в БД, не кешируем
+            logger.warning(f"Question ID {question_id} не найден в БД, кеширование отключено")
+            return 'no_cache'
+        
+        # ВСЕ вопросы из библиотеки кешируются по специализации пользователя
+        return 'by_specialization'
+            
+    except Exception as e:
+        logger.error(f"Ошибка при определении типа кеша для question_id {question_id}: {e}")
+        return 'no_cache'  # Fallback к отключению кеша
+
 def send_message_to_all_users(message_text):
     """Функция для отправки сообщения всем пользователям через thread-safe очередь"""
     try:
