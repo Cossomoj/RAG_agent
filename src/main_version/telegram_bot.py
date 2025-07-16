@@ -289,6 +289,62 @@ def clear_all_cache():
         logger.error(f"❌ Ошибка при очистке кешей: {e}")
         return False
 
+def clear_cache_for_specialization(specialization):
+    """
+    Функция для очистки кеша конкретной специализации в телеграм-боте.
+    
+    НОВАЯ АРХИТЕКТУРА: cache_by_specialization[specialization][question_id] = answer
+    Теперь очистка стала очень простой - просто удаляем ключ специализации.
+    """
+    global cache_by_specialization
+    
+    try:
+        cleared_count = 0
+        
+        if specialization in cache_by_specialization:
+            # Подсчитываем количество вопросов для данной специализации
+            cleared_count = len(cache_by_specialization[specialization])
+            # Удаляем всю специализацию из кэша
+            del cache_by_specialization[specialization]
+            logger.info(f"🧹 Очищен кэш телеграм-бота для специализации '{specialization}': удалено {cleared_count} вопросов")
+        else:
+            logger.info(f"✅ Кэш телеграм-бота для специализации '{specialization}' уже пуст")
+        
+        return cleared_count
+    except Exception as e:
+        logger.error(f"❌ Ошибка при очистке кеша телеграм-бота для специализации '{specialization}': {e}")
+        return 0
+
+def clear_question_cache(question_id):
+    """
+    Функция для очистки кэша конкретного вопроса во всех специализациях.
+    
+    НОВАЯ АРХИТЕКТУРА: cache_by_specialization[specialization][question_id] = answer
+    Проходим по всем специализациям и удаляем question_id из каждой.
+    """
+    global cache_by_specialization
+    
+    try:
+        cleared_count = 0
+        cleared_specs = []
+        
+        # Проходим по всем специализациям
+        for specialization in list(cache_by_specialization.keys()):
+            if question_id in cache_by_specialization[specialization]:
+                del cache_by_specialization[specialization][question_id]
+                cleared_count += 1
+                cleared_specs.append(specialization)
+        
+        if cleared_count > 0:
+            logger.info(f"🧹 Очищен кэш телеграм-бота для question_id={question_id}: удалено из {cleared_count} специализаций ({', '.join(cleared_specs)})")
+        else:
+            logger.info(f"✅ Кэш телеграм-бота для question_id={question_id} уже пуст")
+        
+        return cleared_count
+    except Exception as e:
+        logger.error(f"❌ Ошибка при очистке кеша телеграм-бота для question_id={question_id}: {e}")
+        return 0
+
 def get_cache_type_for_question(question_id):
     """
     Определяет тип кеша для вопроса.
@@ -2966,6 +3022,25 @@ class TelegramBotAPIHandler(BaseHTTPRequestHandler):
             except Exception as e:
                 logger.error(f"Ошибка /clear-cache-specialization: {e}")
                 self._send_json(500, {"success": False, "error": str(e)})
+        elif self.path == "/clear-question-cache":
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+                body = self.rfile.read(length)
+                data = json.loads(body.decode("utf-8"))
+                question_id = data.get("question_id")
+                if not question_id:
+                    self._send_json(400, {"success": False, "error": "question_id не указан"})
+                    return
+                
+                cleared_count = clear_question_cache(int(question_id))
+                self._send_json(200, {
+                    "success": True, 
+                    "message": f"Кэш для вопроса {question_id} очищен из {cleared_count} специализаций",
+                    "cleared_count": cleared_count
+                })
+            except Exception as e:
+                logger.error(f"Ошибка /clear-question-cache: {e}")
+                self._send_json(500, {"success": False, "error": str(e)})
         elif self.path == "/reload-questions":
             try:
                 logger.info("Получен API-запрос на перезагрузку кеша вопросов...")
@@ -2994,7 +3069,7 @@ class TelegramBotAPIHandler(BaseHTTPRequestHandler):
                 logger.error(f"Ошибка в API /send-message: {e}", exc_info=True)
                 self._send_json(500, {"success": False, "error": str(e)})
         else:
-            self._send_json(404, {"success": False, "error": "Эндпоинт не найден. Доступные: /clear-cache, /clear-cache-specialization, /reload-questions, /send-message"})
+            self._send_json(404, {"success": False, "error": "Эндпоинт не найден. Доступные: /clear-cache, /clear-cache-specialization, /clear-question-cache, /reload-questions, /send-message"})
 
     def do_OPTIONS(self):
         # CORS pre-flight

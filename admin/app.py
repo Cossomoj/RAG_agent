@@ -5,15 +5,19 @@ import sys
 from datetime import datetime
 import sqlite3
 import requests
-# Переменные окружения не используются - URL-ы настроены напрямую
-
-# Импортируем DatabaseOperations из локального файла
+import json
+import logging
+from werkzeug.middleware.proxy_fix import ProxyFix
 from database import DatabaseOperations
 from rag_manager import RAGDocumentManager
 
-app = Flask(__name__)
-from werkzeug.middleware.proxy_fix import ProxyFix
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
+# Переменные окружения не используются - URL-ы настроены напрямую
+
+app = Flask(__name__)
 app.wsgi_app = ProxyFix(
     app.wsgi_app,
     x_proto=1,
@@ -137,6 +141,61 @@ def delete_prompt(prompt_id):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 400
 
+def clear_question_cache(question_id):
+    """Очистка кэша для конкретного вопроса во всех системах"""
+    results = {'bot': None, 'webapp': None}
+    errors = []
+    
+    # 1. Очищаем кеш в телеграм-боте для конкретного вопроса
+    try:
+        response = requests.post(f'{TELEGRAM_BOT_API_URL}/clear-question-cache', 
+                               json={'question_id': question_id}, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('success'):
+                results['bot'] = f"очищен кэш для вопроса {question_id}"
+            else:
+                results['bot'] = f"ошибка: {data.get('error', 'неизвестная ошибка')}"
+                errors.append(f"Бот: {data.get('error', 'неизвестная ошибка')}")
+        else:
+            results['bot'] = f'HTTP ошибка: {response.status_code}'
+            errors.append(f'Бот: HTTP ошибка {response.status_code}')
+    except requests.exceptions.ConnectionError:
+        results['bot'] = 'не удается подключиться к боту'
+        errors.append('Бот: не удается подключиться (возможно, не запущен)')
+    except requests.exceptions.Timeout:
+        results['bot'] = 'превышено время ожидания'
+        errors.append('Бот: превышено время ожидания')
+    except Exception as e:
+        results['bot'] = f'ошибка: {str(e)}'
+        errors.append(f'Бот: {str(e)}')
+    
+    # 2. Очищаем кеш в веб-приложении для конкретного вопроса
+    try:
+        response = requests.post(f'{WEBAPP_URL}/api/clear-question-cache', 
+                               json={'question_id': question_id}, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('success'):
+                results['webapp'] = f"очищен кэш для вопроса {question_id}"
+            else:
+                results['webapp'] = f"ошибка: {data.get('error', 'неизвестная ошибка')}"
+                errors.append(f"Веб-приложение: {data.get('error', 'неизвестная ошибка')}")
+        else:
+            results['webapp'] = f'HTTP ошибка: {response.status_code}'
+            errors.append(f'Веб-приложение: HTTP ошибка {response.status_code}')
+    except requests.exceptions.ConnectionError:
+        results['webapp'] = 'не удается подключиться к веб-приложению'
+        errors.append('Веб-приложение: не удается подключиться (возможно, не запущено)')
+    except requests.exceptions.Timeout:
+        results['webapp'] = 'превышено время ожидания'
+        errors.append('Веб-приложение: превышено время ожидания')
+    except Exception as e:
+        results['webapp'] = f'ошибка: {str(e)}'
+        errors.append(f'Веб-приложение: {str(e)}')
+    
+    return results, errors
+
 @app.route('/prompts/<int:prompt_id>', methods=['GET', 'POST'])
 @login_required
 def edit_prompt(prompt_id):
@@ -146,7 +205,19 @@ def edit_prompt(prompt_id):
         prompt_template = request.form['prompt_template']
         try:
             db.update_prompt(prompt_id, int(new_question_id), question_text, prompt_template)
-            flash('Промпт успешно обновлен')
+            
+            # Очищаем кэш для этого вопроса во всех системах
+            try:
+                cache_results, cache_errors = clear_question_cache(int(new_question_id))
+                if cache_errors:
+                    logger.warning(f"Ошибки при очистке кэша для вопроса {new_question_id}: {cache_errors}")
+                    flash(f'Промпт обновлен, но возникли ошибки при очистке кэша: {"; ".join(cache_errors)}', 'warning')
+                else:
+                    flash(f'Промпт успешно обновлен и кэш очищен для вопроса {new_question_id}')
+            except Exception as cache_error:
+                logger.error(f"Ошибка при очистке кэша для вопроса {new_question_id}: {cache_error}")
+                flash(f'Промпт обновлен, но не удалось очистить кэш: {str(cache_error)}', 'warning')
+            
             return redirect(url_for('prompts'))
         except sqlite3.IntegrityError:
             flash(f'Ошибка: Промпт с ID {new_question_id} уже существует')

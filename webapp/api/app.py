@@ -259,6 +259,36 @@ def clear_cache_for_specialization(specialization):
         logger.error(f"❌ Ошибка при очистке кеша веб-приложения для специализации '{specialization}': {e}")
         return 0
 
+def clear_question_cache(question_id):
+    """
+    Функция для очистки кэша конкретного вопроса во всех специализациях.
+    
+    НОВАЯ АРХИТЕКТУРА: cache_by_specialization[specialization][question_id] = answer
+    Проходим по всем специализациям и удаляем question_id из каждой.
+    """
+    global cache_by_specialization
+    
+    try:
+        cleared_count = 0
+        cleared_specs = []
+        
+        # Проходим по всем специализациям
+        for specialization in list(cache_by_specialization.keys()):
+            if question_id in cache_by_specialization[specialization]:
+                del cache_by_specialization[specialization][question_id]
+                cleared_count += 1
+                cleared_specs.append(specialization)
+        
+        if cleared_count > 0:
+            logger.info(f"🧹 Очищен кэш веб-приложения для question_id={question_id}: удалено из {cleared_count} специализаций ({', '.join(cleared_specs)})")
+        else:
+            logger.info(f"✅ Кэш веб-приложения для question_id={question_id} уже пуст")
+        
+        return cleared_count
+    except Exception as e:
+        logger.error(f"❌ Ошибка при очистке кеша веб-приложения для question_id={question_id}: {e}")
+        return 0
+
 def sync_clear_cache_with_telegram_bot(specialization):
     """
     Синхронизация очистки кеша с телеграм-ботом.
@@ -301,6 +331,26 @@ def clear_webapp_cache():
         return jsonify({"success": True, "message": f"Кеш веб-приложения успешно очищен, удалено {count} записей."})
     except Exception as e:
         logger.error(f"Ошибка при очистке кеша веб-приложения: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/clear-question-cache', methods=['POST'])
+def clear_webapp_question_cache():
+    """Эндпоинт для очистки кеша конкретного вопроса в веб-приложении."""
+    try:
+        data = request.get_json()
+        question_id = data.get('question_id')
+        
+        if not question_id:
+            return jsonify({"success": False, "error": "question_id не указан"}), 400
+        
+        cleared_count = clear_question_cache(int(question_id))
+        return jsonify({
+            "success": True, 
+            "message": f"Кэш для вопроса {question_id} очищен из {cleared_count} специализаций в веб-приложении",
+            "cleared_count": cleared_count
+        })
+    except Exception as e:
+        logger.error(f"Ошибка при очистке кеша вопроса в веб-приложении: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 async def handle_cached_request(question_id, question, user_id, specialization):
