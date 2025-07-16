@@ -435,7 +435,7 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
                 final_prompt = f"{self.base_prompt}{dialogue_history_prompt_part}{user_profile_context}\\n\\nКонтекст из документов:\\n{context_text}\\n\\nВопрос: {question}\\n\\nОтвет:"
             
             # Отладочная информация
-            # print(f"\\n--- FINAL PROMPT ---\\n{final_prompt}\\n--- END FINAL PROMPT ---\\n")
+            print(f"\\n--- FINAL PROMPT ---\\n{final_prompt}\\n--- END FINAL PROMPT ---\\n")
             
             # 4. Стримим ответ от LLM
             try:
@@ -595,9 +595,12 @@ async def websocket_endpoint(websocket: WebSocket):
     context = await websocket.receive_text()
     count = await websocket.receive_text()
     
+    logger.info(f"🔌 RAG-СЕРВИС: Получен WebSocket запрос - question_id: {question_id}, specialization: {specialization}, question: '{question[:100]}...'")
+    
     # Получаем параметр vector_store (если есть)
     try:
         vector_store = await websocket.receive_text()
+        logger.info(f"🗂️ RAG-СЕРВИС: Получен vector_store параметр: {vector_store}")
     except Exception as e:
         logger.warning(f"Ошибка получения vector_store параметра: {e}. Используется значение по умолчанию 'auto'")
         vector_store = 'auto'  # Значение по умолчанию для обратной совместимости

@@ -589,7 +589,10 @@ def ask_question():
         question_id = data.get('question_id', None)
         vector_store = data.get('vector_store', 'auto')
         
+        logger.info(f"📨 ВЕБ-ПРИЛОЖЕНИЕ: Получен вопрос от пользователя {user_id} (специализация: {specialization}): '{question[:100]}...'")
+        
         if not question:
+            logger.warning(f"❌ Пустой вопрос от пользователя {user_id}")
             return jsonify({"error": "Вопрос не может быть пустым"}), 400
         
         # Если question_id не передан, пытаемся определить его автоматически
@@ -697,10 +700,14 @@ def ask_library_question():
         question_id = data.get('question_id', None)
         vector_store = data.get('vector_store', 'auto')  # Добавляем поддержку vector_store
         
+        logger.info(f"📚 ВЕБ-ПРИЛОЖЕНИЕ: Получен библиотечный вопрос от пользователя {user_id} (специализация: {specialization}, question_id: {question_id}): '{question[:100]}...'")
+        
         if not question:
+            logger.warning(f"❌ Пустой библиотечный вопрос от пользователя {user_id}")
             return jsonify({"error": "Вопрос не может быть пустым"}), 400
         
         if not question_id:
+            logger.warning(f"❌ Отсутствует question_id для библиотечного вопроса от пользователя {user_id}")
             return jsonify({"error": "Для библиотечных вопросов обязателен question_id"}), 400
         
         question_id_int = int(question_id)
