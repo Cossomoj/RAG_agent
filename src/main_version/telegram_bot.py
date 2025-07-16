@@ -663,9 +663,14 @@ def require_onboarding(func):
         else:
             chat_id = message.chat.id
             
+        logger.info(f"🔍 Проверяем онбординг для пользователя {chat_id}")
+        
         if not check_onboarding(chat_id):
+            logger.info(f"❌ Пользователь {chat_id} не прошел онбординг, перенаправляем")
             redirect_to_onboarding(message)
             return
+        
+        logger.info(f"✅ Пользователь {chat_id} прошел онбординг, выполняем {func.__name__}")
         return func(message, *args, **kwargs)
     return wrapper
 
@@ -934,7 +939,10 @@ def check_onboarding(user_id):
         cursor.execute('SELECT is_onboarding FROM Users WHERE user_id = ?', (user_id,))
         result = cursor.fetchone()
         conn.close()
-        return result[0] if result else False
+        
+        onboarding_status = result[0] if result else False
+        logger.info(f"🔎 Статус онбординга для пользователя {user_id}: {onboarding_status} (result: {result})")
+        return onboarding_status
     except Exception as e:
         logger.error(f"Ошибка при проверке онбординга для пользователя {user_id}: {e}")
         return False
@@ -2670,6 +2678,8 @@ def handle_text_message(message):
     """
     chat_id = message.chat.id
     question = message.text.strip()
+    
+    logger.info(f"📨 ПОЛУЧЕНО СООБЩЕНИЕ от пользователя {chat_id}: '{question}'")
     
     # Игнорируем команды (они уже обработаны другими хендлерами)
     if question.startswith('/'):
