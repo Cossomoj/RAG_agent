@@ -402,11 +402,11 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
                 
                 # Добавляем контекст диалога если есть
                 if dialogue_context and dialogue_context != '[]':
-                    dialogue_history_prompt_part = f"\\n\\nКонтекст предыдущих сообщений:\\n{dialogue_context}"
+                    dialogue_history_prompt_part = f"\n\nКонтекст предыдущих сообщений:\n{dialogue_context}"
                     final_prompt = final_prompt + dialogue_history_prompt_part
                 
                 # ДОБАВЛЯЕМ ИНФОРМАЦИЮ О ПРОФИЛЕ ПОЛЬЗОВАТЕЛЯ
-                user_profile_context = f"\\n\\nИнформация о пользователе:\\nСпециализация: {self.specialization if self.specialization else 'не указана'}"
+                user_profile_context = f"\n\nИнформация о пользователе:\nСпециализация: {self.specialization if self.specialization else 'не указана'}"
                 final_prompt = final_prompt + user_profile_context
                     
             elif '{context}' in self.base_prompt:
@@ -416,26 +416,26 @@ async def create_enhanced_retrieval_chain(role, specialization, question_id, emb
                 # Добавляем контекст диалога и вопрос
                 dialogue_history_prompt_part = ""
                 if dialogue_context and dialogue_context != '[]':
-                    dialogue_history_prompt_part = f"\\n\\nКонтекст предыдущих сообщений:\\n{dialogue_context}"
+                    dialogue_history_prompt_part = f"\n\nКонтекст предыдущих сообщений:\n{dialogue_context}"
                 
                 # ДОБАВЛЯЕМ ИНФОРМАЦИЮ О ПРОФИЛЕ ПОЛЬЗОВАТЕЛЯ
-                user_profile_context = f"\\n\\nИнформация о пользователе:\\nСпециализация: {self.specialization if self.specialization else 'не указана'}"
+                user_profile_context = f"\n\nИнформация о пользователе:\nСпециализация: {self.specialization if self.specialization else 'не указана'}"
                 
-                final_prompt = f"{filled_prompt}{dialogue_history_prompt_part}{user_profile_context}\\n\\nВопрос: {question}\\n\\nОтвет:"
+                final_prompt = f"{filled_prompt}{dialogue_history_prompt_part}{user_profile_context}\n\nВопрос: {question}\n\nОтвет:"
                 
             else:
                 # Fallback: старая логика для промптов без переменных
                 dialogue_history_prompt_part = ""
                 if dialogue_context and dialogue_context != '[]':
-                    dialogue_history_prompt_part = f"\\n\\nКонтекст предыдущих сообщений:\\n{dialogue_context}"
+                    dialogue_history_prompt_part = f"\n\nКонтекст предыдущих сообщений:\n{dialogue_context}"
 
                 # ДОБАВЛЯЕМ ИНФОРМАЦИЮ О ПРОФИЛЕ ПОЛЬЗОВАТЕЛЯ
-                user_profile_context = f"\\n\\nИнформация о пользователе:\\nСпециализация: {self.specialization if self.specialization else 'не указана'}"
+                user_profile_context = f"\n\nИнформация о пользователе:\nСпециализация: {self.specialization if self.specialization else 'не указана'}"
 
-                final_prompt = f"{self.base_prompt}{dialogue_history_prompt_part}{user_profile_context}\\n\\nКонтекст из документов:\\n{context_text}\\n\\nВопрос: {question}\\n\\nОтвет:"
+                final_prompt = f"{self.base_prompt}{dialogue_history_prompt_part}{user_profile_context}\n\nКонтекст из документов:\n{context_text}\n\nВопрос: {question}\n\nОтвет:"
             
-            # Отладочная информация
-            print(f"\\n--- FINAL PROMPT ---\\n{final_prompt}\\n--- END FINAL PROMPT ---\\n")
+            # Отладочная информация отключена
+            # print(f"\\n--- FINAL PROMPT ---\\n{final_prompt}\\n--- END FINAL PROMPT ---\\n")
             
             # 4. Стримим ответ от LLM
             try:
