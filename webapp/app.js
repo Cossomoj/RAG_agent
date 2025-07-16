@@ -2361,8 +2361,12 @@ async function copyAnswerToClipboard() {
         }, 2000);
         
         // Также показываем Telegram уведомление если доступно
-        if (tg.showAlert) {
-            tg.showAlert('Ответ скопирован в буфер обмена!');
+        try {
+            if (tg && typeof tg.showAlert === 'function') {
+                tg.showAlert('Ответ скопирован в буфер обмена!');
+            }
+        } catch (alertError) {
+            console.error('Ошибка показа Telegram уведомления:', alertError);
         }
     } catch (err) {
         console.error('Ошибка копирования:', err);
@@ -2870,10 +2874,17 @@ async function loadHistory() {
 }
 
 function showAlert(message) {
-    if (tg && tg.showAlert) {
-        tg.showAlert(message);
-    } else {
-        alert(message);
+    try {
+        if (tg && typeof tg.showAlert === 'function') {
+            tg.showAlert(String(message));
+        } else {
+            alert(String(message));
+        }
+    } catch (error) {
+        console.error('Ошибка показа уведомления:', error);
+        console.log('Сообщение:', message);
+        // Fallback на обычный браузерный alert
+        alert(String(message));
     }
 }
 
