@@ -3,7 +3,7 @@ let tg = window.Telegram.WebApp;
 
 // Конфигурация
 const CONFIG = {
-    API_BASE_URL: 'https://restocorp.ru/api', // API через nginx на домене
+    API_BASE_URL: 'https://gigamentor.ru/api', // API через nginx на домене
     WEBSOCKET_URL: 'ws://localhost:8000/ws'
 };
 
